@@ -1,13 +1,14 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
-import { getListed, label, url } from '../lib/sketches';
+import { getListed, getSite, label, url } from '../lib/sketches';
 
+const site = getSite();
 const sketches = getListed();
 ---
 
-<BaseLayout title="glimmers" description="Small moving things, made in the browser.">
+<BaseLayout title={site.name} appTitle={site.name}>
   <main>
-    <h1>glimmers</h1>
+    <h1>{site.name}</h1>
     <ul>
       {sketches.map((s) => (
         <li>

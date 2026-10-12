@@ -118,8 +118,10 @@ export function createLoop(canvas: HTMLCanvasElement, P: Record<string, Param>, 
     fpsFrames++;
     if (fpsAccum >= 0.5) {
       if (loop.onStats) {
-        loop.onStats(Math.round(fpsFrames / fpsAccum) + ' fps · ' + canvas.width + '×' + canvas.height +
-          (adaptive() ? ' · res ' + Math.round(dynScale * 100) + '%' : ''));
+        // e.g. "2940×2240dp @ 60fps (100% quality)": canvas size in device pixels, frames per
+        // second, and adaptive quality's resolution scale (only when it's on).
+        loop.onStats(canvas.width + '×' + canvas.height + 'dp @ ' + Math.round(fpsFrames / fpsAccum) + 'fps' +
+          (adaptive() ? ' (' + Math.round(dynScale * 100) + '% quality)' : ''));
       }
       fpsAccum = 0;
       fpsFrames = 0;

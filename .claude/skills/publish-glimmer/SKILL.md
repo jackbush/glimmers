@@ -32,10 +32,11 @@ Expect `0 errors`. Report each warning: unused params, missing tooltips, labels 
 
 ## 4. The cover
 
-The cover is `cover.mp4` + `cover.jpg` in the sketch folder, made by `scripts/capture.mjs`, which reads the sketch's `capture` settings from `manifest.js`.
+The cover is `cover.mp4` + `cover.jpg` in the sketch folder, plus `share.jpg` (the page's 1200×630 link-preview image), all made by `scripts/capture.mjs`, which reads the sketch's `capture` settings from `manifest.js`.
 
 - **Missing**, or **older than the last commit touching the sketch's code or defaults** (`git log -1 --format=%ct -- src/sketches/<slug>/{sketch.js,params.js,shader.js,*.js}` vs `git log -1 --format=%ct -- src/sketches/<slug>/cover.mp4`, or file mtimes for uncommitted work): run `node scripts/capture.mjs <slug>`.
-- Look at it: extract the first and middle frames (`ffmpeg -i cover.mp4 -vf "select='eq(n,0)+eq(n,90)',scale=840:-2,tile=1x2" -frames:v 1 <scratchpad>/cover.png`) and read the PNG. An empty or black frame usually means the sketch needs a `capture.start` so something has happened before recording.
+- Look at `share.jpg` too: it's what a shared link shows.
+- Look at the cover: extract the first and middle frames (`ffmpeg -i cover.mp4 -vf "select='eq(n,0)+eq(n,90)',scale=840:-2,tile=1x2" -frames:v 1 <scratchpad>/cover.png`) and read the PNG. An empty or black frame usually means the sketch needs a `capture.start` so something has happened before recording.
 - **Size:** report it. Over **3MB**, warn, and suggest a higher `capture.crf` (grain and noise are the usual cause; Blackstar uses 29) or fewer `seconds`. Don't change the manifest without asking.
 - **Motion:** if the sketch's interest comes from params the viewer would change (Mindflow's brain data), sweep them with `capture.animate: { key: [from, to] }`, which goes from → to → from over the clip, eased. Use `pingpong: false` with it, since the sweep already loops.
 - **Loop:** ping-pong (forwards then backwards) is the default. If the motion looks wrong reversed (falling, flowing one way), suggest `pingpong: false` with a `start` in the steady state, as Cubeland does.

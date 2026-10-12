@@ -82,7 +82,7 @@ for (const slug of slugs) {
   }
 
   if (!listed.includes(slug)) warnings.push('not listed in src/sketches/index.js (its page still builds)');
-  const covers = ['cover.mp4', 'cover.jpg'].filter((f) => !existsSync(join(dir, f)));
+  const covers = ['cover.mp4', 'cover.jpg', 'share.jpg'].filter((f) => !existsSync(join(dir, f)));
   if (covers.length) warnings.push(`no ${covers.join(' or ')} — run: node scripts/capture.mjs ${slug}`);
 
   for (const w of warnings) console.log(`warn  ${slug}: ${w}`);

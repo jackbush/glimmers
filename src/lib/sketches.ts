@@ -22,19 +22,21 @@ const manifestSchema = z
   })
   .strict();
 
-const homeSchema = z.object({ sketches: z.array(z.string()) }).strict();
+const homeSchema = z
+  .object({ name: z.string().trim().min(1), description: z.string().trim().min(1), sketches: z.array(z.string()) })
+  .strict();
 
 export interface SketchEntry {
   slug: string;
   name: string;
   year: number;
   pageColour?: string;
-  /** URLs of the cover video and its poster, if they've been captured. */
-  cover: { video?: string; poster?: string };
+  /** URLs of the cover video, its poster and the 1200×630 share image, if they've been captured. */
+  cover: { video?: string; poster?: string; share?: string };
 }
 
 const MANIFESTS = import.meta.glob<{ default: unknown }>('/src/sketches/*/manifest.js', { eager: true });
-const COVERS = import.meta.glob<string>('/src/sketches/*/cover.{mp4,jpg}', { eager: true, query: '?url', import: 'default' });
+const COVERS = import.meta.glob<string>('/src/sketches/*/{cover.mp4,cover.jpg,share.jpg}', { eager: true, query: '?url', import: 'default' });
 
 function slugOf(path: string): string {
   return path.split('/')[3];
@@ -62,6 +64,7 @@ export function getSketches(): Map<string, SketchEntry> {
       cover: {
         video: COVERS[`/src/sketches/${slug}/cover.mp4`],
         poster: COVERS[`/src/sketches/${slug}/cover.jpg`],
+        share: COVERS[`/src/sketches/${slug}/share.jpg`],
       },
     });
   }
@@ -69,12 +72,22 @@ export function getSketches(): Map<string, SketchEntry> {
   return out;
 }
 
-/** The sketches listed in src/sketches/index.js, in order. */
-export function getListed(): SketchEntry[] {
+function getHome() {
   const parsed = homeSchema.safeParse(home);
   if (!parsed.success) throw new Error(issues(parsed.error, 'src/sketches/index.js'));
+  return parsed.data;
+}
+
+/** The site's name and description, from src/sketches/index.js. */
+export function getSite(): { name: string; description: string } {
+  const { name, description } = getHome();
+  return { name, description };
+}
+
+/** The sketches listed in src/sketches/index.js, in order. */
+export function getListed(): SketchEntry[] {
   const all = getSketches();
-  return parsed.data.sketches.map((slug) => {
+  return getHome().sketches.map((slug) => {
     const s = all.get(slug);
     if (!s) throw new Error(`src/sketches/index.js lists "${slug}", but there's no src/sketches/${slug}/manifest.js.`);
     return s;

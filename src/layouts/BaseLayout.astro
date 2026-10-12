@@ -1,16 +1,31 @@
 ---
-import { url } from '../lib/sketches';
+import { getSite, url } from '../lib/sketches';
 
 interface Props {
+  /** <title> and share title, verbatim: pages compose their own. */
   title: string;
+  /** Name under the icon when the page is added to a home screen. */
+  appTitle: string;
   /** Page background and theme-color. */
   background?: string;
-  description?: string;
+  /** Link-preview image (1200×630) and its alt text. Defaults to the site's (public/share.jpg). */
+  image?: string;
+  imageAlt?: string;
 }
 
-const { title, background = '#000', description } = Astro.props;
+const {
+  title,
+  appTitle,
+  background = '#000',
+  image = url('share.jpg'),
+  imageAlt = 'Blackstar: a black orb with a burning halo on a yellow-orange gradient',
+} = Astro.props;
+const site = getSite();
 // Stamped with the commit hash by the Pages workflow; see src/kit/version.ts.
 const build = import.meta.env.PUBLIC_BUILD || 'dev';
+// Share cards need absolute URLs; a relative og:image is dropped.
+const canonical = new URL(Astro.url.pathname, Astro.site);
+const shareImage = new URL(image, Astro.site);
 ---
 
 <!doctype html>
@@ -18,14 +33,32 @@ const build = import.meta.env.PUBLIC_BUILD || 'dev';
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content={background} />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content={title} />
-    <meta name="build" content={build} />
-    {description && <meta name="description" content={description} />}
     <title>{title}</title>
-    <link rel="icon" href={url('favicon.svg')} type="image/svg+xml" />
+    <meta name="description" content={site.description} />
+    <link rel="canonical" href={canonical} />
+    <meta name="theme-color" content={background} />
+    <meta name="build" content={build} />
+
+    <link rel="icon" href={url('favicon-32.png')} type="image/png" sizes="32x32" />
+    <link rel="icon" href={url('icon-192.png')} type="image/png" sizes="192x192" />
+    <link rel="apple-touch-icon" href={url('apple-touch-icon.png')} />
+    <link rel="manifest" href={url('site.webmanifest')} />
+    <meta name="application-name" content={appTitle} />
+    <meta name="apple-mobile-web-app-title" content={appTitle} />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={site.name} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={site.description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={shareImage} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={imageAlt} />
+    <meta name="twitter:card" content="summary_large_image" />
     <slot name="head" />
   </head>
   <body style={`background:${background}`}>

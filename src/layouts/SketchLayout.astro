@@ -6,19 +6,24 @@ import BaseLayout from './BaseLayout.astro';
 import { url } from '../lib/sketches';
 
 interface Props {
-  /** Tab title. */
+  /** Tab and share title. */
   title: string;
+  /** Home-screen name. */
+  appTitle: string;
+  /** Link-preview image (1200×630). */
+  image?: string;
+  imageAlt?: string;
   background: string;
 }
 
-const { title, background } = Astro.props;
+const { title, appTitle, background, image, imageAlt } = Astro.props;
 ---
 
-<BaseLayout title={title} background={background}>
+<BaseLayout title={title} appTitle={appTitle} background={background} image={image} imageAlt={imageAlt}>
   <canvas id="stage"></canvas>
   <div id="error" hidden></div>
 
-  <a id="back" class="disc" href={url()} aria-label="All glimmers">
+  <a id="back" class="disc" href={url()} aria-label="All Glimmers">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <path d="M19 12H5" /><path d="M12 19l-7-7 7-7" />
     </svg>
