@@ -1,0 +1,46 @@
+---
+import type { GetStaticPaths } from 'astro';
+import SketchLayout from '../layouts/SketchLayout.astro';
+import { getSketches, label, type SketchEntry } from '../lib/sketches';
+import type { Group } from '../kit/types';
+
+interface Props {
+  sketch: SketchEntry;
+}
+
+export const getStaticPaths: GetStaticPaths = () =>
+  [...getSketches().values()].map((sketch) => ({ params: { slug: sketch.slug }, props: { sketch } }));
+
+const { sketch } = Astro.props;
+
+// Paint the page in the sketch's colour before any script runs, so there's no flash.
+const PARAMS = import.meta.glob<{ default: Group[] }>('/src/sketches/*/params.js', { eager: true });
+const groups = PARAMS[`/src/sketches/${sketch.slug}/params.js`]?.default ?? [];
+const pageParam = sketch.pageColour ? groups.flatMap((g) => g.params).find((p) => p.key === sketch.pageColour) : undefined;
+if (sketch.pageColour && !pageParam) {
+  throw new Error(`src/sketches/${sketch.slug}/manifest.js: pageColour "${sketch.pageColour}" isn't a param key.`);
+}
+const background = pageParam ? String(pageParam.value) : '#000';
+---
+
+<SketchLayout title={label(sketch)} background={background}>
+  <script is:inline define:vars={{ slug: sketch.slug }}>document.body.dataset.slug = slug;</script>
+</SketchLayout>
+
+<script>
+  import { run } from '../kit/run';
+
+  // One lazy chunk per sketch: a page only downloads its own code.
+  const MANIFESTS = import.meta.glob('../sketches/*/manifest.js');
+  const PARAMS = import.meta.glob('../sketches/*/params.js');
+  const SKETCHES = import.meta.glob('../sketches/*/sketch.js');
+
+  const slug = document.body.dataset.slug!;
+  const dir = `../sketches/${slug}/`;
+  const [manifest, params, sketch] = await Promise.all([
+    MANIFESTS[dir + 'manifest.js'](),
+    PARAMS[dir + 'params.js'](),
+    SKETCHES[dir + 'sketch.js'](),
+  ]) as [{ default: any }, { default: any }, { default: any }];
+  run(slug, { manifest: manifest.default, params: params.default, sketch: sketch.default });
+</script>

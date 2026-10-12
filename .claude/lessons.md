@@ -1,0 +1,7 @@
+# Lessons
+
+- **Benchmark on the real GPU at large display sizes before handing over.** Blackstar's first build "worked" in a headless SwiftShader screenshot but stalled the user's browser (~2fps / crash): a single pass ran ~35 3D-noise calls per pixel. A screenshot only proves that it renders, not that it's fast. Run `node scripts/bench.mjs <slug> --fixed --size 2560x1440 --dpr 2` before saying a visual change is done.
+- Compute per-pixel only what actually varies per pixel: put pixel-invariant values on the CPU, angle-only shapes in a 1D pass, and smooth fields at low resolution.
+- Headless Chrome frame rates are noisy, and they change with how you measure: counting rAF ticks from injected script gave numbers ~30% off the frames the page actually rendered. `bench.mjs` counts the kit's own rendered frames (`window.__glimmer.frames`). Compare like with like, and treat <10% differences as noise.
+- When porting p5 sketches, check the angle mode: p5 defaults to radians, so `cos(18)` in The Blob (now Orb) was 18 radians, not degrees, and its "pentagon" was uneven.
+- Low-alpha fades on an 8-bit canvas never reach the background: the step rounds to zero ~12 levels short (at alpha 0.04), which leaves grey ghosts and over-saturates anything that keeps adding. For trail effects, accumulate in a half-float texture and give the fade a minimum step (see Mindflow's NOTES).

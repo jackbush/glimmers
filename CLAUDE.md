@@ -1,0 +1,21 @@
+# Glimmers
+
+A home for small browser sketches ("glimmers"): an index page of looping covers, plus one full-screen page per sketch with a shared settings pane. Astro (static), served at `https://jackbush.github.io/glimmers/`. See `README.md` to run it.
+
+- `src/sketches/<slug>/`: one folder per sketch. **The folder name is the URL.** `params.js` holds every default, `sketch.js` draws, `manifest.js` has the name, page colour and capture settings, and `NOTES.md` holds the sketch's architecture, perf budget and benchmark history. **Read a sketch's `NOTES.md` before changing it.**
+- `src/sketches/index.js`: which sketches the index lists, and in what order.
+- `src/kit/`: the shared engine. It covers the param model and saved settings (`params.ts`), the settings pane (`panel.ts`), the buttons and keys (`chrome.ts`), the frame loop and adaptive quality (`loop.ts`), new-build detection (`version.ts`), standard params (`standard.js`), and boot (`run.ts`). No design logic goes here.
+- `src/layouts/SketchLayout.astro`: the canvas, the back button and cog, and the pane's markup and CSS. `src/pages/`: the index and the `[slug]` route.
+- Scripts:
+  - `scripts/check.mjs`: params ↔ code consistency. Run it after every change.
+  - `scripts/bench.mjs`: real-GPU fps in headless Chrome.
+  - `scripts/capture.mjs`: cover videos. Needs ffmpeg.
+  - Both bench and capture rebuild the site and start `astro preview` themselves.
+- Skills: `new-glimmer` (scaffold), `glimmers-elements` (add/edit/remove elements and params), `glimmers-state` (apply pasted state blobs), `publish-glimmer` (index + cover + perf scan + benchmark).
+- Deploy: `.github/workflows/deploy.yml` builds on push to `main` with `PUBLIC_BUILD` set to the short commit hash. That hash is stamped into each page and `version.json`, and open tabs jump to a newer build.
+
+## Rules
+
+- Every tunable number or colour is a param in `params.js`, never a magic number in the code.
+- `frame()` allocates nothing. See `glimmers-elements` for the rules.
+- After a visual change: run `node scripts/check.mjs`, look at a screenshot from `bench.mjs --shot`, and benchmark at `--fixed --size 2560x1440 --dpr 2`. A screenshot proves it renders, not that it's fast.

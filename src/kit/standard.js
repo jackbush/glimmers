@@ -1,0 +1,49 @@
+// Standard params the kit itself reads: playback speed and resolution/quality. (Pause isn't
+// a param: it's the play/pause button next to the cog.)
+//
+// A sketch puts `playback()` first in its params.js. The kit looks these keys up by name,
+// so every sketch gets the same controls with the same meaning. Override a default by
+// passing it in, e.g. `playback({ timeScale: 0.41 }, { quality: true, extra: [seed] })`.
+//
+// All of them are `uniform: false`: they're read on the CPU, never by a shader.
+
+/** @typedef {import('./types').ParamDef} ParamDef */
+/** @typedef {import('./types').Group} Group */
+
+/** @type {Record<string, ParamDef>} */
+const STANDARD = {
+  timeScale: { key: 'timeScale', label: 'Speed', value: 1, min: 0, max: 4, step: 0.01, uniform: false, desc: 'Global speed of all scene motion.' },
+  renderScale: { key: 'renderScale', label: 'Render scale', value: 1, min: 0.25, max: 1, step: 0.05, uniform: false, desc: 'Internal resolution ceiling. Lower = faster, softer. Adaptive quality works below this.' },
+  adaptive: { key: 'adaptive', label: 'Adaptive quality', type: 'bool', value: true, uniform: false, desc: 'Automatically lowers internal resolution when frames run slow, and raises it again when there is headroom.' },
+  targetFps: { key: 'targetFps', label: 'Target fps', value: 60, min: 24, max: 120, step: 1, uniform: false, desc: 'Frame rate adaptive quality tries to hold.' },
+  maxDpr: { key: 'maxDpr', label: 'Max pixel ratio', value: 2, min: 1, max: 3, step: 0.25, uniform: false, desc: 'Caps device pixel ratio on retina screens.' },
+};
+
+/** Keys the kit owns. Sketches must not reuse them for anything else. */
+export const STANDARD_KEYS = Object.keys(STANDARD);
+
+/**
+ * The Playback group: Speed, any sketch-specific `extra` params, then the
+ * resolution controls. `quality: true` adds render scale and adaptive quality, which
+ * only pay off for GPU-heavy sketches; every sketch gets the pixel-ratio cap.
+ *
+ * @param {Partial<Record<string, number | boolean>>} [defaults] default values for standard keys
+ * @param {{ quality?: boolean, extra?: ParamDef[] }} [options]
+ * @returns {Group}
+ */
+export function playback(defaults = {}, { quality = false, extra = [] } = {}) {
+  const pick = (/** @type {string} */ key) => {
+    const p = { ...STANDARD[key] };
+    if (defaults[key] !== undefined) p.value = /** @type {number | boolean} */ (defaults[key]);
+    return p;
+  };
+  return {
+    group: 'Playback',
+    params: [
+      pick('timeScale'),
+      ...extra,
+      ...(quality ? [pick('renderScale'), pick('adaptive'), pick('targetFps')] : []),
+      pick('maxDpr'),
+    ],
+  };
+}
