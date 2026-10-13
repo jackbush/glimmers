@@ -83,6 +83,13 @@ export interface Manifest {
   year: number;
   /** Seconds a preset takes to morph in (default 1.5). */
   presetSeconds?: number;
+  /**
+   * Cycle through the presets when the page opens: a random one at once, then on in menu order,
+   * each held for `hold` seconds, then morphing to the next over presetSeconds, round and round. Opening
+   * the settings pane stops it (a morph under way finishes); it starts again next visit. Off
+   * for capture mode and for prefers-reduced-motion. Nothing it applies is saved.
+   */
+  autoplay?: { hold?: number };
   /** Key of a colour param that drives the page background and theme-color. */
   pageColour?: string;
   /** Defaults for scripts/capture.mjs, so re-captures match. */

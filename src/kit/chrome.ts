@@ -1,10 +1,10 @@
 // The buttons around a sketch: back (top left) and the settings cog (top right), and the
-// keyboard. Both states are shared by every sketch on the site and remembered per browser:
-//   glimmers:ui    on | off       Space toggles; off hides the buttons and the pane
-//   glimmers:pane  open | closed  the cog toggles; Escape closes
+// keyboard. Two states, shared by every sketch on the site:
+//   ui    on | off       Space toggles; off hides the buttons and the pane. Remembered per
+//                       browser (glimmers:ui).
+//   pane  open | closed  the cog toggles; Escape closes. Every page opens with it closed.
 
 const UI_KEY = 'glimmers:ui';
-const PANE_KEY = 'glimmers:pane';
 
 function load(key: string): string | null {
   try { return localStorage.getItem(key); } catch { return null; }
@@ -17,13 +17,16 @@ export interface Chrome {
   readonly paneOpen: boolean;
 }
 
-/** @param persist false in capture mode: the UI is forced off and nothing is saved. */
-export function setupChrome(persist: boolean): Chrome {
+/**
+ * @param persist false in capture mode: the UI is forced off and nothing is saved.
+ * @param onPane called whenever the pane opens or closes.
+ */
+export function setupChrome(persist: boolean, onPane?: (open: boolean) => void): Chrome {
   const body = document.body;
   const cog = document.getElementById('cog')!;
   const panel = document.getElementById('panel')!;
   let ui = persist ? (load(UI_KEY) === 'off' ? 'off' : 'on') : 'off';
-  let pane = persist && load(PANE_KEY) === 'open' ? 'open' : 'closed';
+  let pane = 'closed';
 
   function apply() {
     body.dataset.ui = ui;
@@ -34,7 +37,7 @@ export function setupChrome(persist: boolean): Chrome {
     cog.setAttribute('aria-expanded', String(open));
   }
   function setUi(v: string) { ui = v; if (persist) save(UI_KEY, v); apply(); }
-  function setPane(v: string) { pane = v; if (persist) save(PANE_KEY, v); apply(); }
+  function setPane(v: string) { pane = v; apply(); onPane?.(v === 'open'); }
 
   cog.addEventListener('click', () => setPane(pane === 'open' ? 'closed' : 'open'));
 

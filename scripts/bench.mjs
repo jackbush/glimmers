@@ -29,8 +29,11 @@ let failed = false;
 
 for (const slug of slugs) {
   await chrome.send('Page.navigate', { url: server.base + slug + '/' + (has('--fixed') ? '?fixed' : '') });
-  await sleep(1500);
-  // Pane open → the fps readout updates. Pane state is site-wide, so only click when closed.
+  // Wait for the page to boot (run() sets __glimmer last, after the cog is wired up): pages
+  // open with the pane closed, and a click before then did nothing.
+  for (let i = 0; i < 100 && !(await chrome.evaluate('!!window.__glimmer')); i++) await sleep(100);
+  await sleep(300);
+  // Pane open → the fps readout updates. (It also stops autoplay, so the measure is of one preset.)
   await chrome.evaluate(`(() => { const c = document.getElementById('cog'); if (c.getAttribute('aria-expanded') !== 'true') c.click(); })()`);
   await sleep(has('--swiftshader') ? 10000 : 2500); // let adaptive quality settle
 

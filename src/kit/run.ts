@@ -60,17 +60,21 @@ export function run(slug: string, { manifest, params, presets, sketch }: SketchM
     if (themeMeta) themeMeta.content = c;
   }
 
-  const chrome = setupChrome(!capture);
+  // Autoplay (manifest.autoplay): cycling through the presets until the pane opens.
+  let autoplay: { names: string[]; i: number; wait: number } | null = null;
+  const chrome = setupChrome(!capture, (open) => { if (open) autoplay = null; });
   const presetSeconds = manifest.presetSeconds ?? 1.5;
-  function applyPreset(name: string, seconds = presetSeconds) {
+  const autoHold = manifest.autoplay?.hold ?? 1;
+  function applyPreset(name: string, seconds = presetSeconds, save = true) {
     if (!presets?.[name]) return;
     const own = !!instance?.morph;
     store.applyPreset(presets[name], seconds, !own);
     if (own) instance!.morph!(seconds);
     // What landed at once shows now; gliding colours catch up as they move.
+    syncPageColour();
     panel.syncAll();
     panel.refreshStatus();
-    store.scheduleSave();
+    if (save) store.scheduleSave();
   }
   const panel = buildPanel({
     slug,
@@ -94,6 +98,11 @@ export function run(slug: string, { manifest, params, presets, sketch }: SketchM
   // Preset morphs advance with the frame loop; the pane catches up when one lands.
   let paneWait = 0;
   loop.onTick = (dt) => {
+    if (autoplay && (autoplay.wait -= dt) <= 0) {
+      autoplay.i = (autoplay.i + 1) % autoplay.names.length;
+      applyPreset(autoplay.names[autoplay.i], presetSeconds, false);
+      autoplay.wait = presetSeconds + autoHold;
+    }
     const state = store.tick(dt);
     if (state === 'idle') return;
     syncPageColour();
@@ -103,7 +112,8 @@ export function run(slug: string, { manifest, params, presets, sketch }: SketchM
       panel.syncAll();
       panel.refreshStatus();
     }
-    if (state === 'done') store.scheduleSave();
+    // Autoplay's presets aren't the user's settings, so they aren't saved.
+    if (state === 'done' && !autoplay) store.scheduleSave();
   };
 
   // Play/pause: freezes scene time (anything on real time, like film grain, keeps running).
@@ -114,6 +124,15 @@ export function run(slug: string, { manifest, params, presets, sketch }: SketchM
   }
   playBtn.addEventListener('click', () => { loop.paused = !loop.paused; syncPlay(); });
   syncPlay();
+
+  // The first preset lands before the sketch starts, so it opens on it rather than morphing in.
+  const names = presets ? Object.keys(presets) : [];
+  if (!capture && manifest.autoplay && names.length && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    // A random one first, then on through the menu order from there.
+    const first = Math.floor(Math.random() * names.length);
+    autoplay = { names, i: first, wait: autoHold };
+    applyPreset(names[first], 0, false);
+  }
 
   try {
     instance = sketch({ canvas, P, model: store, degrade: (f) => loop.degrade(f) });

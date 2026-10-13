@@ -14,6 +14,7 @@ const manifestSchema = z
     year: z.number().int().min(1990).max(2100),
     pageColour: z.string().optional(),
     presetSeconds: z.number().min(0).optional(),
+    autoplay: z.object({ hold: z.number().min(0).optional() }).strict().optional(),
     capture: z
       .object({ seconds: z.number().positive(), start: z.number().min(0), fps: z.number().positive(), crf: z.number().int().min(0).max(51), pingpong: z.boolean(),
         animate: z.record(z.string(), z.tuple([z.number(), z.number()])),
