@@ -3,7 +3,7 @@
 // params.js.
 
 import type { ParamStore } from './params';
-import type { Param } from './types';
+import type { Param, Presets } from './types';
 import { jumpTo, newerBuild } from './version';
 
 export const STATE_TAG = 'state@1';
@@ -13,6 +13,10 @@ interface PanelOptions {
   store: ParamStore;
   /** Called after every edit made in the pane. */
   onEdited(): void;
+  /** The sketch's presets, if it has any: shown as a dropdown at the top of the pane. */
+  presets?: Presets;
+  /** Called when one is picked. */
+  onPreset?(name: string): void;
 }
 
 export interface Panel {
@@ -28,7 +32,7 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string | null, 
   return n;
 }
 
-export function buildPanel({ slug, store, onEdited }: PanelOptions): Panel {
+export function buildPanel({ slug, store, onEdited, presets, onPreset }: PanelOptions): Panel {
   const controls = document.getElementById('controls')!;
   const copyBtn = document.getElementById('copy') as HTMLButtonElement;
   const resetBtn = document.getElementById('reset') as HTMLButtonElement;
@@ -95,6 +99,26 @@ export function buildPanel({ slug, store, onEdited }: PanelOptions): Panel {
     sync();
     rows.push({ sync });
     return wrap;
+  }
+
+  const names = presets ? Object.keys(presets) : [];
+  if (names.length) {
+    // Presets: pick one to morph every setting it names; the menu then rests on "—" again,
+    // since any edit afterwards makes the settings your own.
+    const wrap = el('div', 'row row-select row-preset');
+    const label = el('label', 'lbl', 'Preset');
+    label.htmlFor = 'p--preset';
+    const menu = el('select');
+    menu.id = 'p--preset';
+    menu.appendChild(el('option', null, '—')).value = '';
+    for (const n of names) menu.appendChild(el('option', null, n)).value = n;
+    menu.addEventListener('change', () => {
+      if (menu.value && onPreset) onPreset(menu.value);
+      menu.value = '';
+    });
+    wrap.append(label, menu);
+    wrap.title = 'Morph to a preset. Settings it doesn\'t name are left as they are.';
+    controls.appendChild(wrap);
   }
 
   for (const group of store.groups) {

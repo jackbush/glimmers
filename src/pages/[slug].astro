@@ -47,6 +47,6 @@ const background = pageParam ? String(pageParam.value) : '#000';
     MANIFESTS[dir + 'manifest.js'](),
     PARAMS[dir + 'params.js'](),
     SKETCHES[dir + 'sketch.js'](),
-  ]) as [{ default: any }, { default: any }, { default: any }];
-  run(slug, { manifest: manifest.default, params: params.default, sketch: sketch.default });
+  ]) as [{ default: any }, { default: any; presets?: any }, { default: any }];
+  run(slug, { manifest: manifest.default, params: params.default, presets: params.presets, sketch: sketch.default });
 </script>

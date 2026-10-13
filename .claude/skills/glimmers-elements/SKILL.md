@@ -11,7 +11,7 @@ description: Add, edit, or remove visual elements and parameters in a glimmers s
 
 | File | Role |
 |---|---|
-| `src/sketches/<slug>/params.js` | **The only place defaults live.** Groups → params; the settings pane is generated from it. Starts with `playback()` from `src/kit/standard.js` (Speed, pixel-ratio cap; `quality: true` adds render scale and adaptive quality). |
+| `src/sketches/<slug>/params.js` | **The only place defaults live.** Groups → params; the settings pane is generated from it. Starts with `playback()` from `src/kit/standard.js` (Speed, pixel-ratio cap; `quality: true` adds render scale and target fps, and turns adaptive quality on). |
 | `src/sketches/<slug>/sketch.js` | `export default function create({ canvas, P, model, degrade })` → `{ resize(w, h, pxRatio), frame(t, dt, rt), dispose? }`. All drawing lives here (plus any helper files in the folder). |
 | `src/sketches/<slug>/manifest.js` | `name`, `year`, optional `pageColour` (a colour param key that drives the page background), optional `capture` settings for the cover. |
 | `src/kit/` | Shared engine: param model and saved settings, pane, buttons and keys, frame loop, adaptive quality. **No design logic.** Change it only for behaviour every sketch should get. |
@@ -26,12 +26,16 @@ description: Add, edit, or remove visual elements and parameters in a glimmers s
    ```js
    { key: 'haloFlare', label: 'Flare', value: 0.2, min: 0, max: 1, step: 0.01, desc: 'One-line tooltip.' },
    ```
-   - `key` is camelCase, unique and descriptive. It's the key in copied state, so treat it as permanent. Don't reuse a standard key (`timeScale`, `renderScale`, `adaptive`, `targetFps`, `maxDpr`).
+   - `key` is camelCase, unique and descriptive. It's the key in copied state, so treat it as permanent. Don't reuse a standard key (`timeScale`, `renderScale`, `targetFps`, `maxDpr`).
    - `type` is `'range'` (the default), `'color'` (lowercase `'#rrggbb'`), `'bool'` or `'select'` (a dropdown: `options: ['Ovate', 'Cordate']`, and the value is one of those strings).
    - The default must sit inside `[min, max]`. Pick ranges that are useful but not destructive, and pick `step` to suit the precision that matters.
    - `label` stays short (≤ 18 characters) so it fits the 124px label column. `desc` is required because it's the tooltip.
 2. Read it in the sketch as `P.<key>.value`.
 3. Run `node scripts/check.mjs <slug>`.
+
+## Presets
+
+A sketch can `export const presets = { Name: { key: value, … } }` from `params.js`. The pane shows them as a Preset dropdown; picking one morphs every key it names (numbers and colours glide over the manifest's `presetSeconds`, default 1.5 s; selects and bools switch). Keys it doesn't name are left alone. `check.mjs` validates every key and value. For the cover, `manifest.capture.presets = { sequence: [...], hold }` holds on each preset and morphs to the next, looping. Leaf builds its species presets from the current shape defaults plus overrides (see its params.js).
 
 ## Adding a visual element
 

@@ -9,26 +9,33 @@ import { createModel } from './params';
 import { buildPanel } from './panel';
 import { setupChrome } from './chrome';
 import { createLoop } from './loop';
-import type { Group, Manifest, Sketch, SketchInstance } from './types';
+import type { Group, Manifest, Presets, Sketch, SketchInstance } from './types';
 
 interface SketchModules {
   manifest: Manifest;
   params: Group[];
+  /** Optional `export const presets` from params.js. */
+  presets?: Presets;
   sketch: Sketch;
 }
 
 declare global {
   interface Window {
     /** Hooks for scripts/bench.mjs and scripts/capture.mjs. */
-    __glimmer?: { readonly frames: number; step?(dt: number): void; set?(key: string, value: unknown): void };
+    __glimmer?: {
+      readonly frames: number;
+      step?(dt: number): void;
+      set?(key: string, value: unknown): void;
+      /** Morph to a preset (capture mode), over `seconds` (default: the manifest's). */
+      preset?(name: string, seconds?: number): void;
+    };
   }
 }
 
-export function run(slug: string, { manifest, params, sketch }: SketchModules): void {
+export function run(slug: string, { manifest, params, presets, sketch }: SketchModules): void {
   const capture = new URLSearchParams(location.search).has('capture');
   const store = createModel(params, capture ? null : 'glimmers:' + slug + ':overrides');
   const P = store.byKey;
-  if (capture && P.adaptive) store.setValue(P.adaptive, false);
 
   const canvas = document.getElementById('stage') as HTMLCanvasElement;
   const errorBox = document.getElementById('error')!;
@@ -54,9 +61,15 @@ export function run(slug: string, { manifest, params, sketch }: SketchModules): 
   }
 
   const chrome = setupChrome(!capture);
+  const presetSeconds = manifest.presetSeconds ?? 1.5;
+  function applyPreset(name: string, seconds = presetSeconds) {
+    if (presets?.[name]) store.applyPreset(presets[name], seconds);
+  }
   const panel = buildPanel({
     slug,
     store,
+    presets,
+    onPreset: (name) => applyPreset(name),
     onEdited() {
       store.scheduleSave();
       syncPageColour();
@@ -68,7 +81,23 @@ export function run(slug: string, { manifest, params, sketch }: SketchModules): 
 
   let instance: SketchInstance | null = null;
   const loop = createLoop(canvas, P, () => instance);
+  // Captures and `?fixed` (bench.mjs --fixed) render at full resolution, no adaptive quality.
+  loop.fixed = capture || new URLSearchParams(location.search).has('fixed');
   loop.onStats = (text) => { if (chrome.paneOpen) fpsEl.textContent = text; };
+  // Preset morphs advance with the frame loop; the pane catches up when one lands.
+  let paneWait = 0;
+  loop.onTick = (dt) => {
+    const state = store.tick(dt);
+    if (state === 'idle') return;
+    syncPageColour();
+    paneWait -= dt;
+    if (state === 'done' || paneWait <= 0) {
+      paneWait = 0.25;
+      panel.syncAll();
+      panel.refreshStatus();
+    }
+    if (state === 'done') store.scheduleSave();
+  };
 
   // Play/pause: freezes scene time (anything on real time, like film grain, keeps running).
   const playBtn = document.getElementById('play') as HTMLButtonElement;
@@ -91,6 +120,7 @@ export function run(slug: string, { manifest, params, sketch }: SketchModules): 
     window.__glimmer.step = (dt) => loop.step(dt);
     // capture.mjs animates params over a clip (manifest `capture.animate`).
     window.__glimmer.set = (key, value) => { if (P[key]) store.setValue(P[key], value); };
+    window.__glimmer.preset = (name, seconds) => applyPreset(name, seconds);
   }
   else loop.start();
 }

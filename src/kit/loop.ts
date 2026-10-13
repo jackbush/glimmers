@@ -12,8 +12,12 @@ export interface Loop {
   /** Render exactly one frame `dt` seconds after the last (capture mode). */
   step(dt: number): void;
   degrade(factor: number): void;
+  /** Turn adaptive quality off: full resolution always (captures, `?fixed` benchmarks). */
+  fixed: boolean;
   /** Called twice a second with a status line for the pane header. */
   onStats: ((text: string) => void) | null;
+  /** Called every frame with real seconds, before the sketch draws (preset morphs). */
+  onTick: ((dt: number) => void) | null;
   /** Freezes scene time; real time keeps running. */
   paused: boolean;
   /** Frames rendered so far (scripts/bench.mjs reads this). */
@@ -25,7 +29,7 @@ const MIN_SCALE = 0.35;
 export function createLoop(canvas: HTMLCanvasElement, P: Record<string, Param>, sketch: () => SketchInstance | null): Loop {
   const P_timeScale = P.timeScale;
   const P_renderScale = P.renderScale, P_maxDpr = P.maxDpr;
-  const P_adaptive = P.adaptive, P_targetFps = P.targetFps;
+  const P_targetFps = P.targetFps;
 
   let raf = 0, last = 0, sceneTime = 0, realTime = 0;
   let fpsAccum = 0, fpsFrames = 0;
@@ -39,7 +43,8 @@ export function createLoop(canvas: HTMLCanvasElement, P: Record<string, Param>, 
   let winTime = 0, winFrames = 0, sinceChange = 0, ceiling = 1, ceilingAge = 0;
   let judgingDrop = false, preDropScale = 1, preDropAvg = 0, holdDown = 0, holdDownLen = 5;
 
-  function adaptive(): boolean { return !!(P_adaptive && P_adaptive.value); }
+  // Always on for sketches with quality controls (a Target fps), except when fixed.
+  function adaptive(): boolean { return !!P_targetFps && !loop.fixed; }
 
   function adapt(dt: number) {
     if (!adaptive()) { dynScale = 1; return; }
@@ -110,6 +115,7 @@ export function createLoop(canvas: HTMLCanvasElement, P: Record<string, Param>, 
     const sdt = loop.paused ? 0 : dt * (P_timeScale ? (P_timeScale.value as number) : 1);
     sceneTime += sdt;
     adapt(dt);
+    if (loop.onTick) loop.onTick(dt);
     resizeIfNeeded(s);
     s.frame(sceneTime, sdt, realTime);
     frames++;
@@ -136,7 +142,9 @@ export function createLoop(canvas: HTMLCanvasElement, P: Record<string, Param>, 
   }
 
   const loop: Loop = {
+    fixed: false,
     onStats: null,
+    onTick: null,
     paused: false,
     get frames() { return frames; },
     start() {

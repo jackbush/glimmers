@@ -24,6 +24,7 @@ for (const slug of slugs) {
   const load = async (f) => (await import(pathToFileURL(join(dir, f)).href)).default;
 
   const manifest = await load('manifest.js');
+  const presets = existsSync(join(dir, 'params.js')) ? (await import(pathToFileURL(join(dir, 'params.js')).href)).presets : null;
   const schema = existsSync(join(dir, 'params.js')) ? await load('params.js') : null;
   if (!existsSync(join(dir, 'sketch.js'))) errors.push('missing sketch.js');
   if (!schema) errors.push('missing params.js');
@@ -62,6 +63,22 @@ for (const slug of slugs) {
   }
   for (const k of ['timeScale', 'maxDpr']) {
     if (schema && !keys.has(k)) errors.push(`no "${k}" param — start params.js with playback() from src/kit/standard.js`);
+  }
+
+  // Presets: every key must be a param, every value valid for it.
+  for (const [name, values] of Object.entries(presets || {})) {
+    for (const [k, v] of Object.entries(values)) {
+      const p = params.find((q) => q.key === k);
+      if (!p) { errors.push(`preset "${name}": no param "${k}"`); continue; }
+      const type = p.type || 'range';
+      if (type === 'select' && !p.options.includes(v)) errors.push(`preset "${name}": ${k} "${v}" isn't one of its options`);
+      else if (type === 'range' && (typeof v !== 'number' || v < p.min || v > p.max)) errors.push(`preset "${name}": ${k} ${v} isn't a number in [${p.min}, ${p.max}]`);
+      else if (type === 'color' && !/^#[0-9a-f]{6}$/.test(v)) errors.push(`preset "${name}": ${k} must be lowercase #rrggbb`);
+      else if (type === 'bool' && typeof v !== 'boolean') errors.push(`preset "${name}": ${k} must be boolean`);
+    }
+  }
+  for (const n of manifest?.capture?.presets?.sequence || []) {
+    if (!presets?.[n]) errors.push(`manifest.js: capture preset "${n}" isn't in params.js presets`);
   }
 
   if (manifest?.pageColour) {

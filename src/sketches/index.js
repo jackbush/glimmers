@@ -13,11 +13,10 @@ export default {
 
   sketches: [
     'blackstar',
+    'leaf',
     'orb',
     'constellations',
     'cubeland',
-    'mindflow',
-    // 'foliage',
-    // 'leaf',
+    // 'mindflow',
   ],
 };

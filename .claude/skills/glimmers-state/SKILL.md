@@ -27,7 +27,7 @@ The settings pane's **Copy changes** button produces this:
 ## Where a default lives
 
 - Most params are literal entries in `params.js`: edit the `value:` field.
-- **Standard keys** (`timeScale`, `renderScale`, `adaptive`, `targetFps`, `maxDpr`) come from `playback()` in `src/kit/standard.js`. Set them through the first argument of the sketch's `playback()` call, e.g. `playback({ timeScale: 0.41 }, …)`. Never edit `standard.js` for one sketch's value.
+- **Standard keys** (`timeScale`, `renderScale`, `targetFps`, `maxDpr`) come from `playback()` in `src/kit/standard.js`. Set them through the first argument of the sketch's `playback()` call, e.g. `playback({ timeScale: 0.41 }, …)`. Never edit `standard.js` for one sketch's value.
 
 ## Procedure
 

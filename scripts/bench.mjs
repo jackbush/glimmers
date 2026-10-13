@@ -28,13 +28,10 @@ const killer = setTimeout(() => { console.error('timed out'); chrome.close(); se
 let failed = false;
 
 for (const slug of slugs) {
-  await chrome.send('Page.navigate', { url: server.base + slug + '/' });
+  await chrome.send('Page.navigate', { url: server.base + slug + '/' + (has('--fixed') ? '?fixed' : '') });
   await sleep(1500);
   // Pane open → the fps readout updates. Pane state is site-wide, so only click when closed.
   await chrome.evaluate(`(() => { const c = document.getElementById('cog'); if (c.getAttribute('aria-expanded') !== 'true') c.click(); })()`);
-  if (has('--fixed')) {
-    await chrome.evaluate(`(() => { const b = document.getElementById('p-adaptive'); if (b && b.checked) { b.checked = false; b.dispatchEvent(new Event('change')); } })()`);
-  }
   await sleep(has('--swiftshader') ? 10000 : 2500); // let adaptive quality settle
 
   // Counts frames the kit actually rendered (window.__glimmer.frames) over wall-clock time.

@@ -13,9 +13,11 @@ const manifestSchema = z
     name: z.string().trim().min(1),
     year: z.number().int().min(1990).max(2100),
     pageColour: z.string().optional(),
+    presetSeconds: z.number().min(0).optional(),
     capture: z
       .object({ seconds: z.number().positive(), start: z.number().min(0), fps: z.number().positive(), crf: z.number().int().min(0).max(51), pingpong: z.boolean(),
-        animate: z.record(z.string(), z.tuple([z.number(), z.number()])) })
+        animate: z.record(z.string(), z.tuple([z.number(), z.number()])),
+        presets: z.object({ sequence: z.array(z.string()).min(1), hold: z.number().min(0).optional() }).strict() })
       .partial()
       .strict()
       .optional(),

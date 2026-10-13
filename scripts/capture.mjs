@@ -17,6 +17,8 @@
 // --dpr 2 renders it at retina resolution. --start skips into the animation first.
 // --still writes a single PNG frame (at --start) instead of a cover: share images, icons.
 // --set overrides a param for this capture (repeatable), e.g. --set orbRadius=0.7.
+// A manifest `capture.presets` ({ sequence, hold }) morphs through the sketch's presets instead:
+// each held for `hold` s, then morphed to the next over `presetSeconds`, looping (no ping-pong).
 
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -46,7 +48,13 @@ if (spawnSync('ffmpeg', ['-version']).status !== 0) {
 // Defaults, then the sketch's own `capture` settings in manifest.js, then the command line.
 const { default: manifest } = await import(join(dir, 'manifest.js'));
 const preset = { seconds: 6, start: 0, fps: 30, crf: 26, pingpong: true, animate: {}, ...(manifest.capture || {}) };
-const seconds = Number(opt('--seconds', preset.seconds));
+// A preset sequence (manifest capture.presets): hold each, morph to the next, loop.
+const seq = preset.presets?.sequence || [];
+const hold = preset.presets?.hold ?? 1.5;
+const morph = manifest.presetSeconds ?? 1.5;
+const period = hold + morph;
+if (seq.length) preset.pingpong = false;
+const seconds = Number(opt('--seconds', seq.length ? seq.length * period : preset.seconds));
 const start = Number(opt('--start', preset.start));
 const fps = Number(opt('--fps', preset.fps));
 const [W, H] = opt('--size', '840x525').split('x').map(Number);
@@ -77,6 +85,11 @@ try {
   const setAt = (p) => chrome.evaluate(sweep.map(([key, [a, b]]) =>
     `window.__glimmer.set(${JSON.stringify(key)}, ${a + (b - a) * (1 - Math.cos(2 * Math.PI * p)) / 2})`).join(';') || '0');
   await setAt(0);
+  if (seq.length) {
+    // Land on the first preset, and give the sketch's own morphs (selects) time to settle,
+    // so the clip starts (and loops back) on it.
+    await chrome.evaluate(`window.__glimmer.preset(${JSON.stringify(seq[0])}, 0); for (let i = 0; i < ${Math.round(3 * fps)}; i++) window.__glimmer.step(${1 / fps})`);
+  }
   for (const [k, v] of overrides) await chrome.evaluate(`window.__glimmer.set(${JSON.stringify(k)}, ${JSON.stringify(v)})`);
 
   // Skip ahead at the capture timestep, so physics-style sketches see the same dt as in the clip.
@@ -91,6 +104,12 @@ try {
 
   for (let i = 0; !still && i < frames; i++) {
     if (sweep.length) await setAt(i / frames);
+    if (seq.length) {
+      const k = Math.floor(i / fps / period);
+      if (Math.round((k * period + hold) * fps) === i) {
+        await chrome.evaluate(`window.__glimmer.preset(${JSON.stringify(seq[(k + 1) % seq.length])}, ${morph})`);
+      }
+    }
     await chrome.evaluate(`window.__glimmer.step(${1 / fps})`);
     const r = await chrome.send('Page.captureScreenshot', { format: 'png' });
     writeFileSync(join(work, 'raw', String(i).padStart(5, '0') + '.png'), Buffer.from(r.result.data, 'base64'));

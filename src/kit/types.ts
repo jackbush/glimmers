@@ -20,6 +20,12 @@ export interface ParamDef {
   [extra: string]: unknown;
 }
 
+/**
+ * Named sets of param values a sketch offers (params.js: `export const presets`). Picking
+ * one morphs to it: numbers and colours glide, selects and bools switch.
+ */
+export type Presets = Record<string, Record<string, ParamValue>>;
+
 export interface Group {
   group: string;
   params: ParamDef[];
@@ -69,6 +75,8 @@ export interface Manifest {
   name: string;
   /** The year the sketch was first made. */
   year: number;
+  /** Seconds a preset takes to morph in (default 1.5). */
+  presetSeconds?: number;
   /** Key of a colour param that drives the page background and theme-color. */
   pageColour?: string;
   /** Defaults for scripts/capture.mjs, so re-captures match. */
@@ -80,5 +88,10 @@ export interface Manifest {
     pingpong?: boolean;
     /** Params to sweep during the clip: from → to and back, eased, over the whole clip. */
     animate?: Record<string, [number, number]>;
+    /**
+     * Morph through presets instead: hold each for `hold` seconds, then morph to the next
+     * over the kit's preset morph time; the last morphs back to the first, so it loops.
+     */
+    presets?: { sequence: string[]; hold?: number };
   };
 }

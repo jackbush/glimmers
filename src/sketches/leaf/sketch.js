@@ -1,19 +1,25 @@
 // Leaf — one leaf (or one sprig) centred on the screen, backlit on a light table. Raw WebGL2.
 //
-// Each frame: ease the category morphs → rebuild the geometry if a shape param moved
-// (shapes.js, forked from Foliage) → fit it, tip up, to Scale × 90% of the short side →
-// draw the mottled background, then the leaf (shaders.js). Nothing moves on its own, so a
-// frame where nothing changed draws nothing and the last image stays on screen.
+// Each frame: ease the category morphs and every shape number toward the params → rebuild
+// the geometry while anything is still easing (shapes.js) → ease the
+// framing (tip up, Scale × 90% of the short side) → sway → draw the paper, then the leaf
+// (shaders.js). With Sway at 0 and nothing changing, a frame draws nothing and the last
+// image stays on screen.
+//
+// Smooth morphs: shape numbers are eased copies (counts go fractional, and shapes.js grows
+// the newest node, leaflet pair or vein in as the fraction rises); categories, including
+// arrangement, terminal and bud type, are eased weights; each leaf has a presence and is
+// scaled about where it attaches, so leaves grow out of and shrink back into the stem.
 //
 // Params without `uniform: false` are auto-declared in every shader as u_<key>; f_* are
 // per-frame values computed here. The frame allocates nothing.
 
 import * as SH from './shaders.js';
-import { buildShapes, geo, STRIDE, MAX_PLACE, SEG_FILL, SEG_VEIN } from './shapes.js';
+import { buildShapes, geo, STRIDE, MAX_VERTS, MAX_PLACE, SEG_FILL, SEG_VEIN } from './shapes.js';
 import { rng } from '../../kit/random.js';
 
 const MAX_INST = MAX_PLACE + 1, IFLOATS = 6;
-const SELECTS = ['compound', 'outline', 'base', 'apex', 'lobing', 'margin', 'venation'];
+const SELECTS = ['compound', 'outline', 'base', 'apex', 'lobing', 'margin', 'venation', 'arrangement', 'terminal', 'budType'];
 // Params that change the geometry (selects in SELECTS morph and are tracked separately).
 const GEOM_KEYS = [
   'seed', 'leaflets', 'leafletAngle', 'width', 'bend', 'sCurve', 'lobeDepth', 'lobes', 'lobeSharpness',
@@ -21,7 +27,7 @@ const GEOM_KEYS = [
   'petioleLength', 'petioleFlat', 'petioleWing', 'stipules', 'outlineWeight', 'wobble',
   'arrangement', 'nodes', 'divergence', 'decussate', 'whorlCount', 'internode', 'internodeTaper', 'bareStem',
   'insertion', 'tipInsertion', 'sizeGradient', 'stemWidth', 'stemTaper', 'stemCurve', 'stemDroop', 'zigzag',
-  'terminal', 'leafVariety',
+  'terminal', 'budType', 'budSize', 'budStem', 'leafVariety',
 ];
 
 /** @type {import('../../kit/types').Sketch} */
@@ -73,11 +79,46 @@ export default function create({ canvas, P, model, degrade }) {
     }
     return s;
   }
-  function arrangementIndex() { return P.arrangement.options.indexOf(P.arrangement.value); }
+
+  // ---- eased shape numbers: geometry reads PE (P with eased copies of these), so a slider
+  // or preset change glides. Bools (decussate) ease 0 → 1 too.
+  /** @type {Record<string, any>} */
+  const PE = {};
+  const eased = [];
+  for (const k in P) PE[k] = P[k];
+  for (const p of geomParams) {
+    if (p.type !== 'range' && p.type !== 'bool') continue;
+    if (p.key === 'seed') continue;
+    const e = { p, value: 0, eps: p.type === 'bool' ? 1e-3 : Math.max(1e-7, (p.max - p.min) * 1e-4) };
+    PE[p.key] = e;
+    eased.push(e);
+  }
+  let easedInit = false;
+  function easeNumbers(rdt) {
+    const k = P.morph.value > 0 ? 1 - Math.exp(-rdt * 4.6 / P.morph.value) : 1;
+    let moving = false;
+    for (let i = 0; i < eased.length; i++) {
+      const e = eased[i];
+      const t = e.p.type === 'bool' ? (e.p.value ? 1 : 0) : e.p.value;
+      if (!easedInit) { e.value = t; continue; }
+      const d = t - e.value;
+      if (d === 0) continue;
+      e.value = Math.abs(d) < e.eps ? t : e.value + d * k;
+      moving = true;
+    }
+    easedInit = true;
+    return moving;
+  }
 
   // ---- GL plumbing
   let ready = false;
   let progBg = null, progLeaf = null, vaoLeaf = null, vaoFull = null, vbo = null, ibo = null;
+  // Geometry uploads rotate through RING fixed-size buffers (each with its own VAO). The GPU
+  // runs a few frames behind, so writing a buffer it may still be reading made the driver
+  // copy or wait (up to half a second, once per morph); reallocating each time did too.
+  const RING = 2;
+  const vbos = [null, null], vaos = [null, null], ibos = [null, null];
+  let cur = 0;
   const UNIT_NOISE = 0;
   const fView = new Float32Array(2);
   let fPx = 1;
@@ -95,7 +136,7 @@ export default function create({ canvas, P, model, degrade }) {
   }
   function header() {
     return '#version 300 es\nprecision highp float;\nprecision highp int;\nprecision highp sampler2D;\n' +
-      'uniform vec2 f_view;\nuniform float f_px;\n' +
+      'uniform vec2 f_view;\nuniform float f_px;\nuniform float u_style;\n' +
       uniformParams.map((p) => 'uniform ' + (p.type === 'color' ? 'vec3' : 'float') + ' u_' + p.key + ';').join('\n') + '\n';
   }
   function program(vsBody, fsBody, name) {
@@ -114,13 +155,14 @@ export default function create({ canvas, P, model, degrade }) {
     const loc = (n) => gl.getUniformLocation(prog, n);
     gl.useProgram(prog);
     gl.uniform1i(loc('u_noise'), UNIT_NOISE);
-    return { prog, version: -1, fView: loc('f_view'), fPx: loc('f_px'), uPass: loc('u_pass'), paramLocs: uniformParams.map((p) => loc('u_' + p.key)) };
+    return { prog, version: -1, fView: loc('f_view'), fPx: loc('f_px'), uPass: loc('u_pass'), uStemBase: loc('u_stemBase'), uStyle: loc('u_style'), paramLocs: uniformParams.map((p) => loc('u_' + p.key)) };
   }
   function use(pr) {
     gl.useProgram(pr.prog);
     gl.uniform2fv(pr.fView, fView);
     gl.uniform1f(pr.fPx, fPx);
     if (pr.version !== model.version) {
+      gl.uniform1f(pr.uStyle, P.style.options.indexOf(P.style.value));
       for (let i = 0; i < uniformParams.length; i++) {
         const p = uniformParams[i], l = pr.paramLocs[i];
         if (p.type === 'color') gl.uniform3fv(l, p.rgb);
@@ -172,21 +214,31 @@ export default function create({ canvas, P, model, degrade }) {
     progBg = program(SH.vertFull, SH.background, 'background');
     progLeaf = program(SH.leafVert, SH.leafFrag, 'leaf');
     vaoFull = gl.createVertexArray();
-    vaoLeaf = gl.createVertexArray();
-    gl.bindVertexArray(vaoLeaf);
-    vbo = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
     const B = STRIDE * 4;
-    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, B, 0);
-    gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 2, gl.FLOAT, false, B, 8);
-    gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 4, gl.FLOAT, false, B, 16);
-    gl.enableVertexAttribArray(3); gl.vertexAttribPointer(3, 1, gl.FLOAT, false, B, 32);
-    ibo = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, ibo);
-    gl.enableVertexAttribArray(4); gl.vertexAttribDivisor(4, 1);
-    gl.enableVertexAttribArray(5); gl.vertexAttribDivisor(5, 1);
+    for (let k = 0; k < RING; k++) {
+      vaos[k] = gl.createVertexArray();
+      gl.bindVertexArray(vaos[k]);
+      vbos[k] = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, vbos[k]);
+      gl.bufferData(gl.ARRAY_BUFFER, MAX_VERTS * STRIDE * 4, gl.DYNAMIC_DRAW);
+      // One full-size upload now, so the driver sizes its upload staging for the largest
+      // geometry up front (growing it mid-morph stalled for up to a second).
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, geo.verts, 0, MAX_VERTS * STRIDE);
+      gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, B, 0);
+      gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 2, gl.FLOAT, false, B, 8);
+      gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 4, gl.FLOAT, false, B, 16);
+      gl.enableVertexAttribArray(3); gl.vertexAttribPointer(3, 1, gl.FLOAT, false, B, 32);
+      ibos[k] = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, ibos[k]);
+      gl.bufferData(gl.ARRAY_BUFFER, MAX_INST * IFLOATS * 4, gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(4); gl.vertexAttribDivisor(4, 1);
+      gl.enableVertexAttribArray(5); gl.vertexAttribDivisor(5, 1);
+    }
     gl.bindVertexArray(null);
+    cur = 0;
+    vaoLeaf = vaos[0]; vbo = vbos[0]; ibo = ibos[0];
     geoUploaded = false;
+    bufGen.fill(-1);
     needsDraw = true;
     ready = true;
   }
@@ -195,19 +247,26 @@ export default function create({ canvas, P, model, degrade }) {
     e.preventDefault();
     ready = false;
     progBg = progLeaf = vaoLeaf = vaoFull = vbo = ibo = null;
+    for (let k = 0; k < RING; k++) vbos[k] = vaos[k] = ibos[k] = null;
     degrade(0.6);
   });
   canvas.addEventListener('webglcontextrestored', buildAll);
 
   // ---- the object: bounds (leaf units, unrotated) of whatever is drawn
   let lastVersion = -1, lastSig = NaN, geoUploaded = false, lastRt = -1;
+  // Which geometry generation each buffer of the pair holds.
+  let geoGen = 0;
+  const bufGen = new Int32Array([-1, -1]);
   // The leaf is still, so it's only drawn when something changes (see frame()).
   let needsDraw = true, drawnVersion = -1;
   let bx0 = 0, by0 = 0, bx1 = 1, by1 = 1;
+  // The framing eases toward the rebuilt box, so the view doesn't jump as the shape changes.
+  const viewBox = new Float32Array(4);
+  let viewInit = false;
   const leafBox = new Float32Array(16 * 4);
 
   function rebuild() {
-    buildShapes(P, blend, arrangementIndex(), P.leafVariety.value);
+    buildShapes(PE, blend, PE.leafVariety.value);
     geoUploaded = false;
     // Each leaf variant's box, from its vertices.
     for (let v = 0; v < geo.nLeaf; v++) {
@@ -218,22 +277,35 @@ export default function create({ canvas, P, model, degrade }) {
       }
       leafBox[v * 4] = x0; leafBox[v * 4 + 1] = y0; leafBox[v * 4 + 2] = x1; leafBox[v * 4 + 3] = y1;
     }
-    if (geo.nSprig === 0) {
-      bx0 = leafBox[0]; by0 = leafBox[1]; bx1 = leafBox[2]; by1 = leafBox[3];
-      return;
-    }
-    // Sprig: the stem's vertices plus each placed leaf's box corners.
+    // The stem's vertices plus each placed leaf's box corners (at its presence).
     bx0 = by0 = 1e9; bx1 = by1 = -1e9;
-    for (let i = geo.sprigStart[0]; i < geo.sprigStart[0] + geo.sprigCount[0]; i++) grow(geo.verts[i * STRIDE], geo.verts[i * STRIDE + 1]);
+    for (let i = geo.sprigStart[0]; i < geo.budStart[0] + geo.budCount[0]; i++) grow(geo.verts[i * STRIDE], geo.verts[i * STRIDE + 1]);
     for (let p = 0; p < geo.sprigNPlace[0]; p++) {
-      const o = p * 8, lv = geo.sprigPlace[o];
-      const qa = geo.sprigPlace[o + 1], qb = geo.sprigPlace[o + 2], qc = geo.sprigPlace[o + 3], qd = geo.sprigPlace[o + 4];
-      const qx = geo.sprigPlace[o + 5], qy = geo.sprigPlace[o + 6];
+      placed(p, 0);
+      const lv = geo.sprigPlace[p * 8];
       for (let c = 0; c < 4; c++) {
         const x = leafBox[lv * 4 + (c & 1 ? 2 : 0)], y = leafBox[lv * 4 + (c & 2 ? 3 : 1)];
-        grow(qa * x + qc * y + qx, qb * x + qd * y + qy);
+        grow(pa * x + pc * y + px, pb * x + pd * y + py);
       }
     }
+    if (bx0 > bx1) { bx0 = by0 = 0; bx1 = by1 = 1; }
+  }
+  // Placement p's transform (leaf coords → sprig coords), scaled about where the leaf
+  // attaches by its presence (so it grows from the stem) and swayed by angle th about the
+  // same point. Into pa…pd (column-major mat2), px, py.
+  let pa = 1, pb = 0, pc = 0, pd = 1, px = 0, py = 0;
+  function placed(p, th) {
+    const o = p * 8, lv = geo.sprigPlace[o];
+    const qa = geo.sprigPlace[o + 1], qb = geo.sprigPlace[o + 2], qc = geo.sprigPlace[o + 3], qd = geo.sprigPlace[o + 4];
+    const qx = geo.sprigPlace[o + 5], qy = geo.sprigPlace[o + 6], pres = geo.sprigPlace[o + 7];
+    const ax = geo.leafAttach[lv * 3], ay = geo.leafAttach[lv * 3 + 1];
+    const nx = qa * ax + qc * ay + qx, ny = qb * ax + qd * ay + qy; // the node
+    const c = Math.cos(th), s = Math.sin(th);
+    // Q' = R · pres·Q;  q' = N + R · pres·(q − N)
+    pa = pres * (c * qa - s * qb); pb = pres * (s * qa + c * qb);
+    pc = pres * (c * qc - s * qd); pd = pres * (s * qc + c * qd);
+    const dx = pres * (qx - nx), dy = pres * (qy - ny);
+    px = nx + c * dx - s * dy; py = ny + s * dx + c * dy;
   }
   function grow(x, y) {
     if (x < bx0) bx0 = x; if (x > bx1) bx1 = x; if (y < by0) by0 = y; if (y > by1) by1 = y;
@@ -246,31 +318,32 @@ export default function create({ canvas, P, model, degrade }) {
     const o = slot * IFLOATS;
     inst[o] = a; inst[o + 1] = b; inst[o + 2] = c; inst[o + 3] = d; inst[o + 4] = tx; inst[o + 5] = ty;
   }
-  function buildInstances(cssW, cssH) {
-    // Tip up, centred, the larger side of the box at Scale × 90% of the short side.
-    const s = P.scale.value * 0.9 * Math.min(cssW, cssH) / Math.max(bx1 - bx0, by1 - by0, 1e-3);
-    const cx = (bx0 + bx1) / 2, cy = (by0 + by1) / 2;
-    // m = R(−90°) · s: leaf +x (toward the tip) points up the screen.
-    const m00 = 0, m10 = -s, m01 = s, m11 = 0;
-    const tx = cssW / 2 - (m00 * cx + m01 * cy), ty = cssH / 2 - (m10 * cx + m11 * cy);
-    if (geo.nSprig === 0) {
-      stemInst = 0;
-      putInst(0, m00, m10, m01, m11, tx, ty);
-      instTotal = 1;
-      return;
-    }
+  function buildInstances(cssW, cssH, t) {
+    // Tip up, centred, the larger side of the (eased) box at Scale × 90% of the short side.
+    const x0 = viewBox[0], y0 = viewBox[1], x1 = viewBox[2], y1 = viewBox[3];
+    const sc = P.scale.value * 0.9 * Math.min(cssW, cssH) / Math.max(x1 - x0, y1 - y0, 1e-3);
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+    // Sway: the whole sprig rocks about its base, each leaf about where it attaches, each on
+    // its own slow rhythm (two sines, so it never quite repeats).
+    const sw = P.sway.value, f = P.swaySpeed.value * 6.2831853;
+    const ths = sw * 0.035 * (Math.sin(f * 0.6 * t) + 0.4 * Math.sin(f * 0.37 * t + 1.3));
+    // m = R(−90°) · sc · R(ths), about the stem's base (sprig origin): leaf +x points up.
+    const cs = Math.cos(ths), sn = Math.sin(ths);
+    const m00 = sc * sn, m10 = -sc * cs, m01 = sc * cs, m11 = sc * sn;
+    // The centre sits where it would unswayed, so the rocking is about the base, not the middle.
+    const tx = cssW / 2 - sc * cy, ty = cssH / 2 + sc * cx;
     stemInst = 1;
     putInst(0, m00, m10, m01, m11, tx, ty);
-    // In stem order (instance 1 + p), so later leaves cover earlier ones in a fixed order.
+    // In stem order (instance 1 + p), so the draw order of leaves is fixed.
     instTotal = 1 + geo.sprigNPlace[0];
     for (let p = 0; p < geo.sprigNPlace[0]; p++) {
-      const o = p * 8, lv = geo.sprigPlace[o];
-      const qa = geo.sprigPlace[o + 1], qb = geo.sprigPlace[o + 2], qc = geo.sprigPlace[o + 3], qd = geo.sprigPlace[o + 4];
-      const qx = geo.sprigPlace[o + 5], qy = geo.sprigPlace[o + 6];
-      // world = m · (Q · p + q) + t
+      const ph = p * 2.39996; // golden angle: neighbours out of step
+      const th = sw * 0.09 * (Math.sin(f * t + ph) + 0.5 * Math.sin(f * 1.73 * t + ph * 1.7));
+      placed(p, th);
+      // world = m · (Q' · v + q') + t
       putInst(1 + p,
-        m00 * qa + m01 * qb, m10 * qa + m11 * qb, m00 * qc + m01 * qd, m10 * qc + m11 * qd,
-        m00 * qx + m01 * qy + tx, m10 * qx + m11 * qy + ty);
+        m00 * pa + m01 * pb, m10 * pa + m11 * pb, m00 * pc + m01 * pd, m10 * pc + m11 * pd,
+        m00 * px + m01 * py + tx, m10 * px + m11 * py + ty);
     }
   }
 
@@ -282,8 +355,10 @@ export default function create({ canvas, P, model, degrade }) {
     gl.drawArraysInstanced(gl.TRIANGLES, start, count, n);
   }
 
-  // One leaf instance, segment by segment. Each leaflet gets its own stencil value: its
-  // fill writes it, its veins draw only where it's set, so veins never leave the blade.
+  // One leaf instance, segment by segment. Stencil bits: 0x3f the leaflet's id (its fill
+  // writes it, so veins never leave the blade), 0x40 pooled already, 0x80 inside a vein.
+  // Veins draw as one network: pool once, mark insides, pen edges outside the insides,
+  // then fill each inside pixel once.
   let stencilRef = 0;
   function drawLeaf(v, inst) {
     const b = inst * IFLOATS * 4;
@@ -293,20 +368,35 @@ export default function create({ canvas, P, model, degrade }) {
     for (let k = s0; k < s1; k++) {
       const start = geo.seg[k * 3], count = geo.seg[k * 3 + 1], mode = geo.seg[k * 3 + 2];
       if (mode === SEG_FILL) {
-        if (++stencilRef > 255) { gl.clear(gl.STENCIL_BUFFER_BIT); stencilRef = 1; }
+        if (++stencilRef > 63) { gl.stencilMask(0xff); gl.clear(gl.STENCIL_BUFFER_BIT); stencilRef = 1; }
         gl.enable(gl.STENCIL_TEST);
-        gl.stencilFunc(gl.ALWAYS, stencilRef, 0xff);
-        gl.stencilOp(gl.KEEP, gl.KEEP, gl.REPLACE);
+        gl.stencilFunc(gl.ALWAYS, stencilRef, 0xff); gl.stencilMask(0xff); gl.stencilOp(gl.KEEP, gl.KEEP, gl.REPLACE);
         gl.drawArraysInstanced(gl.TRIANGLES, start, count, 1);
       } else if (mode === SEG_VEIN) {
+        const R = stencilRef;
         gl.enable(gl.STENCIL_TEST);
-        gl.stencilFunc(gl.EQUAL, stencilRef, 0xff);
-        gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP);
+        // 1. Pigment pooled along the veins (watercolour), each pixel once (INVERT sets 0x40,
+        // and only pixels with it clear pass).
+        gl.stencilFunc(gl.EQUAL, R, 0x7f); gl.stencilMask(0x40); gl.stencilOp(gl.KEEP, gl.KEEP, gl.INVERT);
         gl.uniform1f(progLeaf.uPass, 1);
         gl.drawArraysInstanced(gl.TRIANGLES, start, count, 1);
+        // 2. Mark the insides of all the veins.
+        gl.colorMask(false, false, false, false);
+        // (REPLACE with the 0x80 bit in ref: sets it, idempotent where veins overlap.)
+        gl.stencilFunc(gl.EQUAL, R | 0x80, 0x3f); gl.stencilMask(0x80); gl.stencilOp(gl.KEEP, gl.KEEP, gl.REPLACE);
+        gl.uniform1f(progLeaf.uPass, 3);
+        gl.drawArraysInstanced(gl.TRIANGLES, start, count, 1);
+        gl.colorMask(true, true, true, true);
+        // 3. Pen edges, only outside every vein's inside.
+        gl.stencilFunc(gl.EQUAL, R, 0xbf); gl.stencilMask(0); gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP);
+        gl.uniform1f(progLeaf.uPass, 4);
+        gl.drawArraysInstanced(gl.TRIANGLES, start, count, 1);
+        // 4. Fill the insides, each pixel once (clearing its mark as it goes).
+        gl.stencilFunc(gl.EQUAL, R | 0x80, 0xbf); gl.stencilMask(0x80); gl.stencilOp(gl.KEEP, gl.KEEP, gl.ZERO);
         gl.uniform1f(progLeaf.uPass, 2);
         gl.drawArraysInstanced(gl.TRIANGLES, start, count, 1);
         gl.uniform1f(progLeaf.uPass, 0);
+        gl.stencilMask(0xff);
       } else {
         gl.disable(gl.STENCIL_TEST);
         gl.drawArraysInstanced(gl.TRIANGLES, start, count, 1);
@@ -319,37 +409,58 @@ export default function create({ canvas, P, model, degrade }) {
 
   return {
     resize(_w, _h, px) { fPx = px; needsDraw = true; },
-    frame(_t, _dt, rt) {
+    frame(t, dt, rt) {
       if (!ready) return;
       let rdt = lastRt < 0 ? 1 / 60 : rt - lastRt;
       if (rdt < 0 || rdt > 0.1) rdt = 1 / 60;
       lastRt = rt;
       const cssW = canvas.width / fPx, cssH = canvas.height / fPx;
 
-      // Shapes: rebuild when a category is morphing or a shape param moved.
+      // Shapes: rebuild while a category or a shape number is still easing.
       let dirty = easeBlends(rdt);
+      if (easeNumbers(rdt)) dirty = true;
       if (model.version !== lastVersion) {
         lastVersion = model.version;
         const s = geomSig();
         if (s !== lastSig) { lastSig = s; dirty = true; }
       }
       if (dirty) rebuild();
-      // Nothing changed: leave the last frame on screen. WebGL keeps showing it until we draw
-      // again, so a still leaf costs no GPU time (a constant redraw starved Chrome's own UI,
-      // which shares the GPU).
-      if (!dirty && !needsDraw && model.version === drawnVersion) return;
+      // Ease the framing toward the box.
+      let framing = false;
+      {
+        const k = !viewInit ? 1 : P.morph.value > 0 ? 1 - Math.exp(-rdt * 4.6 / P.morph.value) : 1;
+        const tb0 = bx0, tb1 = by0, tb2 = bx1, tb3 = by1;
+        const eps = 1e-5 * Math.max(bx1 - bx0, by1 - by0, 1e-3);
+        for (let i = 0; i < 4; i++) {
+          const target = i === 0 ? tb0 : i === 1 ? tb1 : i === 2 ? tb2 : tb3;
+          const d = target - viewBox[i];
+          if (d === 0) continue;
+          viewBox[i] = Math.abs(d) < eps ? target : viewBox[i] + d * k;
+          framing = true;
+        }
+        viewInit = true;
+      }
+      const swaying = P.sway.value > 0 && dt > 0;
+      // Nothing changed and nothing sways: leave the last frame on screen. WebGL keeps showing
+      // it until we draw again, so a still leaf costs no GPU time (a constant heavy redraw
+      // starved Chrome's own UI, which shares the GPU).
+      if (!dirty && !framing && !swaying && !needsDraw && model.version === drawnVersion) return;
       needsDraw = false;
       drawnVersion = model.version;
-      if (!geoUploaded) {
-        // bufferData, not bufferSubData: fresh storage, so the upload never waits for the
-        // GPU to finish drawing from the old geometry (that stalled the whole browser).
+      // Move on to the next buffer in the ring. New geometry goes in it; otherwise copy the
+      // current geometry across if it holds an older generation.
+      cur = (cur + 1) % RING;
+      vaoLeaf = vaos[cur]; vbo = vbos[cur]; ibo = ibos[cur];
+      if (!geoUploaded || bufGen[cur] !== geoGen) {
+        if (!geoUploaded) geoGen++;
         gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-        gl.bufferData(gl.ARRAY_BUFFER, geo.verts, gl.DYNAMIC_DRAW, 0, Math.max(1, geo.count * STRIDE));
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, geo.verts, 0, Math.max(1, geo.count * STRIDE));
+        bufGen[cur] = geoGen;
         geoUploaded = true;
       }
-      buildInstances(cssW, cssH);
+      buildInstances(cssW, cssH, t);
       gl.bindBuffer(gl.ARRAY_BUFFER, ibo);
-      gl.bufferData(gl.ARRAY_BUFFER, inst, gl.DYNAMIC_DRAW, 0, instTotal * IFLOATS);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, inst, 0, instTotal * IFLOATS);
 
       fView[0] = cssW; fView[1] = cssH;
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -364,14 +475,22 @@ export default function create({ canvas, P, model, degrade }) {
       use(progLeaf);
       gl.bindVertexArray(vaoLeaf);
       gl.bindBuffer(gl.ARRAY_BUFFER, ibo);
+      gl.uniform1f(progLeaf.uStemBase, 1);
       if (stemInst) drawRun(geo.sprigStart[0], geo.sprigCount[0], 0, 1);
+      gl.uniform1f(progLeaf.uStemBase, 0);
       gl.uniform1f(progLeaf.uPass, 0);
       stencilRef = 0;
+      gl.stencilMask(0xff);
       gl.clear(gl.STENCIL_BUFFER_BIT);
       if (stemInst) {
         // Sprig leaves one at a time, tip first, so leaves nearer the base cover those above.
-        for (let p = geo.sprigNPlace[0] - 1; p >= 0; p--) drawLeaf(geo.sprigPlace[p * 8], 1 + p);
-      } else drawLeaf(0, 0);
+        // The bud is the end of the stem: drawn first, under every leaf.
+        drawRun(geo.budStart[0], geo.budCount[0], 0, 1);
+        for (let p = geo.sprigNPlace[0] - 1; p >= 0; p--) {
+          if (geo.sprigPlace[p * 8 + 7] < 0.002) continue; // not grown in yet
+          drawLeaf(geo.sprigPlace[p * 8], 1 + p);
+        }
+      }
       gl.disable(gl.BLEND);
       gl.bindVertexArray(null);
     },

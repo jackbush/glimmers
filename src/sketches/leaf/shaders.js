@@ -1,20 +1,41 @@
-// Leaf — shaders: a leaf backlit on a light table, against a dark background.
+// Leaf — shaders: a botanical study in fineliner (and watercolour) on warm paper.
 //
-// Two passes, straight to the canvas:
-//   1. background  full screen: the background colour, mottled.
+// Two passes, straight to the canvas, drawn only when something changes (see sketch.js):
+//   1. background  the paper: its colour and grain.
 //   2. leaf        the leaf geometry (one instance, or a sprig's stem and leaves), drawn
-//                  leaflet by leaflet: the fill marks the stencil, the veins are clipped
-//                  to it (edges pass, then cores pass), then the outline.
-//                  Blade: lit tissue, mottled, broken into capillary cells (a Voronoi
-//                  network in leaf coordinates, plus a finer one inside), each cell a
-//                  little brighter or darker, darkening toward the rim. Veins: a glowing
-//                  core with darker edges. Outline and stem: solid, each mottled.
-// Every layer is mottled by its own slice of the noise texture, in leaf coordinates, so the
-// mottling sticks to the leaf and differs between layers.
+//                  leaflet by leaflet: the fill marks the stencil, the veins are clipped to
+//                  it, then the pen outline.
+//
+// u_style (set by sketch.js from the Style select) builds up the finish:
+//   0 Outline      fills are bare paper (they hide what's beneath); pen outline and veins.
+//   1 Shaded pen   + hatching: solid pen lines only, tone from how many lines are drawn,
+//                  wandering and broken like a hand-held fineliner. No greys.
+//   2 Watercolour  + a transparent wash under the pen work: shaded half, blooms, grain,
+//                  a halo (or overshoot) against the pen line, lifted veins.
+// Pen lines are all the same fine width, like one fineliner. Veins are drawn along both
+// edges (one line down the thinnest); stalks are pen-edged and fade into the midrib
+// (`o` in the along slot: 1 stalk → 0 vein).
 //
 // Uniforms:
 //   u_<key>   every param without `uniform: false` (auto-declared by sketch.js)
+//   u_style   0 / 1 / 2, see above
 //   f_view    canvas size in CSS px          f_px     canvas px per CSS px
+
+const paperFn = `
+uniform sampler2D u_noise;
+// The paper's grain, −0.5…0.5, in screen space: shared by the paper and the wash.
+float grainAt() {
+  // Spread the texture over 4× the grain size (so its features are about that size); two
+  // rotated, mismatched lookups hide the repeat.
+  vec2 p = gl_FragCoord.xy / f_px / (u_grainScale * 4.0);
+  vec2 r = mat2(0.8, -0.6, 0.6, 0.8) * p * 1.37 + 0.31;
+  return (texture(u_noise, p).r + texture(u_noise, r).r) * 0.5 - 0.5;
+}
+vec3 paperAt() {
+  float broad = texture(u_noise, gl_FragCoord.xy / f_px / 900.0).g - 0.5;
+  return u_paper * (1.0 + u_grain * (grainAt() * 0.07 + broad * 0.03));
+}
+`;
 
 export const vertFull = `
 void main() {
@@ -22,14 +43,9 @@ void main() {
   gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
 }`;
 
-export const background = `
-uniform sampler2D u_noise;
+export const background = paperFn + `
 out vec4 o;
-void main() {
-  vec2 css = gl_FragCoord.xy / f_px;
-  float n = texture(u_noise, css / 700.0).g + texture(u_noise, css.yx / 260.0 + 0.4).r - 1.0;
-  o = vec4(u_background * (1.0 + u_backgroundMottle * n * 1.6), 1.0);
-}`;
+void main() { o = vec4(paperAt(), 1.0); }`;
 
 export const leafVert = `
 layout(location = 0) in vec2 a_pos;
@@ -40,6 +56,8 @@ layout(location = 4) in vec4 i_m;      // instance mat2, column-major
 layout(location = 5) in vec2 i_t;      // translate
 out vec2 v_bl;
 out vec2 v_lp;
+out vec2 v_pos;
+out float v_s;
 out float v_acrossPx;
 out float v_wPx;
 flat out int v_kind;
@@ -51,7 +69,16 @@ void main() {
   float sc = sqrt(abs(i_m.x * i_m.w - i_m.y * i_m.z)); // leaf units → CSS px
   v_acrossPx = 0.0;
   v_wPx = 0.0;
-  if (k != 0) {
+  v_s = 0.0;
+  if (k == 0 || k == 7) {
+    // Fills (leaf and bud): v_s is the signed distance past the margin along each spoke, as a share of the
+    // spoke (−1 at the midrib, 0 at the margin). For a wash that overshoots the pen line,
+    // margin vertices are pushed out along their spoke first.
+    float grow = u_style > 1.5 ? max(0.0, u_washGapJitter - u_washGap) + 0.003 : 0.0;
+    bool outer = abs(a_attr.y) > 0.5;
+    c += (M * a_nrm) * (outer ? grow * a_attr.x : 0.0);
+    v_s = outer ? grow : -1.0;
+  } else {
     vec2 nn = M * a_nrm;
     vec2 dir = nn / max(length(nn), 1e-6);
     float w = max(a_attr.x * sc, u_minLine * 0.5);
@@ -61,107 +88,148 @@ void main() {
     v_wPx = w * f_px;
   }
   v_bl = a_attr.yz;
-  v_lp = a_pos + a_seed * 13.7; // leaf coordinates, offset per leaflet so networks differ
+  v_lp = a_pos + a_seed * 13.7; // leaf coordinates, offset per leaflet so noise differs
+  v_pos = a_pos;
   v_kind = k;
   gl_Position = vec4(c.x / f_view.x * 2.0 - 1.0, 1.0 - c.y / f_view.y * 2.0, 0.0, 1.0);
 }`;
 
-export const leafFrag = `
-uniform sampler2D u_noise;
-uniform float u_pass;   // 0 everything, 1 vein edges only, 2 vein cores only
+export const leafFrag = paperFn + `
+uniform float u_stemBase; // 1 while drawing the main stem (its base fades out)
+uniform float u_pass;   // 0 everything; veins: 1 pooling, 3 mark insides, 4 pen edges, 2 fill insides
 in vec2 v_bl;
 in vec2 v_lp;
+in vec2 v_pos;
+in float v_s;
 in float v_acrossPx;
 in float v_wPx;
 flat in int v_kind;
 out vec4 o;
 
-vec2 hash22(vec2 p) {
-  vec3 q = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
-  q += dot(q, q.yzx + 33.33);
-  return fract((q.xx + q.yz) * q.zy);
-}
+// A smooth noise field in leaf coordinates, −0.5…0.5; layer picks an independent slice.
+float field(vec2 p, float layer) { return texture(u_noise, p + vec2(layer * 0.37, layer * 0.61)).g - 0.5; }
+float hash21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+// Pigment on paper at density d (0 = bare paper).
+vec3 wash(vec3 paper, vec3 pig, float d) { return mix(paper, pig, clamp(d, 0.0, 1.0)); }
+// Half-width of every pen line, in device px.
+float penW() { return max(u_minLine * 0.5 * f_px, 0.35); }
+// A solid pen line of half-width penW() at distance d (device px) from its centre.
+float pen(float d) { return clamp(penW() - d + 0.5, 0.0, 1.0); }
+// The fineliner skipping now and then.
+float skipAt(vec2 p) { return smoothstep(u_penSkip * 0.7, u_penSkip * 0.7 + 0.12, field(p * 9.0, 5.0) + 0.5); }
 
-// Distance to the nearest Voronoi cell border (two-pass, after Inigo Quilez) and the
-// cell's id. Cells are the capillary areoles; borders are the capillaries.
-vec3 voronoi(vec2 x) {
-  vec2 n = floor(x), f = fract(x), mg = vec2(0.0), mr = vec2(0.0);
-  float md = 8.0;
-  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
-    vec2 g = vec2(float(i), float(j));
-    vec2 r = g + hash22(n + g) * 0.85 + 0.075 - f;
-    float d = dot(r, r);
-    if (d < md) { md = d; mr = r; mg = g; }
-  }
-  md = 8.0;
-  for (int j = -2; j <= 2; j++) for (int i = -2; i <= 2; i++) {
-    vec2 g = mg + vec2(float(i), float(j));
-    vec2 r = g + hash22(n + g) * 0.85 + 0.075 - f;
-    if (dot(mr - r, mr - r) > 1e-5) md = min(md, dot(0.5 * (mr + r), normalize(r - mr)));
-  }
-  return vec3(md, n + mg);
-}
-
-// A layer's mottle, −1…1: its own offset into the noise, in leaf coordinates.
-float mottle(float layer) {
-  vec2 p = v_lp * u_mottleScale / 8.0 + vec2(layer * 0.37, layer * 0.61);
-  return (texture(u_noise, p).r + texture(u_noise, p * 2.7 + 0.5).g * 0.5) / 1.5 * 2.0 - 1.0;
-}
-
-// Antialiased line: 1 within half-width w of a border at distance d (cell units).
-float line(float d, float w) {
-  float fw = fwidth(d);
-  return w <= 0.0 ? 0.0 : 1.0 - smoothstep(w - fw * 0.7, w + fw * 0.7, d);
+// One family of hand hatching at angle th (mirrored across the midrib, like veins): solid
+// lines, drawn or left out stroke by stroke so that about tone of them appear.
+float hatch(vec2 p, float th, float tone, float layer) {
+  vec2 q = vec2(p.x, abs(p.y));
+  vec2 d = vec2(cos(th), sin(th)), n = vec2(-d.y, d.x);
+  float h = dot(q, n) * u_hatchDensity + u_hatchWonk * field(q * 3.0, layer) * 2.2;
+  float fw = max(fwidth(h), 1e-4);
+  float li = floor(h + 0.5);
+  // Along each line: short strokes, each kept or dropped, with small gaps between them.
+  float g = dot(q, d) * u_hatchDensity * mix(0.6, 0.18, u_hatchWonk) + hash21(vec2(li, layer)) * 9.0;
+  float seg = floor(g);
+  float keep = step(hash21(vec2(li, seg + layer * 31.0)), tone);
+  float gapIn = step(fract(g), 1.0 - 0.18 * u_hatchWonk);
+  // Too dense to draw at this size: leave lines out rather than let them merge into grey.
+  keep *= step(hash21(vec2(li * 1.7, layer)), clamp(0.35 / fw, 0.0, 1.0));
+  return pen(abs(fract(h + 0.5) - 0.5) / fw) * keep * gapIn;
 }
 
 void main() {
   vec3 col;
   float alpha;
-  if (v_kind == 0) {
-    // --- blade: lit tissue.
-    float a = abs(v_bl.x);
-    alpha = clamp((1.0 - a) / max(fwidth(a), 1e-4), 0.0, 1.0);
-    col = u_blade * (1.0 + u_bladeMottle * mottle(1.0) * 0.5);
-    // Capillary cells, each a little brighter or darker; their borders are capillaries.
-    vec2 cp = v_lp * u_capillaryDensity;
-    vec3 c1 = voronoi(cp);
-    col *= 1.0 + u_cellVariation * (hash22(c1.yz).x - 0.5) * 2.0;
-    vec3 capCol = u_capillary * (1.0 + u_capillaryMottle * mottle(2.0) * 0.5);
-    // Too fine to resolve at this size: fade the network out rather than let it shimmer.
-    float res = 1.0 - smoothstep(0.12, 0.3, fwidth(cp.x) + fwidth(cp.y));
-    float cap = line(c1.x, u_capillaryWeight * 0.5) * res;
-    if (u_fineCapillaries > 0.0) {
-      vec2 fp = cp * 2.4 + 17.0;
-      vec3 c2 = voronoi(fp);
-      float fres = 1.0 - smoothstep(0.12, 0.3, fwidth(fp.x) + fwidth(fp.y));
-      cap = max(cap, line(c2.x, u_capillaryWeight * 0.32) * u_fineCapillaries * 0.75 * fres);
+  vec3 paper = paperAt();
+  float skip = skipAt(v_lp);
+  if (v_kind == 0 || v_kind == 7) {
+    bool bud = v_kind == 7;
+    float across = v_bl.x, a = abs(across);
+    float fw = max(fwidth(v_s), 1e-4);
+    float inside = clamp(-v_s / fw, 0.0, 1.0);            // within the pen outline
+    col = paper;
+    alpha = inside;
+    // Which half is shaded, bleeding unevenly across the midrib.
+    float bleed = across + field(v_lp * 1.4, 2.0) * u_shadeBlend * 0.8;
+    float shaded = 1.0 - smoothstep(-u_shadeBlend * 0.5, u_shadeBlend * 0.5, bleed);
+    if (u_style > 1.5) {
+      // --- the wash, stopping short of (or overshooting) the pen line by a wandering margin.
+      float gap = (u_washGap + u_washGapJitter * field(v_lp * 2.2, 7.0) * 2.0) * smoothstep(0.0, 0.08, v_bl.y);
+      float washIn = clamp((-gap - v_s) / fw, 0.0, 1.0);
+      vec3 pig = bud ? mix(u_budColour, u_budShade, shaded * u_halfShade) : mix(u_leafWash, u_leafShade, shaded * u_halfShade);
+      float d = u_washDensity;
+      d *= 1.0 + u_bloom * field(v_lp * u_bloomScale / 6.0, 1.0) * 1.4;     // blooms
+      d *= 1.0 + u_grain * grainAt() * 0.9;                                  // granulation
+      d += u_edgeDarken * 0.45 * (1.0 - smoothstep(0.0, 0.06, -gap - v_s)); // dried rim
+      col = mix(paper, wash(paper, pig, d), washIn);
+      alpha = max(inside, washIn);
     }
-    col = mix(col, capCol, cap);
-    // Rim: the margin is thicker against the light.
-    vec3 outCol = u_outlineColour * (1.0 + u_outlineMottle * mottle(4.0) * 0.5);
-    col = mix(col, outCol, u_rim * smoothstep(0.8, 1.0, a) * 0.8);
+    if (u_style > 0.5) {
+      // --- pen hatching: more lines where it's darker; cross-hatching in the darkest.
+      float tone = u_hatching * clamp(shaded * 0.7 + smoothstep(0.55, 1.0, a) * 0.45 + field(v_lp * 2.0, 4.0) * 0.4, 0.0, 1.0);
+      float th = radians(u_hatchAngle);
+      float lines = hatch(v_pos, th, tone, 1.0);
+      lines = max(lines, hatch(v_pos, th - 1.4, (tone - 0.5) * 2.0 * u_crossHatch, 2.0));
+      col = mix(col, u_penColour, lines * u_penOpacity * skip * inside);
+    }
   } else {
-    alpha = clamp(v_wPx - abs(v_acrossPx) + 0.5, 0.0, 1.0);
-    float t = abs(v_acrossPx) / max(v_wPx, 1.0); // 0 at the centre line, 1 at the edge
+    float ax = abs(v_acrossPx);
+    float line = clamp(v_wPx - ax + 0.5, 0.0, 1.0);
+    // Pen along a line's edges, or once down the middle if it's too thin for two.
+    float edgeAt = v_wPx * 0.8;
+    float edges = edgeAt > penW() * 2.5 ? pen(abs(ax - edgeAt)) : pen(ax);
     if (v_kind == 2 || v_kind == 3 || v_kind == 6) {
-      // --- stalks, midribs and veins are one vascular system, drawn one way: a core inside
-      // an edge. o (opacity) runs from 1, a thick opaque stalk (stem colour, outlined), to 0,
-      // a thin translucent vein (glowing core, darker edges), continuously across the join.
-      float o = clamp(v_bl.y, 0.0, 1.0);
-      float m = mix(u_veinMottle * mottle(3.0), u_stemMottle * mottle(5.0), o) * 0.5;
-      vec3 coreCol = mix(u_vein, u_stemColour, o);
-      vec3 edgeCol = mix(u_veinEdge, mix(u_stemColour, u_outlineColour, 0.7), o);
-      float coreW = mix(u_veinCore, 0.6, o);
-      // Veins inside a blade draw edges (pass 1) then cores (pass 2), so crossings merge.
-      if (u_pass > 1.5) {
-        alpha = clamp(v_wPx * coreW - abs(v_acrossPx) + 0.5, 0.0, 1.0);
-        col = coreCol * (1.0 + m);
+      float o = clamp(v_bl.y, 0.0, 1.0); // 1 stalk … 0 vein
+      // Veins are drawn as one network per leaflet (see sketch.js, drawLeaf): their insides
+      // are marked in the stencil first, so pen edges stop where another vein's inside
+      // begins, and each inside pixel is filled once (no stacking where strips overlap).
+      float inner = edgeAt > penW() * 2.5 ? edgeAt - penW() : 0.0;  // inside, up to the pen
+      float o2 = clamp(o * 2.0, 0.0, 1.0);  // the midrib's base still carries the stalk's wash
+      if (u_pass > 3.5) {
+        // Pen along the edges (or down the middle of the thinnest).
+        alpha = edges * mix(u_penVeins, u_penOpacity, o2) * skip;
+        col = u_penColour;
+      } else if (u_pass > 2.5) {
+        if (ax > inner) discard;
+        alpha = 0.0; col = vec3(0.0);
+      } else if (u_pass > 1.5) {
+        // Inside: kept clear of hatching; in watercolour, lifted toward paper (or, at the
+        // midrib's base, the stalk's wash carrying on).
+        alpha = clamp(inner - ax + 0.5, 0.0, 1.0);
+        vec3 lifted = u_style > 1.5 ? wash(paper, mix(u_leafWash, u_leafShade, 0.3), u_washDensity * (1.0 - u_veinLift)) : paper;
+        vec3 stalk = u_style > 1.5 ? wash(paper, u_stemWash, 0.85 + u_grain * grainAt() * 0.5) : paper;
+        col = mix(lifted, stalk, o2);
+      } else if (u_pass > 0.5) {
+        // Watercolour only: pigment pooled along the vein's sides.
+        alpha = u_style > 1.5 ? line * u_veinPool * (1.0 - o) * smoothstep(0.55 * v_wPx, v_wPx, ax) * (1.0 - smoothstep(0.85 * v_wPx, v_wPx, ax)) * 0.8 : 0.0;
+        col = wash(paper, u_leafShade, u_washDensity + 0.3);
       } else {
-        float core = u_pass > 0.5 ? 0.0 : 1.0 - smoothstep(coreW - 0.12, coreW + 0.05, t);
-        col = mix(edgeCol, coreCol, core) * (1.0 + m);
+        // Stalk: a wash between pen edges, with fibrous texture and a little pen shading;
+        // fades out as it becomes the midrib. The main stem's base fades away.
+        float sa = v_acrossPx / max(v_wPx, 1.0);          // −1…1 across the stalk
+        float along = length(v_pos);                       // leaf units from the base
+        // Texture: streaks running along the stalk.
+        float fib = field(vec2(sa * 1.3, along * 0.35), 8.0) + 0.6 * field(vec2(sa * 3.1, along * 0.9), 9.0);
+        float d = 0.85 * (1.0 + u_stemTexture * fib * 1.4) + u_grain * grainAt() * 0.5;
+        // Base: the wash thins out and the pen breaks up over the last Stem fade.
+        float base = u_stemBase > 0.5 ? smoothstep(0.0, max(u_stemFade, 1e-3), along) : 1.0;
+        float gaps = field(vec2(along * 18.0, sa > 0.0 ? 1.7 : 4.3), 6.0) + 0.5;
+        float penKeep = u_stemBase > 0.5 ? step(1.0 - base, gaps * 0.9) : 1.0;
+        vec3 fillCol = u_style > 1.5 ? wash(paper, u_stemWash, d * base) : paper;
+        float edgeP = pen(abs(ax - max(v_wPx - penW(), 0.0))) * u_penOpacity * skip * penKeep;
+        // Pen shading: short broken strokes across the shaded side.
+        float hs = along * u_hatchDensity * 0.9 + field(vec2(along * 4.0, sa), 3.0) * 0.6;
+        float fwh = max(fwidth(hs), 1e-4);
+        float shadeSide = smoothstep(0.05, 0.5, -sa) * u_stemShading * (u_style > 0.5 ? 1.0 : 0.0);
+        float keepH = step(hash21(vec2(floor(hs + 0.5), 3.7)), shadeSide * base) * step(fwh, 0.4);
+        float hatchP = pen(abs(fract(hs + 0.5) - 0.5) / fwh) * keepH * u_penOpacity;
+        col = mix(fillCol, u_penColour, max(edgeP, hatchP));
+        float fillA = u_style > 1.5 ? mix(max(edgeP, hatchP), 1.0, base) : 1.0;
+        alpha = line * smoothstep(0.0, 0.3, o) * fillA;
       }
     } else {
-      col = u_outlineColour * (1.0 + u_outlineMottle * mottle(4.0) * 0.5);
+      // Pen outline.
+      alpha = line * u_penOpacity * skip;
+      col = u_penColour;
     }
   }
   o = vec4(col * alpha, alpha);

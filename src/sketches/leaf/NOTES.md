@@ -1,25 +1,44 @@
 # Leaf
 
-One leaf (or one sprig) centred on the screen, drawn as if backlit on a light table against a dark background. Nothing moves on its own; changing a category morphs the shape. Raw WebGL2.
+One leaf (or one sprig) centred on the screen, drawn as a botanical study on warm paper. Finish → Style picks Outline (plain 0.1 mm fineliner), Shaded pen (+ hand hatching, line only) or Watercolour (+ a wash). Nothing moves on its own; changing a category morphs the shape. Raw WebGL2.
 
-Forked from Foliage: `shapes.js` is a copy of Foliage's geometry (blade outline, lobes, margin, veins and veinlets, stalk, sprigs), raised to far higher resolution (`NMAX` 420 points a side, up to 40 segments a vein) since only one object is drawn. Its `buildShapes(P, B, arrangement, variety)` builds one leaf variant, or six plus one sprig in stem mode (Leaf variety jitters them). The collision circles it still computes are unused here. Fixes to the geometry in either sketch should be copied to the other.
+`shapes.js` builds the geometry (blade outline, lobes, margin, veins and veinlets, stalk, sprigs) at high resolution (`NMAX` 420 points a side, up to 40 segments a vein), since only one object is drawn. `buildShapes(P, B, variety)` builds the leaf variants and the sprig. (It was forked from an earlier packing sketch, Foliage, now deleted; the collision-circle code left over from that is unused.)
 
 ## Files
 
 | File | Role | Edit when |
 |---|---|---|
-| `params.js` | Every default. Shape groups as Foliage's (Margin split from Lobes); Light table and Colour are this sketch's own. | Any control |
-| `shapes.js` | Geometry (forked from Foliage, see above). | Leaf or stem shape |
+| `params.js` | Every default: shape groups, then Finish (style, pen, watercolour, colours), plus species presets. | Any control |
+| `shapes.js` | Geometry (see above). | Leaf or stem shape |
 | `shaders.js` | Background pass and leaf pass. | The look |
 | `sketch.js` | Morph weights, rebuild-on-change, fitting the object to the screen, GL. | New select, new buffer |
+
+## Species presets
+
+`params.js` exports `presets`: each species is the current shape defaults (all groups but Finish, minus Scale and Morph time) plus its own overrides, so a species always lands on the same leaf. It also sets the colours (leaf, shade, stem and bud as they look in summer, and the paper), and leaves the rest of Finish (style, pen, wash) alone. Each paper is a very pale pastel from roughly opposite the leaf's hue: Oak olive on blue-lilac, Elm dark green on rose, Ash yellow-green on lilac. Colours glide during the morph, page colour included. The cover (manifest `capture.presets`) holds on Oak, Elm and Ash, morphing between them. Everything morphs, including arrangement (see below).
+
+## Smooth morphs and sway
+
+- Shape numbers are eased copies (`PE` in sketch.js), so slider and preset changes glide over Morph time. Counts go fractional while easing, and shapes.js grows the newest node, whorl leaf, leaflet pair (layouts blended either side of the count), vein or veinlet in as the fraction rises.
+- Arrangement, Terminal and Bud type are eased weights like the other selects. The sprig is always built: "No stem" is a stem shrunk to nothing bearing only its terminal leaf (curve and zigzag scale with how much stem there is). Each placement carries a presence (`sprigPlace` slot 7); the renderer scales the leaf about where it attaches, so leaves grow out of and shrink into their nodes. Leaf shapes are keyed by node and position, not list index, so they don't swap as the arrangement changes. Alternate leaves take their side from node parity (pressed sprigs alternate), and Divergence only sets how near the stem they press, so nothing swings across the stem as it eases. Outline resolution steps only with the leaflet count rounded up to a power of two (and budgets for the maximum veins), because resampling the outline every frame while counts eased made the teeth shimmer.
+- The bud is the end of the stem: drawn first, under every leaf. The tip runs past the last node by the bud's room, and leaves near the tip splay out so it shows.
+- The framing eases toward the rebuilt bounds.
+- Sway: the sprig rocks about its base and each leaf about its node, on two-sine rhythms with golden-angle phases, in scene time (pausing stops it). It redraws every frame while Sway > 0 (352 fps at 2560×1440 @2x on the M3); at 0 Leaf goes back to drawing only on change. The cover sways too, so its loop has a small sway jump at the wrap.
 
 ## How it's drawn
 
 - **Fit.** After every rebuild the object's box is measured (leaf vertices, or for a sprig the stem's vertices plus each placed leaf's box corners). It's rotated tip up and scaled so its larger side is Scale × 90% of the screen's short side, centred.
-- **Background** pass: the background colour with its own broad mottle, in screen space.
-- **Blade:** lit tissue colour, mottled; broken into capillary cells (a Voronoi network in leaf coordinates, cell borders = capillaries) plus a finer, fainter network inside each cell; each cell slightly brighter or darker (Cell variation); darkening toward the rim. Networks fade out (rather than shimmer) when cells get smaller than a few pixels.
-- **Veins:** a glowing core (Vein glow sets its share of the width) inside darker edges. **Outline** and **stem**: solid, the stem edged in the outline colour.
-- **Mottle per layer:** each layer (background, blade, capillary, vein, outline, stem) reads its own offset into the noise texture, in leaf coordinates, so the mottles are independent and stick to the leaf.
+- **Paper** pass: the paper colour with a little tooth.
+- **Per leaflet** (stencil): the wash fill marks the stencil; veins are clipped to it; then the pen outline on top. Sprig leaves draw tip first, so leaves nearer the base cover those above.
+- **Styles** (`u_style`, set from the Style select by sketch.js): each adds to the one before. Outline fills are bare paper (they still hide what's beneath). Shaded pen adds hatching: solid lines at one pen width, mirrored across the midrib like veins, broken into short strokes that are each kept or dropped so tone comes from how many lines appear (no greys); a cross-hatch family joins in the darkest places; lines too dense to draw are dropped, not blended. Watercolour adds the wash underneath the pen work.
+- **Wash:** transparent pigment over paper: one half in the shade colour, bleeding unevenly across the midrib; blooms; granulation from the paper grain (one grain texture, Grain + Grain scale, shared with the paper); a dried rim. Its edge is set by Paper halo ± Halo jitter as a share of each spoke (midrib → margin). Fill vertices carry their spoke length and direction, so for a negative halo the margin vertices are pushed out and the wash overshoots the pen line.
+- **Veins:** pass 1 (watercolour) pools pigment along their sides; pass 2 clears hatching and wash from them and draws the pen along both edges (one line down veins too thin for two).
+- **Pen:** one fine sepia line width for everything (Finest line px), with occasional skips (Pen skip).
+
+## Gotchas
+
+- Shader sources are JS template strings: a backtick in a GLSL comment ends the string and breaks the build.
+- A blade's lines go to separate staging buffers (veinlets, veins, midrib, outline) and are appended in draw order. Reordering vertices in place afterwards was the biggest cost in a rebuild.
 
 ## Performance budget
 
@@ -27,7 +46,7 @@ Forked from Foliage: `shapes.js` is a copy of Foliage's geometry (blade outline,
 - **Uploads use `bufferData`, never `bufferSubData`.** Writing into a buffer the GPU is still drawing from made the browser wait for the GPU (one upload stalled 3.8 s); `bufferData` gets fresh storage.
 - Memory is flat across hundreds of rebuilds (JS heap 1–2 MB); nothing is held between them.
 
-- The blade runs two Voronoi lookups per pixel (9 + 25 cell hashes each). It only covers the leaf, but at Scale 2 that's most of the screen: check the benchmark if you add a third.
+- The wash is a handful of texture lookups per pixel (the old light-table capillary network was two Voronoi lookups and cost far more). Stress test (drags and flips, 2×): worst frame 48 ms for a whorled sprig drag, ~2–3 ms for simple-leaf drags.
 - Geometry rebuilds only on shape changes; at this resolution a rebuild is a few ms for a simple leaf, more for compound leaves and sprigs.
 
 ## Benchmarks
@@ -35,3 +54,6 @@ Forked from Foliage: `shapes.js` is a copy of Foliage's geometry (blade outline,
 | Date | Machine | Command | fps |
 |---|---|---|---|
 | 2026-10-13 | M3, Chrome headless | `bench.mjs leaf --fixed --size 2560x1440 --dpr 2` (pane open, canvas 4300×2706) | 116 |
+| 2026-10-13 | M3, Chrome headless | `bench.mjs leaf --fixed --size 2560x1440 --dpr 2 --seconds 5` (pane open) | 58 (idle loop: Leaf draws only on change, so this is the frame-loop rate, not drawing cost) |
+| 2026-10-13 | M3, Chrome headless | `bench.mjs leaf --fixed --size 2560x1440 --dpr 2 --seconds 5`, swaying (redraws every frame) | 352 |
+| 2026-10-13 | M3, Chrome headless | `bench.mjs leaf --fixed --size 2560x1440 --dpr 2` after the preset rework (defaults unchanged; pane readout 288) | 49 (idle loop) |

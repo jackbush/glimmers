@@ -1,5 +1,4 @@
 // Leaf — leaf and sprig geometry, built on the CPU whenever a shape param changes.
-// Forked from Foliage's shapes.js: one object drawn large, so far higher resolution.
 //
 // buildShapes() turns the params into one leaf mesh or, in stem mode, a few jittered leaf
 // variants plus one sprig (a stem and its leaf placements).
@@ -12,7 +11,9 @@
 // option below is a set of continuous numbers that can be mixed with the others.
 //
 // Vertex layout (STRIDE floats): x, y, nx, ny, hw, across, along, kind, seed.
-//   fills:   nrm = 0, hw = 0, across = −1…1 across the blade (0 on the midrib), along = 0…1.
+//   fills:   across = −1…1 across the blade (0 on the midrib), along = 0…1; hw = the length of
+//            the vertex's spoke (midrib anchor → margin), nrm = that spoke's direction on margin
+//            vertices (0 on anchors), so the shader can grow the wash past the margin.
 //   strokes: centre-line point plus unit normal and half-width; the vertex shader extrudes,
 //            so lines can keep a minimum width in screen px. across = ±1, along = arc length.
 //   kind:    KIND_* below.
@@ -24,7 +25,9 @@ export const MAX_CIRC = 32;
 export const MAX_SPRIG_CIRC = 360;
 export const MAX_PLACE = 56;
 
-export const KIND_FILL = 0, KIND_OUTLINE = 1, KIND_VEIN = 2, KIND_RIB = 3, KIND_STEM = 6;
+export const KIND_FILL = 0, KIND_OUTLINE = 1, KIND_VEIN = 2, KIND_RIB = 3, KIND_STEM = 6, KIND_BUD = 7;
+// Kind written by spokeVtx: leaf fill, or a bud (filled the same way, in bud colours).
+let fillKind = KIND_FILL;
 
 const TAU = Math.PI * 2;
 const DEG = Math.PI / 180;
@@ -107,6 +110,9 @@ export const geo = {
   nSprig: 0,
   sprigStart: new Int32Array(MAX_VARIANTS),
   sprigCount: new Int32Array(MAX_VARIANTS),
+  // The terminal bud, drawn after the leaves (it sits beyond them).
+  budStart: new Int32Array(MAX_VARIANTS),
+  budCount: new Int32Array(MAX_VARIANTS),
   sprigCirc: new Float32Array(MAX_VARIANTS * MAX_SPRIG_CIRC * 3),
   sprigNCirc: new Int32Array(MAX_VARIANTS),
   sprigPivot: new Float32Array(MAX_VARIANTS * 2),
@@ -150,8 +156,27 @@ function noise1(x) {
 
 function vbuf(cap) { return { a: new Float32Array(cap * STRIDE), n: 0, cap }; }
 const sFill = vbuf(60000), sStroke = vbuf(130000);
+// A blade's lines go to their own stages, appended in draw order (veinlets, other veins,
+// midrib, outline), so nothing has to be reordered afterwards.
+const sVeinlet = vbuf(60000), sRib = vbuf(8000), sOutline = vbuf(12000);
 
 let curSeed = 0;
+
+/** A fill vertex on the spoke from anchor (ax, ay) to margin point (ox, oy). */
+function spokeVtx(b, ax, ay, ox, oy, outer, across, along) {
+  const dx = ox - ax, dy = oy - ay, l = Math.hypot(dx, dy) || 1e-6;
+  if (outer) vtx(b, ox, oy, dx / l, dy / l, l, across, along, fillKind);
+  else vtx(b, ax, ay, 0, 0, l, 0, along, fillKind);
+}
+/** A fill quad between two spokes (a0 → o0) and (a1 → o1). */
+function fillQuad(b, ax0, ay0, ox0, oy0, ax1, ay1, ox1, oy1, sg, u0, u1) {
+  spokeVtx(b, ax0, ay0, ox0, oy0, false, 0, u0);
+  spokeVtx(b, ax0, ay0, ox0, oy0, true, sg, u0);
+  spokeVtx(b, ax1, ay1, ox1, oy1, true, sg, u1);
+  spokeVtx(b, ax0, ay0, ox0, oy0, false, 0, u0);
+  spokeVtx(b, ax1, ay1, ox1, oy1, true, sg, u1);
+  spokeVtx(b, ax1, ay1, ox1, oy1, false, 0, u1);
+}
 
 function vtx(b, x, y, nx, ny, hw, across, along, kind) {
   if (b.n >= b.cap) return;
@@ -265,7 +290,7 @@ function resolveKnobs(P, B, variety) {
   G.leaflets = P.leaflets.value; G.leafletAngle = P.leafletAngle.value * DEG;
   G.bend = P.bend.value; G.sCurve = P.sCurve.value;
   G.petLen = P.petioleLength.value; G.petFlat = P.petioleFlat.value; G.wing = P.petioleWing.value; G.stipules = P.stipules.value;
-  G.veinlets = Math.round(P.veinlets.value);
+  G.veinlets = P.veinlets.value;
   G.outlineW = P.outlineWeight.value; G.wobble = P.wobble.value; G.variety = variety;
 }
 
@@ -277,7 +302,8 @@ function jitter(vs) {
   J.toothDepth = G.toothDepth * (1 + v * 0.4 * rnd2(vs, 4));
   J.bend = G.bend + v * 0.7 * rnd2(vs, 5);
   J.sCurve = G.sCurve + v * 0.6 * rnd2(vs, 6);
-  J.veinCount = Math.max(2, Math.round(G.veinCount + v * 2.2 * rnd2(vs, 7)));
+  // Fractional: the last vein fades in as the count rises, so counts morph smoothly.
+  J.veinCount = Math.max(2, G.veinCount + v * 2.2 * rnd2(vs, 7));
   J.leafletAngle = G.leafletAngle + v * 0.25 * rnd2(vs, 8);
   J.petLen = G.petLen * (1 + v * 0.3 * rnd2(vs, 9));
   J.veinAngle = clamp(G.veinAngle + v * 0.15 * rnd2(vs, 10), 0.2, 1.5);
@@ -374,8 +400,23 @@ function layoutTrifoliate(L, ang) {
   RACHIS[4] = 0.14;
 }
 
+// Leaflet counts are fractional while morphing: blend the layouts either side, so a new pair
+// grows out of the rachis instead of appearing.
+const slotsLo = new Float32Array(MAX_SLOTS * SF), pinnaLo = new Float32Array(16 * 4);
 function blendLayouts() {
-  const n = Math.round(G.leaflets), ang = J.leafletAngle;
+  const nF = Math.max(2, G.leaflets), lo = Math.floor(nF), f = nF - lo;
+  if (f > 1e-4) {
+    blendLayoutsN(lo);
+    slotsLo.set(slots); pinnaLo.set(pinnaSeg);
+    const rLo = rachisLen, nLo = pinnaN;
+    blendLayoutsN(lo + 1);
+    for (let i = 0; i < slots.length; i++) slots[i] = lerp(slotsLo[i], slots[i], f);
+    for (let i = 0; i < pinnaSeg.length; i++) pinnaSeg[i] = i < nLo * 4 ? lerp(pinnaLo[i], pinnaSeg[i], f) : pinnaSeg[i];
+    rachisLen = lerp(rLo, rachisLen, f);
+  } else blendLayoutsN(lo);
+}
+function blendLayoutsN(n) {
+  const ang = J.leafletAngle;
   const w = G.cw;
   if (w[0] > 0) layoutSimple(LAYOUTS[0]);
   if (w[1] > 0) layoutPinnate(LAYOUTS[1], n, ang);
@@ -450,7 +491,7 @@ function bladeOutline(ls) {
   const lobes = G.lobes, sharpE = lerp(1.2, 6, G.lobeSharp);
   // Palmate lobes radiate from a point just above the base.
   const pcx = 0.08, nl = Math.max(2, lobes);
-  const dTh = Math.min(1.15, 4.0 / (nl - 1 + 1e-3)), off = nl % 2 ? 0 : 0.5;
+  const dTh = Math.min(1.15, 4.0 / (nl - 1 + 1e-3)), off = 0.25 * (1 + Math.cos(Math.PI * nl)); // odd 0, even ½, smooth between
   const thMax = ((nl - 1) / 2 + 0.55) * dTh;
   const wsc = 1 + G.variety * 0.12 * rnd2(ls, 21);
 
@@ -598,7 +639,17 @@ function insideBlade(x, y) {
   return Math.abs(y) < Math.abs(EY) * 0.96;
 }
 // Secondary veins of the current blade (x0, control x, control y, end x, end y; per side, k).
-const VEIN = new Float32Array(2 * 32 * 5);
+// Slot 0 and slot vc+1 per side are invisible guide veins near the base and tip, so the
+// veinlets also fill the zones below the first vein and above the last.
+const VEIN = new Float32Array(2 * 34 * 5);
+/** Store an invisible guide vein in slot `slot`: from the midrib at x0 to the margin at u. */
+function guideVein(slot, side, x0, u) {
+  edgeAt(side, u);
+  const ex = lerp(u, EX, 0.9), ey = EY * 0.9;
+  const cv = clamp(G.veinCurve, -1, 1), o = slot * 5;
+  VEIN[o] = x0; VEIN[o + 1] = x0 + (ex - x0) * (0.5 - 0.4 * cv); VEIN[o + 2] = ey * (0.5 + 0.4 * cv);
+  VEIN[o + 3] = ex; VEIN[o + 4] = ey;
+}
 function veinPoint(o, t) {
   const it = 1 - t;
   EX = it * it * VEIN[o] + 2 * it * t * VEIN[o + 1] + t * t * VEIN[o + 3];
@@ -618,18 +669,12 @@ function emitBlade(ls) {
       toFinal(fx[i], fy[i]); const ox0 = TX, oy0 = TY;
       toFinal(fx[i + 1], fy[i + 1]); const ox1 = TX, oy1 = TY;
       const u0 = i / N, u1 = (i + 1) / N;
-      vtx(sFill, ax0, ay0, 0, 0, 0, 0, u0, KIND_FILL);
-      vtx(sFill, ox0, oy0, 0, 0, 0, sg, u0, KIND_FILL);
-      vtx(sFill, ox1, oy1, 0, 0, 0, sg, u1, KIND_FILL);
-      vtx(sFill, ax0, ay0, 0, 0, 0, 0, u0, KIND_FILL);
-      vtx(sFill, ox1, oy1, 0, 0, 0, sg, u1, KIND_FILL);
-      vtx(sFill, ax1, ay1, 0, 0, 0, 0, u1, KIND_FILL);
+      fillQuad(sFill, ax0, ay0, ox0, oy0, ax1, ay1, ox1, oy1, sg, u0, u1);
     }
   }
 
   const ow = G.outlineW;
   // Outline: up one side, back down the other.
-  const ol0 = sStroke.n;
   let n = 0;
   // The outline opens where the stalk enters (it shouldn't cross it): points closer to the
   // midrib's base than the stalk's half-width are skipped. With a wing, the wing's edges
@@ -646,8 +691,7 @@ function emitBlade(ls) {
   for (let i = i0; i <= N; i++) n = push(n, FX[0][i], FY[0][i], inkW(ow, i / N, ls));
   for (let i = N - 1; i >= (open ? i1 : 1); i--) n = push(n, FX[1][i], FY[1][i], inkW(ow, 2 - i / N, ls));
   if (i1 > 0) { cutAt(1, i1, bx, trim); n = push(n, EX, EY, inkW(ow, 2, ls)); }
-  emitStroke(sStroke, n, KIND_OUTLINE, !open);
-  const ol1 = sStroke.n;
+  emitStroke(sOutline, n, KIND_OUTLINE, !open);
 
   // Midrib, from where the blade meets it; in a cordate notch the stalk runs up to there.
   const tipX = LX[0][N], baseX = Math.max(0, LX[0][0]);
@@ -661,7 +705,6 @@ function emitBlade(ls) {
   }
   const mw = G.midribWeight * midribScale;
   n = 0;
-  const rib0 = sStroke.n;
   const ms = Math.max(6, Math.round(N / 5));
   for (let i = 0; i <= ms; i++) {
     const t = i / ms, x = baseX + (tipX * 0.97 - baseX) * t;
@@ -672,21 +715,20 @@ function emitBlade(ls) {
     n = push(n, x, G.wobble * 0.5 * noise1(t * 5 + ls) * e, lerp(mw, inkW(mw * (1 - 0.82 * t), t, ls + 3), e));
   }
   useO = true;
-  emitStroke(sStroke, n, KIND_RIB, false);
+  emitStroke(sRib, n, KIND_RIB, false);
   useO = false;
-  const rib1 = sStroke.n;
   if (stip) return;
 
   const vw = G.vw, vwt = G.veinWeight * midribScale;
-  const vc = J.veinCount;
+  const vcF = J.veinCount, vc = Math.ceil(vcF - 1e-6), vcFrac = vcF - (vc - 1);
   const tanA = Math.tan(J.veinAngle);
   // Pinnate secondaries: off the midrib, curving forward to the margin (or into a lobe).
   if (vw[0] > 0.02) {
     for (let side = 0; side < 2; side++) {
       const sg = side === 0 ? 1 : -1;
-      const sec0 = sStroke.n;
       for (let k = 0; k < vc; k++) {
-        const x0 = baseX + (0.05 + (k + 0.5 + 0.25 * rnd2(ls * 7 + side, k)) / vc * 0.8) * (tipX - baseX);
+        const x0 = baseX + (0.05 + (k + 0.5 + 0.25 * rnd2(ls * 7 + side, k)) / vcF * 0.8) * (tipX - baseX);
+        const grow = k === vc - 1 ? vcFrac : 1; // the newest vein grows in
         edgeAt(side, x0);
         let ut = clamp(x0 + Math.abs(EY) / tanA * 0.9, 0.02, 0.97);
         if (G.pin > 0) {
@@ -700,7 +742,7 @@ function emitBlade(ls) {
         // or run along the midrib before turning out (curve < 0).
         const cv = clamp(G.veinCurve, -1, 1);
         const px1 = x0 + (ex - x0) * (0.5 - 0.4 * cv), py1 = ey * (0.5 + 0.4 * cv);
-        const vo = (side * 32 + k) * 5;
+        const vo = (side * 34 + k + 1) * 5;
         VEIN[vo] = x0; VEIN[vo + 1] = px1; VEIN[vo + 2] = py1; VEIN[vo + 3] = ex; VEIN[vo + 4] = ey;
         n = 0;
         for (let s = 0; s <= VS; s++) {
@@ -709,16 +751,23 @@ function emitBlade(ls) {
           const y = it * it * 0 + 2 * it * t * py1 + t * t * ey;
           // A vein aimed into a lobe can cross a sinus: stop where it leaves the blade.
           if (t > 0.2 && G.palm < 0.5 && !insideBlade(x, y)) break;
-          n = push(n, x, y + G.wobble * 0.4 * noise1(t * 4 + k * 3 + ls), inkW(vwt * vw[0] * (1 - 0.8 * t), t, ls + k + side * 50));
+          n = push(n, x, y + G.wobble * 0.4 * noise1(t * 4 + k * 3 + ls), inkW(vwt * vw[0] * grow * (1 - 0.8 * t), t, ls + k + side * 50));
         }
         emitStroke(sStroke, n, KIND_VEIN, false);
       }
-      const sec1 = sStroke.n;
       // Veinlets: fine cross-veins between neighbouring secondaries.
-      for (let k = 0; k + 1 < vc && G.veinlets > 0; k++) {
-        const a = (side * 32 + k) * 5, b = a + 5;
-        for (let q = 0; q < G.veinlets; q++) {
-          const t = (q + 0.5 + 0.3 * rnd2(ls + k * 13 + side, q)) / G.veinlets * 0.92;
+      // Guide veins: one from the midrib's base out to the margin near the base, one from
+      // high on the midrib out toward the tip. Not drawn; veinlets join them like real veins.
+      guideVein(side * 34, side, baseX + 0.01, Math.max(0.03, VEIN[(side * 34 + 1) * 5] * 0.55));
+      const xl = VEIN[(side * 34 + vc) * 5];
+      guideVein(side * 34 + vc + 1, side, xl + (tipX * 0.97 - xl) * 0.55, 0.97);
+      const vlF = G.veinlets, vlN = Math.ceil(vlF - 1e-6);
+      for (let k = 0; k <= vc && vlF > 0.01; k++) {
+        const a = (side * 34 + k) * 5, b = a + 5;
+        for (let q = 0; q < vlN; q++) {
+          const t = (q + 0.5 + 0.3 * rnd2(ls + k * 13 + side, q)) / vlF * 0.92;
+          if (t > 0.98) continue;
+          const vgrow = q === vlN - 1 ? vlF - (vlN - 1) : 1;
           veinPoint(a, t); const x0 = EX, y0 = EY;
           veinPoint(b, t * 0.9 + 0.04); const x1 = EX, y1 = EY;
           // Skip veinlets that would cross outside the blade (between lobes).
@@ -726,13 +775,11 @@ function emitBlade(ls) {
           n = 0;
           for (let s = 0; s <= 3; s++) {
             const f = s / 3, bow = Math.sin(Math.PI * f) * 0.012 * sg;
-            n = push(n, lerp(x0, x1, f) - bow * 0.5, lerp(y0, y1, f) + bow, inkW(vwt * vw[0] * 0.32, f, ls + k * 7 + q));
+            n = push(n, lerp(x0, x1, f) - bow * 0.5, lerp(y0, y1, f) + bow, inkW(vwt * vw[0] * 0.32 * vgrow, f, ls + k * 7 + q));
           }
-          emitStroke(sStroke, n, KIND_VEIN, false);
+          emitStroke(sVeinlet, n, KIND_VEIN, false);
         }
       }
-      // Veinlets underneath the secondaries, so their dark edges don't cut the glow.
-      rotateVerts(sStroke, sec0, sec1, sStroke.n);
     }
   }
   // Palmate primaries: from the base out to each lobe tip.
@@ -763,14 +810,15 @@ function emitBlade(ls) {
   }
   // Parallel: lengthways veins following the outline.
   if (vw[2] > 0.02) {
-    const pv = Math.min(vc, 9);
+    const pvF = Math.min(vcF, 9), pv = Math.ceil(pvF - 1e-6);
     for (let side = 0; side < 2; side++) {
       for (let k = 1; k <= pv; k++) {
-        const fr = k / (pv + 1);
+        const fr = k / (pvF + 1), grow = k === pv ? pvF - (pv - 1) : 1;
+        if (fr >= 1) continue;
         n = 0;
         for (let i = 0; i <= N; i += Math.max(1, Math.floor(N / (VS * 2)))) {
           const x = lerp(AX[i], LX[side][i], fr), y = LY[side][i] * fr;
-          n = push(n, x, y, inkW(vwt * 0.6 * vw[2], i / N, ls + k));
+          n = push(n, x, y, inkW(vwt * 0.6 * vw[2] * grow, i / N, ls + k));
         }
         emitStroke(sStroke, n, KIND_VEIN, false);
       }
@@ -778,42 +826,25 @@ function emitBlade(ls) {
   }
   // Arcuate: veins that arc forward along the margin toward the tip.
   if (vw[3] > 0.02) {
-    const av = Math.max(2, Math.round(vc * 0.6));
+    const avF = Math.max(2, vcF * 0.6), av = Math.ceil(avF - 1e-6);
     for (let side = 0; side < 2; side++) {
       for (let k = 0; k < av; k++) {
-        const x0 = baseX + (0.07 + (k + 0.3) / av * 0.62) * (tipX - baseX);
+        const x0 = baseX + (0.07 + (k + 0.3) / avF * 0.62) * (tipX - baseX), grow = k === av - 1 ? avF - (av - 1) : 1;
         n = 0;
         for (let s = 0; s <= VS; s++) {
           const t = s / VS;
           const u = x0 + t * (0.97 - x0) * 0.82;
           const fr = 0.86 * Math.pow(Math.sin(t * Math.PI / 2), 0.55);
           edgeAt(side, u);
-          n = push(n, lerp(u, EX, fr), EY * fr, inkW(vwt * vw[3] * (1 - 0.7 * t), t, ls + k));
+          n = push(n, lerp(u, EX, fr), EY * fr, inkW(vwt * vw[3] * grow * (1 - 0.7 * t), t, ls + k));
         }
         emitStroke(sStroke, n, KIND_VEIN, false);
       }
     }
   }
-  // Order: veins, midrib, then the outline on top of them all.
-  rotateVerts(sStroke, rib0, rib1, sStroke.n);
-  rotateVerts(sStroke, ol0, ol1, sStroke.n);
-  outlineLen = ol1 - ol0;
 }
-let outlineLen = 0;
 
 const WAX = new Float32Array(13), WAY = new Float32Array(13);
-
-/** Move vertices [a, m) of b after [m, e) in place (three reversals), to reorder layers. */
-function rotateVerts(b, a, m, e) {
-  revVerts(b, a, m); revVerts(b, m, e); revVerts(b, a, e);
-}
-function revVerts(b, i, j) {
-  const A = b.a;
-  for (j--; i < j; i++, j--) {
-    const oi = i * STRIDE, oj = j * STRIDE;
-    for (let k = 0; k < STRIDE; k++) { const t = A[oi + k]; A[oi + k] = A[oj + k]; A[oj + k] = t; }
-  }
-}
 
 /**
  * Move the staged fills then lines into geo.verts and empty the stages, so each part
@@ -836,16 +867,17 @@ function flushStaged(leaflet) {
   const c0 = geo.count;
   appendBuf(sFill);
   const c1 = geo.count;
-  appendBuf(sStroke);
+  appendBuf(sVeinlet); appendBuf(sStroke); appendBuf(sRib);
   const c2 = geo.count;
+  appendBuf(sOutline);
+  const c3 = geo.count;
   if (leaflet) {
-    // Fill marks the stencil; veins draw inside it; the outline (last outlineLen) on top.
-    const ol = Math.min(outlineLen, c2 - c1);
+    // Fill marks the stencil; veins draw inside it; the outline on top.
     pushSeg(c0, c1 - c0, SEG_FILL);
-    pushSeg(c1, c2 - c1 - ol, SEG_VEIN);
-    pushSeg(c2 - ol, ol, SEG_PLAIN);
-  } else pushSeg(c0, c2 - c0, SEG_PLAIN);
-  sFill.n = sStroke.n = 0;
+    pushSeg(c1, c2 - c1, SEG_VEIN);
+    pushSeg(c2, c3 - c2, SEG_PLAIN);
+  } else pushSeg(c0, c3 - c0, SEG_PLAIN);
+  sFill.n = sStroke.n = sVeinlet.n = sRib.n = sOutline.n = 0;
   return ink;
 }
 
@@ -1061,7 +1093,7 @@ function buildLeafVariant(v, seed) {
   const vs = seed * 977 + v * 131 + 17;
   jitter(vs);
   blendLayouts();
-  sFill.n = sStroke.n = 0;
+  sFill.n = sStroke.n = sVeinlet.n = sRib.n = sOutline.n = 0;
   geo.leafStart[v] = geo.count;
   geo.leafSegStart[v] = geo.nSeg;
   const wS = G.cw[0];
@@ -1073,8 +1105,12 @@ function buildLeafVariant(v, seed) {
   for (let j = 0; j < MAX_SLOTS; j++) if (slots[j * SF + 3] > 0.004) active++;
   const budget = Math.min(160000, MAX_VERTS / Math.max(1, geo.nLeaf + 1));
   // Vertices per leaflet ≈ 6 × (4N outline+fill + N/5 midrib + 2·veins·VS) — share the budget.
-  const veinsPer = 2 * Math.max(2, J.veinCount) * (1 + G.veinlets * 0.3); // veinlets are ~3 segments each
-  N = clamp(Math.floor(budget / (Math.max(1, active) * 6 * (4.2 + veinsPer * 0.1))), 10, NMAX);
+  // Resolution must not change frame to frame while things ease: resampling the outline makes
+  // teeth and wobble shimmer. So it steps only with the leaflet count rounded up to a power of
+  // two, and budgets for the most veins and veinlets the sliders allow.
+  const bucket = Math.pow(2, Math.ceil(Math.log2(Math.max(1, active))));
+  const veinsPer = 2 * 22 * (1 + 12 * 0.3); // veinlets are ~3 segments each
+  N = clamp(Math.floor(budget / (bucket * 6 * (4.2 + veinsPer * 0.1))), 10, NMAX);
   N -= N % 2;
   VS = clamp(Math.round(N / 8), 3, 40);
   curSeed = rnd(vs, 5);
@@ -1119,12 +1155,7 @@ function buildLeafVariant(v, seed) {
       }
       for (let i = 0; i < 12; i++) {
         const t0 = i / 12, t1 = (i + 1) / 12;
-        vtx(sFill, WAX[i], WAY[i], 0, 0, 0, 0, t0, KIND_FILL);
-        vtx(sFill, PX[i], PY[i], 0, 0, 0, sg, t0, KIND_FILL);
-        vtx(sFill, PX[i + 1], PY[i + 1], 0, 0, 0, sg, t1, KIND_FILL);
-        vtx(sFill, WAX[i], WAY[i], 0, 0, 0, 0, t0, KIND_FILL);
-        vtx(sFill, PX[i + 1], PY[i + 1], 0, 0, 0, sg, t1, KIND_FILL);
-        vtx(sFill, WAX[i + 1], WAY[i + 1], 0, 0, 0, 0, t1, KIND_FILL);
+        fillQuad(sFill, WAX[i], WAY[i], PX[i], PY[i], WAX[i + 1], WAY[i + 1], PX[i + 1], PY[i + 1], sg, t0, t1);
       }
       emitStroke(sStroke, 13, KIND_OUTLINE, false);
     }
@@ -1181,7 +1212,8 @@ function buildLeafVariant(v, seed) {
   const co = v * MAX_CIRC * 3;
   // The blade gets inscribed circles; the petiole a chain of small ones.
   const nPet = pl > 0.03 ? Math.min(4, Math.ceil(pl / 0.12)) : 0;
-  let nc = fitCircles(geo.leafStart[v], geo.leafCount[v], geo.leafCirc, co, G.outlineW, MAX_CIRC - nPet, wS < 0.5);
+  // No packing here, so no collision circles.
+  let nc = 0;
   bladeMode = false;
   for (let k = 0; k < nPet; k++) {
     toFinal(-pl * (k + 0.5) / nPet, 0);
@@ -1204,6 +1236,64 @@ const STEM_MAX = 400;
 const SX = new Float32Array(STEM_MAX), SY = new Float32Array(STEM_MAX), SPH = new Float32Array(STEM_MAX), SS = new Float32Array(STEM_MAX);
 const NODE_S = new Float32Array(16);
 
+// Bud outlines: half-width along the bud (u 0 base … 1 tip), for each type.
+function budWidth(type, u) {
+  if (type === 'Pointed') return 0.22 * Math.pow(Math.sin(Math.PI * Math.pow(u, 0.6)), 0.8) * Math.pow(1 - u, 0.35);
+  if (type === 'Plump') return 0.42 * Math.pow(Math.sin(Math.PI * Math.pow(u, 0.75)), 0.65);
+  return 0.36 * Math.pow(Math.sin(Math.PI * Math.pow(u, 0.7)), 0.7); // Scaled
+}
+const BUD_LEN = { Pointed: 1.6, Plump: 0.9, Scaled: 1.0 };
+// Bud type weights (Pointed, Plump, Scaled), so bud types morph into one another.
+let bwP = 0, bwPl = 0, bwS = 1;
+function budW(u) { return bwP * budWidth('Pointed', u) + bwPl * budWidth('Plump', u) + bwS * budWidth('Scaled', u); }
+/**
+ * A bud at (bx, by) pointing along angle a, `size` long (leaf units, scaled by type), as a
+ * filled shape (KIND_BUD: shaded like a leaf, in bud colours) with a pen outline; the scaled
+ * share gets overlapping scales drawn in pen. Shape is the blend of the bud-type weights
+ * (bwP, bwPl, bwS). Fill and lines go to the same stage, so each bud is drawn whole before
+ * the next covers it.
+ */
+function emitBud(bx, by, a, size, seed) {
+  if (size < 1e-4) return;
+  const len = size * (bwP * BUD_LEN.Pointed + bwPl * BUD_LEN.Plump + bwS * BUD_LEN.Scaled);
+  const c = Math.cos(a), sn = Math.sin(a), M = 20;
+  fillKind = KIND_BUD;
+  for (let side = 0; side < 2; side++) {
+    const sg = side === 0 ? 1 : -1;
+    for (let i = 0; i < M; i++) {
+      const u0 = i / M, u1 = (i + 1) / M;
+      const w0 = budW(u0) * len * sg, w1 = budW(u1) * len * sg;
+      const x0 = u0 * len, x1 = u1 * len;
+      fillQuad(sFill, bx + x0 * c, by + x0 * sn, bx + x0 * c - w0 * sn, by + x0 * sn + w0 * c,
+        bx + x1 * c, by + x1 * sn, bx + x1 * c - w1 * sn, by + x1 * sn + w1 * c, sg, u0, u1);
+    }
+  }
+  fillKind = KIND_FILL;
+  // Outline: up one side, down the other.
+  let m = 0;
+  for (let i = 0; i <= M; i++) {
+    const u = i / M, x = u * len, w = budW(u) * len;
+    PX[m] = bx + x * c - w * sn; PY[m] = by + x * sn + w * c; PW[m] = G.outlineW; m++;
+  }
+  for (let i = M - 1; i >= 1; i--) {
+    const u = i / M, x = u * len, w = -budW(u) * len;
+    PX[m] = bx + x * c - w * sn; PY[m] = by + x * sn + w * c; PW[m] = G.outlineW; m++;
+  }
+  emitStroke(sFill, m, KIND_OUTLINE, true);
+  if (bwS < 0.02) return;
+  // Scales: arcs across the bud, alternating sides, each overlapping the next.
+  for (let k = 0; k < 5; k++) {
+    const u = 0.18 + k * 0.15, sg = k % 2 ? 1 : -1;
+    m = 0;
+    for (let i = 0; i <= 8; i++) {
+      const f = i / 8, x = (u + 0.14 * Math.sin(Math.PI * f) * (0.8 + 0.4 * rnd(seed, k))) * len;
+      const w = sg * budW(u) * len * (1 - 2 * f) * 0.98;
+      PX[m] = bx + x * c - w * sn; PY[m] = by + x * sn + w * c; PW[m] = G.outlineW * 0.8 * bwS; m++;
+    }
+    emitStroke(sFill, m, KIND_OUTLINE, false);
+  }
+}
+
 function stemAt(s, n) {
   // Interpolate stem sample at arc length s.
   for (let i = 1; i < n; i++) {
@@ -1217,27 +1307,39 @@ function stemAt(s, n) {
   return SPH[0];
 }
 
-function buildSprigVariant(j, P, seed, arrangement) {
+/**
+ * The sprig, always built (no stem = a stem of zero length bearing only its terminal leaf).
+ * Everything is weighted, so it morphs: arrangement weights (B.arrangement: no stem,
+ * alternate, opposite, whorled) set each arrangement's leaves' presence; the stem grows from
+ * its base as "no stem" fades; fractional node and whorl counts grow their newest leaves out
+ * of the stem. Each placement stores its presence in slot 7: the renderer scales the leaf
+ * about where it attaches, so leaves grow from and shrink into the stem.
+ */
+function buildSprigVariant(j, P, B, seed) {
   const ss = seed * 1931 + j * 211 + 5;
   const v = G.variety;
-  const nodes = Math.round(P.nodes.value);
+  const wA = B.arrangement, wT = B.terminal, wB = B.budType;
+  const stemW = 1 - wA[0];
+  const nodesF = Math.max(1, P.nodes.value), nN = Math.ceil(nodesF - 1e-6), fracN = nodesF - (nN - 1);
   const inter = P.internode.value, taper = P.internodeTaper.value;
-  // Node positions along the stem.
+  // Node positions along the stem; the newest node rises up from the tip as it grows in.
   let s = P.bareStem.value * (1 + 0.2 * v * rnd2(ss, 1));
-  for (let i = 0; i < nodes; i++) {
+  for (let i = 0; i < nN; i++) {
     NODE_S[i] = s;
-    s += inter * (1 - taper * i / Math.max(1, nodes - 1)) * (1 + 0.2 * v * rnd2(ss, 10 + i));
+    s += inter * (1 - taper * i / Math.max(1, nodesF - 1)) * (1 + 0.2 * v * rnd2(ss, 10 + i)) * (i === nN - 2 ? fracN : 1);
   }
-  const terminal = P.terminal.value;
-  const len = NODE_S[nodes - 1] + (terminal === 'Bare' ? inter * 0.35 : inter * 0.12);
+  // The tip runs on past the last node by Bud stem (a bare tip a little further).
+  const len = Math.max(1e-4, (NODE_S[nN - 1] + P.budStem.value + inter * 0.23 * wT[2]) * stemW);
+  for (let i = 0; i < nN; i++) NODE_S[i] *= stemW;
   // Stem centre line: steady curve + droop toward the tip + a kink at each node.
-  const curve = P.stemCurve.value + v * 0.4 * rnd2(ss, 2), droop = P.stemDroop.value * (1 + 0.3 * v * rnd2(ss, 3));
-  const zig = P.zigzag.value * DEG;
-  const ds = Math.max(0.01, len / (STEM_MAX - 2));
+  // Scaled by how much stem there is, so with no stem the lone leaf points straight up.
+  const curve = (P.stemCurve.value + v * 0.4 * rnd2(ss, 2)) * stemW, droop = P.stemDroop.value * (1 + 0.3 * v * rnd2(ss, 3)) * stemW;
+  const zig = P.zigzag.value * DEG * stemW;
+  const ds = Math.max(1e-4, len / (STEM_MAX - 2));
   let x = 0, y = 0, ph = 0, ni = 0, n = 0;
   for (let k = 0; k * ds <= len && n < STEM_MAX - 1; k++) {
     const sk = k * ds;
-    while (ni < nodes && NODE_S[ni] <= sk) { ph += zig * (ni % 2 ? 1 : -1); ni++; }
+    while (ni < nN && NODE_S[ni] <= sk) { ph += zig * (ni % 2 ? 1 : -1) * (ni === nN - 1 ? fracN : 1); ni++; }
     const f = sk / len;
     const phk = ph + curve * f + droop * f * f * 1.4;
     SX[n] = x; SY[n] = y; SPH[n] = phk; SS[n] = sk; n++;
@@ -1249,138 +1351,123 @@ function buildSprigVariant(j, P, seed, arrangement) {
   // Stem mesh.
   sFill.n = sStroke.n = 0;
   curSeed = rnd(ss, 4);
-  const sw = P.stemWidth.value, st = P.stemTaper.value;
+  const sw = P.stemWidth.value * Math.sqrt(stemW), st = P.stemTaper.value;
   let m = 0;
   const every = Math.max(1, Math.floor(stemN / 120));
   for (let i = 0; i < stemN; i += every) {
     const f = SS[i] / len;
     PX[m] = SX[i] + G.wobble * 0.3 * noise1(f * 7 + ss); PY[m] = SY[i]; PW[m] = inkW(sw * (1 - st * f), f, ss); m++;
   }
-  emitStroke(sStroke, m, KIND_STEM, false);
-  if (terminal === 'Bud') {
-    const bp = SPH[stemN - 1], bx = SX[stemN - 1], by = SY[stemN - 1];
-    const c = Math.cos(bp), sn = Math.sin(bp), bl = 0.09, bw = 0.026;
-    m = 0;
-    for (let i = 0; i <= 16; i++) {
-      const a = i / 16 * TAU;
-      const u = (1 - Math.cos(a)) / 2;
-      const r = bw * Math.sin(Math.PI * Math.pow(u, 0.7)) * Math.sign(Math.sin(a));
-      const lx = u * bl, ly = r;
-      PX[m] = bx + lx * c - ly * sn; PY[m] = by + lx * sn + ly * c; PW[m] = G.outlineW * 0.8; m++;
-      if (i > 0) {
-        vtx(sFill, bx, by, 0, 0, 0, 0, 0.5, KIND_FILL);
-        vtx(sFill, PX[m - 2], PY[m - 2], 0, 0, 0, 1, 0.5, KIND_FILL);
-        vtx(sFill, PX[m - 1], PY[m - 1], 0, 0, 0, 1, 0.5, KIND_FILL);
-      }
-    }
-    emitStroke(sStroke, m - 1, KIND_OUTLINE, true);
+  // Always end exactly at the tip, where the bud sits (the stride can skip it).
+  if ((stemN - 1) % every !== 0) {
+    PX[m] = SX[stemN - 1] + G.wobble * 0.3 * noise1(7 + ss); PY[m] = SY[stemN - 1]; PW[m] = inkW(sw * (1 - st), 1, ss); m++;
   }
-  geo.sprigStart[j] = geo.count;
-  appendBuf(sStroke); appendBuf(sFill);
-  geo.sprigCount[j] = geo.count - geo.sprigStart[j];
+  if (stemW > 0.001) emitStroke(sStroke, m, KIND_STEM, false);
+  // Terminal bud, its type blended: Cluster adds two plump side buds to a scaled main bud.
+  const budSize = P.budSize.value * wT[1] * stemW;
+  if (budSize > 1e-4) {
+    // The bud's base sits just inside the end of the stem, so it grows out of it.
+    const bp = SPH[stemN - 1], tipW = sw * (1 - st);
+    const bx = PX[m - 1] - Math.cos(bp) * tipW, by = PY[m - 1] - Math.sin(bp) * tipW;
+    if (wB[3] > 0.001) {
+      bwP = 0; bwPl = 1; bwS = 0;
+      emitBud(bx, by, bp - 1.05, budSize * 0.55 * wB[3], ss + 1);
+      emitBud(bx, by, bp + 1.05, budSize * 0.55 * wB[3], ss + 2);
+    }
+    bwP = wB[0]; bwPl = wB[1]; bwS = wB[2] + wB[3];
+    emitBud(bx, by, bp, budSize, ss);
+  }
 
-  // Leaf placements.
+  geo.sprigStart[j] = geo.count;
+  appendBuf(sStroke);
+  geo.sprigCount[j] = geo.count - geo.sprigStart[j];
+  geo.budStart[j] = geo.count;
+  appendBuf(sFill); appendBuf(sOutline);
+  sOutline.n = 0;
+  geo.budCount[j] = geo.count - geo.budStart[j];
+
+  // Leaf placements, base to tip; each arrangement's leaves weighted by its blend.
   const po = j * MAX_PLACE * 8;
   let np = 0;
-  const co = j * MAX_SPRIG_CIRC * 3;
-  let nc = 0;
   const nLeaf = Math.max(1, geo.nLeaf);
-  let ink = len * sw * 2;
-  const div = P.divergence.value * DEG, dec = P.decussate.value, whorl = Math.round(P.whorlCount.value);
+  const div = P.divergence.value * DEG, dec = Number(P.decussate.value);
+  const perF = Math.max(1, P.whorlCount.value), perN = Math.ceil(perF - 1e-6), fracW = perF - (perN - 1);
   const ins0 = P.insertion.value * DEG, ins1 = P.tipInsertion.value * DEG, grad = P.sizeGradient.value;
-  const per = arrangement === 1 ? 1 : arrangement === 2 ? 2 : whorl;
-  const total = nodes * per + (terminal === 'Leaf' ? 1 : 0);
-  for (let L = 0; L < total && np < MAX_PLACE; L++) {
-    const isTip = L >= nodes * per;
-    const i = isTip ? nodes - 1 : Math.floor(L / per), q = isTip ? 0 : L % per;
-    // Pressed flat, as on a herbarium sheet: every leaf keeps its true shape and lies to one
-    // side of the stem at an angle `rel` from it (+ = the stem's left).
-    let rel, size, sAt;
-    const fi = nodes > 1 ? i / (nodes - 1) : 0;
-    if (isTip) { rel = 0; size = (1 - grad) * 0.9; sAt = len; }
-    else {
-      const beta = lerp(ins0, ins1, fi) + v * 0.12 * rnd2(ss, 40 + L);
-      if (arrangement === 1) {
-        // Alternate: the leaf falls to whichever side its turn around the stem faces; leaves
-        // that faced front or back press nearer the stem (180° = a clean zigzag).
-        const c = Math.cos(i * div + 1e-3);
-        rel = (c >= 0 ? 1 : -1) * beta * (0.5 + 0.5 * Math.abs(c));
-      } else if (arrangement === 2) {
-        // Opposite: a pair, one each side. Decussate pairs alternate wide and narrow.
-        rel = (q === 0 ? 1 : -1) * beta * (dec && i % 2 ? 0.55 : 1);
-      } else {
-        // Whorled: fanned evenly across ±insertion, every other ring staggered narrower.
-        rel = beta * (2 * q / Math.max(1, per - 1) - 1) * (i % 2 ? 0.75 : 1);
+  for (let i = 0; i < nN; i++) {
+    const fi = nodesF > 1 ? Math.min(1, i / (nodesF - 1)) : 0;
+    const nodeGrow = i === nN - 1 ? fracN : 1;
+    for (let a = 1; a <= 3; a++) {
+      const wa = wA[a] * stemW;
+      if (wa < 0.001) continue;
+      const per = a === 1 ? 1 : a === 2 ? 2 : perN;
+      for (let q = 0; q < per && np < MAX_PLACE; q++) {
+        const key = i * 8 + q;
+        const beta = lerp(ins0, ins1, fi) + v * 0.12 * rnd2(ss, 40 + key);
+        // Pressed flat, as on a herbarium sheet: every leaf keeps its true shape and lies to
+        // one side of the stem at an angle `rel` from it (+ = the stem's left).
+        let rel, pres = wa * nodeGrow;
+        if (a === 1) {
+          // Alternate: pressed, the sides simply alternate; leaves that faced front or back in
+          // life (by their turn around the stem) press nearer it. Taking the side from parity,
+          // not the turn, stops leaves swinging across the stem as divergence eases.
+          const c = Math.cos(i * div);
+          rel = (i % 2 ? -1 : 1) * beta * (0.5 + 0.5 * Math.abs(c));
+        } else if (a === 2) {
+          // Opposite: a pair, one each side. Decussate pairs alternate wide and narrow.
+          rel = (q === 0 ? 1 : -1) * beta * (i % 2 ? lerp(1, 0.55, dec) : 1);
+        } else {
+          // Whorled: fanned evenly across ±insertion, every other ring staggered narrower;
+          // the newest leaf in a ring grows in as the count rises.
+          rel = beta * (2 * q / Math.max(1, perF - 1) - 1) * (i % 2 ? 0.75 : 1);
+          if (q === perN - 1) pres *= fracW;
+        }
+        const size = (1 - grad * fi) * (1 + v * 0.12 * rnd2(ss, 70 + key));
+        // The same node and position keep the same leaf shape across arrangements.
+        np = place(po, np, (i * 3 + q * 5) % nLeaf, NODE_S[i], stemN, rel, size, pres);
       }
-      size = (1 - grad * fi) * (1 + v * 0.12 * rnd2(ss, 70 + L));
-      sAt = NODE_S[i];
-    }
-    const fore = 1;
-    const flip = rel >= 0 ? 1 : -1;
-    const sph = stemAt(sAt, stemN);
-    const nx = EX, ny = EY;
-    const lv = (j * 7 + L * 3) % nLeaf;
-    const A = lv * 3, axp = geo.leafAttach[A], ayp = geo.leafAttach[A + 1], th = geo.leafAttach[A + 2];
-    const g = sph + rel, cg = Math.cos(g), sgn = Math.sin(g), cA = Math.cos(th), sA = Math.sin(th);
-    const sx = Math.max(0.05, size) * fore, sy = Math.max(0.05, size) * flip;
-    // Q = R(g) · diag(sx, sy) · R(−th);  T = node − Q · attach
-    const q00 = cg * sx * cA + sgn * sy * sA, q01 = cg * sx * sA - sgn * sy * cA;
-    const q10 = sgn * sx * cA - cg * sy * sA, q11 = sgn * sx * sA + cg * sy * cA;
-    const tx = nx - (q00 * axp + q01 * ayp), ty = ny - (q10 * axp + q11 * ayp);
-    const o = po + np * 8;
-    geo.sprigPlace[o] = lv; geo.sprigPlace[o + 1] = q00; geo.sprigPlace[o + 2] = q10; geo.sprigPlace[o + 3] = q01;
-    geo.sprigPlace[o + 4] = q11; geo.sprigPlace[o + 5] = tx; geo.sprigPlace[o + 6] = ty; geo.sprigPlace[o + 7] = L;
-    np++;
-    ink += geo.leafFoot[lv] * Math.abs(q00 * q11 - q01 * q10);
-    // Collision circles: the leaf's own, carried along.
-    const lco = lv * MAX_CIRC * 3, sc = Math.max(0.05, size);
-    // The biggest few circles are enough per leaf (they come biggest first), plus the petiole's.
-    const lnc = geo.leafNCirc[lv];
-    for (let c = 0; c < lnc && nc < MAX_SPRIG_CIRC; c++) {
-      if (c >= 6 && c < lnc - 2) continue;
-      const lx = geo.leafCirc[lco + c * 3], ly = geo.leafCirc[lco + c * 3 + 1], r = geo.leafCirc[lco + c * 3 + 2];
-      geo.sprigCirc[co + nc * 3] = q00 * lx + q01 * ly + tx;
-      geo.sprigCirc[co + nc * 3 + 1] = q10 * lx + q11 * ly + ty;
-      geo.sprigCirc[co + nc * 3 + 2] = r * sc;
-      nc++;
     }
   }
+  // The terminal leaf: all there is with no stem; otherwise weighted by Terminal = Leaf.
+  const tipPres = wA[0] + stemW * wT[0];
+  if (tipPres > 0.001 && np < MAX_PLACE) np = place(po, np, 0, len, stemN, 0, lerp(1, (1 - grad) * 0.9, stemW), tipPres);
   geo.sprigNPlace[j] = np;
-  geo.sprigInk[j] = ink;
-  geo.sprigFoot[j] = ink; // finished below, once the hull is known
-  // Stem circles.
-  const sr = sw + 0.02;
-  for (let sAt = 0; sAt <= len && nc < MAX_SPRIG_CIRC; sAt += sr * 1.6) {
-    stemAt(sAt, stemN);
-    geo.sprigCirc[co + nc * 3] = EX; geo.sprigCirc[co + nc * 3 + 1] = EY; geo.sprigCirc[co + nc * 3 + 2] = sr; nc++;
-  }
-  geo.sprigNCirc[j] = nc;
-  circleStats(geo.sprigCirc, co, nc);
-  geo.sprigPivot[j * 2] = cPivX; geo.sprigPivot[j * 2 + 1] = cPivY;
-  geo.sprigBound[j] = cBound; geo.sprigArea[j] = cArea; geo.sprigGyr[j] = cGyr; geo.sprigRad[j] = cRad;
-  // Sprigs interlock poorly (stems and leaves at angles), so they need more room than their hull.
-  geo.sprigFoot[j] = Math.max(ink, cArea * 1.5);
+}
+
+/** Add one leaf placement at arc length sAt on the stem; returns the new count. */
+function place(po, np, lv, sAt, stemN, rel, size, pres) {
+  const flip = rel >= 0 ? 1 : -1;
+  const sph = stemAt(sAt, stemN);
+  const nx = EX, ny = EY;
+  const A = lv * 3, axp = geo.leafAttach[A], ayp = geo.leafAttach[A + 1], th = geo.leafAttach[A + 2];
+  const g = sph + rel, cg = Math.cos(g), sgn = Math.sin(g), cA = Math.cos(th), sA = Math.sin(th);
+  const sx = Math.max(0.05, size), sy = Math.max(0.05, size) * flip;
+  // Q = R(g) · diag(sx, sy) · R(−th);  T = node − Q · attach
+  const q00 = cg * sx * cA + sgn * sy * sA, q01 = cg * sx * sA - sgn * sy * cA;
+  const q10 = sgn * sx * cA - cg * sy * sA, q11 = sgn * sx * sA + cg * sy * cA;
+  const tx = nx - (q00 * axp + q01 * ayp), ty = ny - (q10 * axp + q11 * ayp);
+  const o = po + np * 8;
+  geo.sprigPlace[o] = lv; geo.sprigPlace[o + 1] = q00; geo.sprigPlace[o + 2] = q10; geo.sprigPlace[o + 3] = q01;
+  geo.sprigPlace[o + 4] = q11; geo.sprigPlace[o + 5] = tx; geo.sprigPlace[o + 6] = ty; geo.sprigPlace[o + 7] = pres;
+  return np + 1;
 }
 
 // ---------------------------------------------------------------- entry point
 
 /**
- * Rebuild from the params and the current option weights. `arrangement` is 0 for no stem,
- * else 1 alternate, 2 opposite, 3 whorled; `variety` is how much sprig leaves differ.
+ * Rebuild from the params and the current option weights (B: one weight array per select,
+ * including arrangement, terminal and budType). `variety` is how much sprig leaves differ.
+ * Params may be eased, fractional copies (see sketch.js), so counts can be fractional.
  */
-export function buildShapes(P, B, arrangement, variety) {
+export function buildShapes(P, B, variety) {
   resolveKnobs(P, B, variety);
-  // Loose: one leaf. Sprig: a few variants so its leaves differ, then the sprig itself.
-  const nv = arrangement > 0 ? 6 : 1;
+  // No stem at all: one leaf. Any stem: a few variants so the sprig's leaves differ.
+  const nv = B.arrangement[0] < 0.999 ? 6 : 1;
   const seed = P.seed.value;
   geo.count = 0;
   geo.nSeg = 0;
   geo.overflow = false;
   geo.nLeaf = nv;
   for (let v = 0; v < nv; v++) buildLeafVariant(v, seed);
-  geo.nSprig = 0;
-  if (arrangement > 0) {
-    geo.nSprig = 1;
-    buildSprigVariant(0, P, seed, arrangement);
-  }
+  geo.nSprig = 1;
+  buildSprigVariant(0, P, B, seed);
 }

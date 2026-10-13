@@ -16,7 +16,21 @@ export interface ParamStore extends Model {
   scheduleSave(): void;
   /** Forget saved overrides, and cancel a pending save. */
   clearSaved(): void;
+  /** Start morphing to these values over `seconds` (0 = at once). */
+  applyPreset(values: Record<string, ParamValue>, seconds: number): void;
+  /** Advance a preset morph by dt seconds. Returns 'moving', 'done' (just landed) or 'idle'. */
+  tick(dt: number): 'moving' | 'done' | 'idle';
 }
+
+function hexToRgb(h: string, out: number[]): void {
+  const n = parseInt(h.slice(1), 16);
+  out[0] = (n >> 16) & 255; out[1] = (n >> 8) & 255; out[2] = n & 255;
+}
+function rgbToHex(r: number, g: number, b: number): string {
+  const c = (v: number) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0');
+  return '#' + c(r) + c(g) + c(b);
+}
+function easeInOut(t: number): number { return t * t * (3 - 2 * t); }
 
 function decimalsOf(step: number | undefined): number {
   const s = String(step ?? 1);
@@ -81,6 +95,11 @@ export function createModel(schema: Group[], storageKey: string | null): ParamSt
   const sig = signature(params);
   let saveTimer = 0;
 
+  // Preset morph: numbers and colours glide from where they were to the preset's values.
+  interface Glide { p: Param; from: number; to: number; rgbFrom?: number[]; rgbTo?: number[] }
+  let glides: Glide[] = [];
+  let glideT = 0, glideLen = 0;
+
   const store: ParamStore = {
     params,
     byKey,
@@ -110,6 +129,36 @@ export function createModel(schema: Group[], storageKey: string | null): ParamSt
           localStorage.setItem(storageKey, JSON.stringify({ sig, values }));
         } catch { /* storage unavailable */ }
       }, 250);
+    },
+    applyPreset(values, seconds) {
+      glides = [];
+      for (const key in values) {
+        const p = byKey[key];
+        if (!p) continue;
+        const to = coerce(p, values[key]);
+        if (seconds <= 0 || p.type === 'select' || p.type === 'bool') { store.setValue(p, to); continue; }
+        if (p.type === 'color') {
+          const a = [0, 0, 0], b = [0, 0, 0];
+          hexToRgb(String(p.value), a); hexToRgb(String(to), b);
+          glides.push({ p, from: 0, to: 1, rgbFrom: a, rgbTo: b });
+        } else glides.push({ p, from: Number(p.value), to: Number(to) });
+      }
+      glideT = 0;
+      glideLen = Math.max(seconds, 1e-3);
+    },
+    tick(dt) {
+      if (!glides.length) return 'idle';
+      glideT = Math.min(glideLen, glideT + dt);
+      const k = easeInOut(glideT / glideLen);
+      for (const g of glides) {
+        if (g.rgbFrom && g.rgbTo) {
+          const a = g.rgbFrom, b = g.rgbTo;
+          store.setValue(g.p, rgbToHex(a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k));
+        } else store.setValue(g.p, g.from + (g.to - g.from) * k);
+      }
+      if (glideT < glideLen) return 'moving';
+      glides = [];
+      return 'done';
     },
     clearSaved() {
       clearTimeout(saveTimer);
