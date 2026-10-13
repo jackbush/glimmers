@@ -10,21 +10,20 @@
 // overall length. Every select param is a blend of option weights (see sketch.js), so each
 // option below is a set of continuous numbers that can be mixed with the others.
 //
-// Vertex layout (STRIDE floats): x, y, nx, ny, hw, across, along, kind, fold, seed.
+// Vertex layout (STRIDE floats): x, y, nx, ny, hw, across, along, kind, seed.
 //   fills:   nrm = 0, hw = 0, across = −1…1 across the blade (0 on the midrib), along = 0…1.
 //   strokes: centre-line point plus unit normal and half-width; the vertex shader extrudes,
 //            so lines can keep a minimum width in screen px. across = ±1, along = arc length.
-//   fold:    signed distance past the turnover fold line (< 0 = not folded away).
-//   kind:    KIND_* below, + FLAP for the folded-over copy.
+//   kind:    KIND_* below.
 
-export const STRIDE = 10;
+export const STRIDE = 9;
 export const MAX_VERTS = 420000;
 export const MAX_VARIANTS = 16;
 export const MAX_CIRC = 32;
 export const MAX_SPRIG_CIRC = 360;
 export const MAX_PLACE = 56;
 
-export const KIND_FILL = 0, KIND_OUTLINE = 1, KIND_VEIN = 2, KIND_RIB = 3, KIND_HAIR = 4, KIND_CREASE = 5, KIND_STEM = 6, FLAP = 8;
+export const KIND_FILL = 0, KIND_OUTLINE = 1, KIND_VEIN = 2, KIND_RIB = 3, KIND_STEM = 6;
 
 const TAU = Math.PI * 2;
 const DEG = Math.PI / 180;
@@ -135,26 +134,19 @@ function noise1(x) {
 }
 
 // ---------------------------------------------------------------- vertex buffers
-// Staging buffers keep a leaf's layers in draw order: fills, then strokes, then the
-// turned-over flap (fill, then strokes). They are copied into geo.verts at the end.
+// Staging buffers keep a leaf's layers in draw order: fills, then strokes. They are copied
+// into geo.verts at the end.
 
 function vbuf(cap) { return { a: new Float32Array(cap * STRIDE), n: 0, cap }; }
-const sFill = vbuf(60000), sStroke = vbuf(110000), sFlapFill = vbuf(20000), sFlapStroke = vbuf(30000);
+const sFill = vbuf(60000), sStroke = vbuf(130000);
 
-// Current fold line (final leaf coords) for the leaflet being emitted.
-let foldOn = false, fnx = 0, fny = 0, fd = 0, foldForce = NaN;
 let curSeed = 0;
-
-function foldAt(x, y) {
-  if (foldForce === foldForce) return foldForce;
-  return foldOn ? fnx * x + fny * y - fd : -1;
-}
 
 function vtx(b, x, y, nx, ny, hw, across, along, kind) {
   if (b.n >= b.cap) return;
   const o = b.n * STRIDE, a = b.a;
   a[o] = x; a[o + 1] = y; a[o + 2] = nx; a[o + 3] = ny; a[o + 4] = hw;
-  a[o + 5] = across; a[o + 6] = along; a[o + 7] = kind; a[o + 8] = foldAt(x, y); a[o + 9] = curSeed;
+  a[o + 5] = across; a[o + 6] = along; a[o + 7] = kind; a[o + 8] = curSeed;
   b.n++;
 }
 
@@ -225,7 +217,7 @@ const G = {
   vw: new Float32Array(4), veinCount: 8, veinAngle: 0.8, veinCurve: 0.3, veinWeight: 0.004, midribWeight: 0.008,
   cw: new Float32Array(5), leaflets: 7, leafletAngle: 1,
   bend: 0, sCurve: 0, petLen: 0.15, petFlat: 0, wing: 0, stipules: 0,
-  hair: 0, turnovers: 0, outlineW: 0.005, wobble: 0.004, variety: 0.3,
+  veinlets: 0, outlineW: 0.005, wobble: 0.004, variety: 0.3,
 };
 // Per-variant jittered copy of the knobs that vary.
 const J = { W: 0, lobeDepth: 0, toothDepth: 0, bend: 0, sCurve: 0, veinCount: 8, leafletAngle: 1, petLen: 0, pw: 0.4, veinAngle: 0.8 };
@@ -262,7 +254,7 @@ function resolveKnobs(P, B) {
   G.leaflets = P.leaflets.value; G.leafletAngle = P.leafletAngle.value * DEG;
   G.bend = P.bend.value; G.sCurve = P.sCurve.value;
   G.petLen = P.petioleLength.value; G.petFlat = P.petioleFlat.value; G.wing = P.petioleWing.value; G.stipules = P.stipules.value;
-  G.hair = P.hairiness.value; G.turnovers = P.turnovers.value;
+  G.veinlets = Math.round(P.veinlets.value);
   G.outlineW = P.outlineWeight.value; G.wobble = P.wobble.value; G.variety = P.variety.value;
 }
 
@@ -565,6 +557,18 @@ function push(n, x, y, w) {
 // ---------------------------------------------------------------- one blade (leaflet)
 
 let midribScale = 1;
+/** Is blade point (x, y) inside the (lobed) outline? Pinnate-lobed blades keep x ≈ u. */
+function insideBlade(x, y) {
+  edgeAt(y >= 0 ? 0 : 1, x);
+  return Math.abs(y) < Math.abs(EY) * 0.96;
+}
+// Secondary veins of the current blade (x0, control x, control y, end x, end y; per side, k).
+const VEIN = new Float32Array(2 * 32 * 5);
+function veinPoint(o, t) {
+  const it = 1 - t;
+  EX = it * it * VEIN[o] + 2 * it * t * VEIN[o + 1] + t * t * VEIN[o + 3];
+  EY = 2 * it * t * VEIN[o + 2] + t * t * VEIN[o + 4];
+}
 // Segments per vein, scaled with the outline's resolution so tiny leaflets stay cheap.
 let VS = 12;
 
@@ -594,8 +598,6 @@ function emitBlade(ls) {
   for (let i = 0; i <= N; i++) n = push(n, FX[0][i], FY[0][i], inkW(ow, i / N, ls));
   for (let i = N - 1; i >= 1; i--) n = push(n, FX[1][i], FY[1][i], inkW(ow, 2 - i / N, ls));
   emitStroke(sStroke, n, KIND_OUTLINE, true);
-  outlineN = n;
-  for (let i = 0; i < n; i++) { OLX[i] = PX[i]; OLY[i] = PY[i]; }
 
   // Midrib, from where the blade meets it; in a cordate notch the stalk runs up to there.
   const tipX = LX[0][N], baseX = Math.max(0, LX[0][0]);
@@ -636,14 +638,35 @@ function emitBlade(ls) {
         // or run along the midrib before turning out (curve < 0).
         const cv = clamp(G.veinCurve, -1, 1);
         const px1 = x0 + (ex - x0) * (0.5 - 0.4 * cv), py1 = ey * (0.5 + 0.4 * cv);
+        const vo = (side * 32 + k) * 5;
+        VEIN[vo] = x0; VEIN[vo + 1] = px1; VEIN[vo + 2] = py1; VEIN[vo + 3] = ex; VEIN[vo + 4] = ey;
         n = 0;
         for (let s = 0; s <= VS; s++) {
           const t = s / VS, it = 1 - t;
           const x = it * it * x0 + 2 * it * t * px1 + t * t * ex;
           const y = it * it * 0 + 2 * it * t * py1 + t * t * ey;
+          // A vein aimed into a lobe can cross a sinus: stop where it leaves the blade.
+          if (t > 0.2 && G.palm < 0.5 && !insideBlade(x, y)) break;
           n = push(n, x, y + G.wobble * 0.4 * noise1(t * 4 + k * 3 + ls), inkW(vwt * vw[0] * (1 - 0.8 * t), t, ls + k + side * 50));
         }
         emitStroke(sStroke, n, KIND_VEIN, false);
+      }
+      // Veinlets: fine cross-veins between neighbouring secondaries (the etched detail).
+      for (let k = 0; k + 1 < vc && G.veinlets > 0; k++) {
+        const a = (side * 32 + k) * 5, b = a + 5;
+        for (let q = 0; q < G.veinlets; q++) {
+          const t = (q + 0.5 + 0.3 * rnd2(ls + k * 13 + side, q)) / G.veinlets * 0.92;
+          veinPoint(a, t); const x0 = EX, y0 = EY;
+          veinPoint(b, t * 0.9 + 0.04); const x1 = EX, y1 = EY;
+          // Skip veinlets that would cross outside the blade (between lobes).
+          if (G.palm < 0.5 && (!insideBlade(x0, y0) || !insideBlade(x1, y1) || !insideBlade((x0 + x1) / 2, (y0 + y1) / 2))) continue;
+          n = 0;
+          for (let s = 0; s <= 3; s++) {
+            const f = s / 3, bow = Math.sin(Math.PI * f) * 0.012 * sg;
+            n = push(n, lerp(x0, x1, f) - bow * 0.5, lerp(y0, y1, f) + bow, inkW(vwt * vw[0] * 0.32, f, ls + k * 7 + q));
+          }
+          emitStroke(sStroke, n, KIND_VEIN, false);
+        }
       }
     }
   }
@@ -667,7 +690,7 @@ function emitBlade(ls) {
       n = 0;
       for (let s = 0; s <= VS; s++) {
         const t = s / VS;
-        const x = lerp(0.02, ex, t), y = lerp(0, ey, t) + Math.sin(Math.PI * t) * 0.03 * Math.sign(th) * G.veinCurve;
+        const x = lerp(baseX + 0.02, ex, t), y = lerp(0, ey, t) + Math.sin(Math.PI * t) * 0.03 * Math.sign(th) * G.veinCurve;
         n = push(n, x, y, inkW(vwt * 1.25 * vw[1] * (1 - 0.75 * t), t, ls + j));
       }
       emitStroke(sStroke, n, KIND_VEIN, false);
@@ -706,43 +729,9 @@ function emitBlade(ls) {
       }
     }
   }
-  // Hairs: short ticks out from the margin, leaning toward the tip.
-  if (G.hair > 0.01) {
-    const step = Math.max(1, Math.round(N / (G.hair * 60)));
-    for (let side = 0; side < 2; side++) {
-      const sg = side === 0 ? 1 : -1;
-      for (let i = 2; i < N - 1; i += step) {
-        const tx = FX[side][i + 1] - FX[side][i - 1], ty = FY[side][i + 1] - FY[side][i - 1];
-        const a = Math.atan2(ty, tx) + sg * (1.0 + 0.4 * rnd2(ls + i, side));
-        const len = 0.012 * (0.5 + rnd(ls + i, side + 9)) * (0.5 + G.hair);
-        n = 0;
-        n = push(n, FX[side][i], FY[side][i], 0.001);
-        n = push(n, FX[side][i] + Math.cos(a) * len, FY[side][i] + Math.sin(a) * len, 0.0004);
-        emitStroke(sStroke, n, KIND_HAIR, false);
-      }
-    }
-  }
 }
 
-// Final-coords outline of the last blade, for finding the fold crease.
-const OLX = new Float32Array(PMAX), OLY = new Float32Array(PMAX);
 const WAX = new Float32Array(13), WAY = new Float32Array(13);
-let outlineN = 0;
-
-/** Copy a range of staged vertices into a flap buffer, mirrored across the fold line. */
-function copyFlap(src, from, to, dst) {
-  for (let v = from; v < to && dst.n < dst.cap; v++) {
-    const o = v * STRIDE, d = dst.n * STRIDE, a = src.a, b = dst.a;
-    const s = a[o + 8];
-    const x = a[o], y = a[o + 1], nx = a[o + 2], ny = a[o + 3];
-    const nd = nx * fnx + ny * fny;
-    b[d] = x - 2 * s * fnx; b[d + 1] = y - 2 * s * fny;
-    b[d + 2] = nx - 2 * nd * fnx; b[d + 3] = ny - 2 * nd * fny;
-    b[d + 4] = a[o + 4]; b[d + 5] = a[o + 5]; b[d + 6] = a[o + 6];
-    b[d + 7] = a[o + 7] + FLAP; b[d + 8] = s; b[d + 9] = a[o + 9];
-    dst.n++;
-  }
-}
 
 function appendBuf(b) {
   const room = MAX_VERTS - geo.count;
@@ -758,7 +747,7 @@ function appendBuf(b) {
 // biggest first until they cover the outline. Inscribed circles hug the shape (a covering
 // hull would hold neighbours off at the narrow ends), and the Gap keeps the clearance.
 
-const NB = 200, NCAND = 160;
+const NB = 180, NCAND = 300;
 const BPX = new Float32Array(NB), BPY = new Float32Array(NB), bCov = new Uint8Array(NB);
 const CDX = new Float32Array(NCAND), CDY = new Float32Array(NCAND), CDR = new Float32Array(NCAND);
 
@@ -769,18 +758,22 @@ function fitCircles(start, count, out, oo, pad, maxC, hull) {
   let nFillQuads = 0;
   for (let v = start; v + 5 < start + count; v += 6) if ((a[v * STRIDE + 7] & 7) === KIND_FILL) nFillQuads++;
   if (nFillQuads === 0) { out[oo] = 0; out[oo + 1] = 0; out[oo + 2] = 0.1; return 1; }
-  let qStride = Math.max(1, Math.floor(nFillQuads / NB));
+  // Round up: rounding down fills the sample before the second side of the leaf is reached.
+  const qStride = Math.max(1, Math.ceil(nFillQuads / NB));
   let nb = 0, nc = 0, qi = 0;
-  const cStride = Math.max(1, Math.ceil(nFillQuads * 3 / NCAND));
+  // Odd stride: a multiple of 4 would only ever pick the same point on every spoke.
+  let cStride = Math.max(1, Math.ceil(nFillQuads * 4 / NCAND));
+  if (cStride % 2 === 0) cStride++;
   let ci = 0;
   for (let v = start; v + 5 < start + count; v += 6) {
     const o = v * STRIDE;
     if ((a[o + 7] & 7) !== KIND_FILL) continue;
     const ax = a[o], ay = a[o + 1], ox = a[o + STRIDE], oy = a[o + STRIDE + 1];
     if (qi++ % qStride === 0 && nb < NB) { BPX[nb] = ox; BPY[nb] = oy; nb++; }
-    for (let k = 0; k < 3; k++) {
+    // Four along each spoke, the last near the outline so narrow lobe tips get a circle.
+    for (let k = 0; k < 4; k++) {
       if (ci++ % cStride !== 0 || nc >= NCAND) continue;
-      const t = k * 0.3;
+      const t = k < 3 ? k * 0.33 : 0.93;
       CDX[nc] = ax + (ox - ax) * t; CDY[nc] = ay + (oy - ay) * t; nc++;
     }
   }
@@ -794,10 +787,10 @@ function fitCircles(start, count, out, oo, pad, maxC, hull) {
   // Greedy by gain: each round takes the circle covering the most still-uncovered outline,
   // until nearly all of it is covered (the last few points are tooth tips).
   bCov.fill(0, 0, nb);
-  const tol = 0.04;
+  const tol = 0.025;
   let n = 0, left = nb;
-  while (n < maxC && left > nb * 0.03) {
-    let best = -1, bestGain = 1;
+  while (n < maxC && left > nb * 0.01) {
+    let best = -1, bestGain = 0;
     for (let c = 0; c < nc; c++) {
       const r = CDR[c] + tol, r2 = r * r;
       let gain = 0;
@@ -814,7 +807,8 @@ function fitCircles(start, count, out, oo, pad, maxC, hull) {
       const dx = BPX[b] - CDX[best], dy = BPY[b] - CDY[best];
       if (!bCov[b] && dx * dx + dy * dy < r2) { bCov[b] = 1; left--; }
     }
-    out[oo + n * 3] = CDX[best]; out[oo + n * 3 + 1] = CDY[best]; out[oo + n * 3 + 2] = CDR[best] + pad;
+    // Stored at the radius the cover assumed (with its tolerance), so it really covers.
+    out[oo + n * 3] = CDX[best]; out[oo + n * 3 + 1] = CDY[best]; out[oo + n * 3 + 2] = CDR[best] + tol + pad;
     n++;
   }
   return Math.max(1, n);
@@ -937,7 +931,7 @@ function buildLeafVariant(v, seed) {
   const vs = seed * 977 + v * 131 + 17;
   jitter(vs);
   blendLayouts();
-  sFill.n = sStroke.n = sFlapFill.n = sFlapStroke.n = 0;
+  sFill.n = sStroke.n = 0;
   const wS = G.cw[0];
   // Simple leaves bend as a whole; compound leaves bend along the rachis, leaflets a little.
   buildBend(leafBend, J.bend * lerp(0.6, 1, wS), J.sCurve * lerp(0.7, 1, wS));
@@ -947,13 +941,11 @@ function buildLeafVariant(v, seed) {
   for (let j = 0; j < MAX_SLOTS; j++) if (slots[j * SF + 3] > 0.004) active++;
   const budget = Math.min(24000, MAX_VERTS / Math.max(1, geo.nLeaf + 1));
   // Vertices per leaflet ≈ 6 × (4N outline+fill + N/5 midrib + 2·veins·VS) — share the budget.
-  const veinsPer = 2 * Math.max(2, J.veinCount);
+  const veinsPer = 2 * Math.max(2, J.veinCount) * (1 + G.veinlets * 0.3); // veinlets are ~3 segments each
   N = clamp(Math.floor(budget / (Math.max(1, active) * 6 * (4.2 + veinsPer * 0.1))), 10, NMAX);
   N -= N % 2;
   VS = clamp(Math.round(N / 10), 3, 12);
-  const turned = rnd(vs, 99) < G.turnovers;
   curSeed = rnd(vs, 5);
-  foldOn = false; foldForce = NaN;
 
   // Stalk: petiole (with optional wing), rachis, pinna rachises, leaflet stalks.
   const pl = J.petLen, mw = G.midribWeight;
@@ -1024,48 +1016,7 @@ function buildLeafVariant(v, seed) {
     buildBend(bladeBend, (1 - wS) * J.bend * 0.5 * (1 + 0.5 * rnd2(ls, 1)), (1 - wS) * J.sCurve * 0.3);
     placeLeaflet(o, mirror);
     curSeed = rnd(ls, 2);
-    const fill0 = sFill.n, str0 = sStroke.n;
-    if (turned && j === 0) {
-      // Fold line: across the blade toward the tip, tilted; in final coords.
-      const uf = 0.58 + 0.2 * rnd(vs, 61), tilt = 0.55 * rnd2(vs, 62);
-      toFinal(uf, 0); const fx = TX, fy = TY;
-      toFinal(uf + 0.01, 0);
-      let tx = TX - fx, ty = TY - fy;
-      const tl = Math.hypot(tx, ty) || 1;
-      tx /= tl; ty /= tl;
-      const c = Math.cos(tilt), s = Math.sin(tilt);
-      fnx = tx * c - ty * s; fny = tx * s + ty * c;
-      fd = fnx * fx + fny * fy;
-      foldOn = true;
-    }
     emitBlade(ls);
-    if (foldOn) {
-      copyFlap(sFill, fill0, sFill.n, sFlapFill);
-      copyFlap(sStroke, str0, sStroke.n, sFlapStroke);
-      // Crease: where the fold line crosses the outline.
-      let found = 0, cx0 = 0, cy0 = 0, cx1 = 0, cy1 = 0;
-      for (let i = 0; i < outlineN && found < 2; i++) {
-        const k = (i + 1) % outlineN;
-        const s0 = fnx * OLX[i] + fny * OLY[i] - fd, s1 = fnx * OLX[k] + fny * OLY[k] - fd;
-        if ((s0 < 0) !== (s1 < 0)) {
-          const t = s0 / (s0 - s1);
-          const x = lerp(OLX[i], OLX[k], t), y = lerp(OLY[i], OLY[k], t);
-          if (found === 0) { cx0 = x; cy0 = y; } else { cx1 = x; cy1 = y; }
-          found++;
-        }
-      }
-      if (found === 2) {
-        foldForce = 0.0005;
-        let n = 0;
-        for (let i = 0; i <= 8; i++) {
-          const t = i / 8;
-          PX[n] = lerp(cx0, cx1, t); PY[n] = lerp(cy0, cy1, t); PW[n] = inkW(G.outlineW * 0.85, t, ls); n++;
-        }
-        emitStroke(sFlapStroke, n, KIND_CREASE + FLAP, false);
-        foldForce = NaN;
-      }
-      foldOn = false;
-    }
   }
 
   // Inked area: the front fills' triangles.
@@ -1077,7 +1028,7 @@ function buildLeafVariant(v, seed) {
   geo.leafInk[v] = ink;
 
   geo.leafStart[v] = geo.count;
-  appendBuf(sFill); appendBuf(sStroke); appendBuf(sFlapFill); appendBuf(sFlapStroke);
+  appendBuf(sFill); appendBuf(sStroke);
   geo.leafCount[v] = geo.count - geo.leafStart[v];
 
   // Attach point: the petiole's base, and the direction the leaf grows from it.
@@ -1159,7 +1110,6 @@ function buildSprigVariant(j, P, seed, arrangement) {
   // Stem mesh.
   sFill.n = sStroke.n = 0;
   curSeed = rnd(ss, 4);
-  foldOn = false;
   const sw = P.stemWidth.value, st = P.stemTaper.value;
   let m = 0;
   const every = Math.max(1, Math.floor(stemN / 120));
