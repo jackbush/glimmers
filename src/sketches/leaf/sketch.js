@@ -10,6 +10,7 @@
 // the newest node, leaflet pair or vein in as the fraction rises); categories, including
 // arrangement, terminal and bud type, are eased weights; each leaf has a presence and is
 // scaled about where it attaches, so leaves grow out of and shrink back into the stem.
+// Presets instead morph on one clock: see beginMorph.
 //
 // Params without `uniform: false` are auto-declared in every shader as u_<key>; f_* are
 // per-frame values computed here. The frame allocates nothing.
@@ -52,7 +53,8 @@ export default function create({ canvas, P, model, degrade }) {
     const w = new Float32Array(p.options.length);
     w[p.options.indexOf(p.value)] = 1;
     blend[key] = w;
-    return { p, w };
+    // from: the weights when a preset morph started.
+    return { p, w, from: new Float32Array(w.length) };
   });
   function easeBlends(rdt) {
     const k = P.morph.value > 0 ? 1 - Math.exp(-rdt * 4.6 / P.morph.value) : 1;
@@ -81,25 +83,32 @@ export default function create({ canvas, P, model, degrade }) {
   }
 
   // ---- eased shape numbers: geometry reads PE (P with eased copies of these), so a slider
-  // or preset change glides. Bools (decussate) ease 0 → 1 too.
+  // or preset change glides. Bools (decussate) ease 0 → 1 too. The leaflet count eases as
+  // pairs and terminal (see shapes.js blendLayouts), not as the raw count.
   /** @type {Record<string, any>} */
   const PE = {};
   const eased = [];
   for (const k in P) PE[k] = P[k];
+  const ease1 = (key, p, target, eps) => {
+    const e = { p, target, value: 0, from: 0, to: 0, eps };
+    PE[key] = e;
+    eased.push(e);
+  };
   for (const p of geomParams) {
     if (p.type !== 'range' && p.type !== 'bool') continue;
-    if (p.key === 'seed') continue;
-    const e = { p, value: 0, eps: p.type === 'bool' ? 1e-3 : Math.max(1e-7, (p.max - p.min) * 1e-4) };
-    PE[p.key] = e;
-    eased.push(e);
+    if (p.key === 'seed' || p.key === 'leaflets') continue;
+    if (p.type === 'bool') ease1(p.key, p, () => (p.value ? 1 : 0), 1e-3);
+    else ease1(p.key, p, () => p.value, Math.max(1e-7, (p.max - p.min) * 1e-4));
   }
+  ease1('leafletPairs', P.leaflets, () => Math.floor(P.leaflets.value / 2), 1e-3);
+  ease1('leafletTerm', P.leaflets, () => P.leaflets.value % 2, 1e-3);
   let easedInit = false;
   function easeNumbers(rdt) {
     const k = P.morph.value > 0 ? 1 - Math.exp(-rdt * 4.6 / P.morph.value) : 1;
     let moving = false;
     for (let i = 0; i < eased.length; i++) {
       const e = eased[i];
-      const t = e.p.type === 'bool' ? (e.p.value ? 1 : 0) : e.p.value;
+      const t = e.target();
       if (!easedInit) { e.value = t; continue; }
       const d = t - e.value;
       if (d === 0) continue;
@@ -108,6 +117,50 @@ export default function create({ canvas, P, model, degrade }) {
     }
     easedInit = true;
     return moving;
+  }
+
+  // ---- preset morphs: work out where everything ends, then move there on one curve
+  // A preset's numbers and selects land in P at once (the kit glides only its colours, over the
+  // same time and curve). The eased numbers and select weights then move from where they were
+  // to their targets, and the framing from the box on screen to the final shape's box, all on
+  // one ease-in-out clock, instead of each chasing its target on its own (which started
+  // abruptly, finished at different times, and let the framing follow every wobble).
+  // A slider change during a morph ends it, and everything chases as usual from there.
+  let morphLen = 0, morphT = 0, morphSig = NaN, morphPending = -1;
+  const viewFrom = new Float32Array(4), viewTo = new Float32Array(4);
+  const smooth01 = (x) => x * x * (3 - 2 * x);
+  function beginMorph(seconds) {
+    for (let i = 0; i < eased.length; i++) { const e = eased[i]; e.from = e.value; e.to = e.target(); }
+    for (let b = 0; b < blendList.length; b++) blendList[b].from.set(blendList[b].w);
+    // The end: build the final shape once and measure its box.
+    for (let i = 0; i < eased.length; i++) eased[i].value = eased[i].to;
+    for (let b = 0; b < blendList.length; b++) {
+      const { p, w } = blendList[b];
+      w.fill(0);
+      w[p.options.indexOf(p.value)] = 1;
+    }
+    rebuild();
+    viewTo[0] = bx0; viewTo[1] = by0; viewTo[2] = bx1; viewTo[3] = by1;
+    // Back to the start; the frame rebuilds from there.
+    for (let i = 0; i < eased.length; i++) eased[i].value = eased[i].from;
+    for (let b = 0; b < blendList.length; b++) blendList[b].w.set(blendList[b].from);
+    viewFrom.set(viewBox);
+    morphLen = seconds; morphT = 0; morphSig = geomSig();
+  }
+  /** Advance the morph; returns false once it has landed (or was cut short). */
+  function stepMorph(rdt) {
+    if (geomSig() !== morphSig) { morphLen = 0; return false; }
+    morphT = Math.min(morphLen, morphT + rdt);
+    const k = morphT >= morphLen ? 1 : smooth01(morphT / morphLen);
+    for (let i = 0; i < eased.length; i++) { const e = eased[i]; e.value = k === 1 ? e.to : e.from + (e.to - e.from) * k; }
+    for (let b = 0; b < blendList.length; b++) {
+      const { w, from, p } = blendList[b];
+      const ti = p.options.indexOf(p.value);
+      for (let i = 0; i < w.length; i++) w[i] = from[i] + ((i === ti ? 1 : 0) - from[i]) * k;
+    }
+    for (let i = 0; i < 4; i++) viewBox[i] = viewFrom[i] + (viewTo[i] - viewFrom[i]) * k;
+    if (morphT >= morphLen) morphLen = 0;
+    return true;
   }
 
   // ---- GL plumbing
@@ -409,6 +462,8 @@ export default function create({ canvas, P, model, degrade }) {
 
   return {
     resize(_w, _h, px) { fPx = px; needsDraw = true; },
+    // Started on the next frame, from whatever is on screen then (0 = jump straight there).
+    morph(seconds) { morphPending = seconds; morphLen = 0; },
     frame(t, dt, rt) {
       if (!ready) return;
       let rdt = lastRt < 0 ? 1 / 60 : rt - lastRt;
@@ -417,8 +472,16 @@ export default function create({ canvas, P, model, degrade }) {
       const cssW = canvas.width / fPx, cssH = canvas.height / fPx;
 
       // Shapes: rebuild while a category or a shape number is still easing.
-      let dirty = easeBlends(rdt);
-      if (easeNumbers(rdt)) dirty = true;
+      if (morphPending >= 0) {
+        if (morphPending > 0 && easedInit && viewInit) beginMorph(morphPending);
+        morphPending = -1;
+      }
+      const morphing = morphLen > 0 && stepMorph(rdt);
+      let dirty = morphing;
+      if (!morphing) {
+        if (easeBlends(rdt)) dirty = true;
+        if (easeNumbers(rdt)) dirty = true;
+      }
       if (model.version !== lastVersion) {
         lastVersion = model.version;
         const s = geomSig();
@@ -426,8 +489,8 @@ export default function create({ canvas, P, model, degrade }) {
       }
       if (dirty) rebuild();
       // Ease the framing toward the box.
-      let framing = false;
-      {
+      let framing = morphing;
+      if (!morphing) {
         const k = !viewInit ? 1 : P.morph.value > 0 ? 1 - Math.exp(-rdt * 4.6 / P.morph.value) : 1;
         const tb0 = bx0, tb1 = by0, tb2 = bx1, tb3 = by1;
         const eps = 1e-5 * Math.max(bx1 - bx0, by1 - by0, 1e-3);

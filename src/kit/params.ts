@@ -16,8 +16,11 @@ export interface ParamStore extends Model {
   scheduleSave(): void;
   /** Forget saved overrides, and cancel a pending save. */
   clearSaved(): void;
-  /** Start morphing to these values over `seconds` (0 = at once). */
-  applyPreset(values: Record<string, ParamValue>, seconds: number): void;
+  /**
+   * Start morphing to these values over `seconds` (0 = at once). With `glideNumbers` false,
+   * numbers land at once and only colours glide (the sketch morphs its shape itself).
+   */
+  applyPreset(values: Record<string, ParamValue>, seconds: number, glideNumbers?: boolean): void;
   /** Advance a preset morph by dt seconds. Returns 'moving', 'done' (just landed) or 'idle'. */
   tick(dt: number): 'moving' | 'done' | 'idle';
 }
@@ -130,13 +133,16 @@ export function createModel(schema: Group[], storageKey: string | null): ParamSt
         } catch { /* storage unavailable */ }
       }, 250);
     },
-    applyPreset(values, seconds) {
+    applyPreset(values, seconds, glideNumbers = true) {
       glides = [];
       for (const key in values) {
         const p = byKey[key];
         if (!p) continue;
         const to = coerce(p, values[key]);
-        if (seconds <= 0 || p.type === 'select' || p.type === 'bool') { store.setValue(p, to); continue; }
+        if (seconds <= 0 || p.type === 'select' || p.type === 'bool' || (p.type !== 'color' && !glideNumbers)) {
+          store.setValue(p, to);
+          continue;
+        }
         if (p.type === 'color') {
           const a = [0, 0, 0], b = [0, 0, 0];
           hexToRgb(String(p.value), a); hexToRgb(String(to), b);

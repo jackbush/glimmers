@@ -65,6 +65,12 @@ export interface SketchInstance {
    * applied: dt is 0 while paused); `rt` is real seconds, which always runs. Must not allocate.
    */
   frame(t: number, dt: number, rt: number): void;
+  /**
+   * Optional: the sketch morphs presets itself. A preset's numbers and selects then land at
+   * once (colours still glide), and this is called to morph from what's on screen to them over
+   * `seconds`, so it can work out where everything ends up first and move there on one curve.
+   */
+  morph?(seconds: number): void;
   dispose?(): void;
 }
 

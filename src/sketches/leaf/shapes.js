@@ -251,7 +251,7 @@ const G = {
   pin: 0, palm: 0, lobeDepth: 0, lobes: 5, lobeSharp: 0.5,
   mw: new Float32Array(7), teeth: 20, toothDepth: 0.02,
   vw: new Float32Array(4), veinCount: 8, veinAngle: 0.8, veinCurve: 0.3, veinWeight: 0.004, midribWeight: 0.008,
-  cw: new Float32Array(5), leaflets: 7, leafletAngle: 1,
+  cw: new Float32Array(5), leaflets: 7, lPairs: 3, lTerm: 1, leafletAngle: 1,
   bend: 0, sCurve: 0, petLen: 0.15, petFlat: 0, wing: 0, stipules: 0,
   veinlets: 0, outlineW: 0.005, wobble: 0.004, variety: 0.3,
 };
@@ -287,7 +287,13 @@ function resolveKnobs(P, B, variety) {
   G.veinCount = P.veinCount.value; G.veinAngle = P.veinAngle.value * DEG; G.veinCurve = P.veinCurve.value;
   G.veinWeight = P.veinWeight.value; G.midribWeight = P.midribWeight.value;
   for (let i = 0; i < 5; i++) G.cw[i] = B.compound[i];
-  G.leaflets = P.leaflets.value; G.leafletAngle = P.leafletAngle.value * DEG;
+  // Leaflets as pairs and a terminal (0–1), eased separately by sketch.js: easing the raw count
+  // passed through every count on the way, and odd and even counts lay out differently, so
+  // leaflets slid up and back and the terminal grew and shrank once per count.
+  const nL = P.leaflets.value;
+  G.lPairs = P.leafletPairs ? P.leafletPairs.value : Math.floor(nL / 2);
+  G.lTerm = P.leafletTerm ? P.leafletTerm.value : nL % 2;
+  G.leaflets = 2 * G.lPairs + G.lTerm; G.leafletAngle = P.leafletAngle.value * DEG;
   G.bend = P.bend.value; G.sCurve = P.sCurve.value;
   G.petLen = P.petioleLength.value; G.petFlat = P.petioleFlat.value; G.wing = P.petioleWing.value; G.stipules = P.stipules.value;
   G.veinlets = P.veinlets.value;
@@ -316,10 +322,13 @@ function jitter(vs) {
 // Slot fields: x, y, angle, scale, stalk length.
 
 const MAX_SLOTS = 80, SF = 5;
+// Bipinnate side leaflets start at a fixed slot (past the most pinnae), so they keep their
+// slots whatever the count.
+const PINNA_SIDE = 17;
 const LAYOUTS = [0, 1, 2, 3, 4].map(() => new Float32Array(MAX_SLOTS * SF));
 const slots = new Float32Array(MAX_SLOTS * SF);
 // Bipinnate pinna rachises: x0, y0, x1, y1 per pinna.
-const pinnaSeg = new Float32Array(16 * 4);
+const pinnaSeg = new Float32Array(17 * 4);
 let pinnaN = 0, rachisLen = 0;
 const RACHIS = new Float32Array(5);
 
@@ -372,8 +381,8 @@ function layoutBipinnate(L, n, ang) {
       const dd = len * (0.2 + 0.28 * q);
       const x = (px + c * dd) / tot, y = (py + s * dd) / tot;
       const sc = len > 0 ? ll * (0.85 + 0.15 * q) / tot : 0;
-      setSlot(L, n + p * 4 + q * 2, x, y, pa + ang * 0.9, sc, 0);
-      setSlot(L, n + p * 4 + q * 2 + 1, x, y, pa - ang * 0.9, sc, 0);
+      setSlot(L, PINNA_SIDE + p * 4 + q * 2, x, y, pa + ang * 0.9, sc, 0);
+      setSlot(L, PINNA_SIDE + p * 4 + q * 2 + 1, x, y, pa - ang * 0.9, sc, 0);
     }
   }
   RACHIS[2] = rl / tot;
@@ -400,20 +409,31 @@ function layoutTrifoliate(L, ang) {
   RACHIS[4] = 0.14;
 }
 
-// Leaflet counts are fractional while morphing: blend the layouts either side, so a new pair
-// grows out of the rachis instead of appearing.
-const slotsLo = new Float32Array(MAX_SLOTS * SF), pinnaLo = new Float32Array(16 * 4);
+// Pairs and terminal are fractional while morphing: blend the four layouts around them (pairs
+// either side, with and without a terminal). Slots keep their identity across all four, so a
+// new pair grows out of the rachis base and the terminal grows at the tip, each moving once.
+const slotsAcc = new Float32Array(MAX_SLOTS * SF), pinnaAcc = new Float32Array(17 * 4), pinnaW = new Float32Array(17);
 function blendLayouts() {
-  const nF = Math.max(2, G.leaflets), lo = Math.floor(nF), f = nF - lo;
-  if (f > 1e-4) {
-    blendLayoutsN(lo);
-    slotsLo.set(slots); pinnaLo.set(pinnaSeg);
-    const rLo = rachisLen, nLo = pinnaN;
-    blendLayoutsN(lo + 1);
-    for (let i = 0; i < slots.length; i++) slots[i] = lerp(slotsLo[i], slots[i], f);
-    for (let i = 0; i < pinnaSeg.length; i++) pinnaSeg[i] = i < nLo * 4 ? lerp(pinnaLo[i], pinnaSeg[i], f) : pinnaSeg[i];
-    rachisLen = lerp(rLo, rachisLen, f);
-  } else blendLayoutsN(lo);
+  const pF = Math.max(1, G.lPairs), p0 = Math.floor(pF), fp = pF - p0, tau = clamp(G.lTerm, 0, 1);
+  slotsAcc.fill(0); pinnaAcc.fill(0); pinnaW.fill(0);
+  let r = 0, pn = 0;
+  for (let c = 0; c < 4; c++) {
+    const w = (c & 1 ? fp : 1 - fp) * (c & 2 ? tau : 1 - tau);
+    if (w < 1e-6) continue;
+    blendLayoutsN(2 * (p0 + (c & 1)) + (c >> 1));
+    for (let i = 0; i < slots.length; i++) slotsAcc[i] += w * slots[i];
+    // A pinna only some layouts have keeps its full rachis; its leaflets' scale grows it in.
+    for (let p = 0; p < pinnaN; p++) {
+      pinnaW[p] += w;
+      for (let k = 0; k < 4; k++) pinnaAcc[p * 4 + k] += w * pinnaSeg[p * 4 + k];
+    }
+    r += w * rachisLen;
+    pn = Math.max(pn, pinnaN);
+  }
+  slots.set(slotsAcc);
+  for (let p = 0; p < pn; p++) for (let k = 0; k < 4; k++) pinnaSeg[p * 4 + k] = pinnaAcc[p * 4 + k] / pinnaW[p];
+  rachisLen = r;
+  pinnaN = pn;
 }
 function blendLayoutsN(n) {
   const ang = J.leafletAngle;
@@ -732,8 +752,10 @@ function emitBlade(ls) {
         edgeAt(side, x0);
         let ut = clamp(x0 + Math.abs(EY) / tanA * 0.9, 0.02, 0.97);
         if (G.pin > 0) {
-          const ph = (ut - 0.05) / 0.92 * G.lobes;
-          const pk = (Math.round(ph - 0.5) + 0.5) / G.lobes * 0.92 + 0.05;
+          // Into the nearest lobe tip, handing over smoothly between neighbours: a hard
+          // snap made veins jump from lobe to lobe as the vein count eased.
+          const ph = (ut - 0.05) / 0.92 * G.lobes - 0.5, li = Math.floor(ph);
+          const pk = (li + smooth(0.3, 0.7, ph - li) + 0.5) / G.lobes * 0.92 + 0.05;
           ut = lerp(ut, clamp(pk, 0.05, 0.95), G.pin);
         }
         edgeAt(side, ut);
@@ -1234,7 +1256,10 @@ function buildLeafVariant(v, seed) {
 
 const STEM_MAX = 400;
 const SX = new Float32Array(STEM_MAX), SY = new Float32Array(STEM_MAX), SPH = new Float32Array(STEM_MAX), SS = new Float32Array(STEM_MAX);
-const NODE_S = new Float32Array(16);
+// Sample kinds: 0 along the stem, 1 a node's leaf direction (the kink's bisector; not drawn),
+// 2 the stem leaving a node (drawn, so the kink is exact).
+const SKIND = new Uint8Array(STEM_MAX);
+const NODE_S = new Float32Array(16), NODE_I = new Int32Array(16);
 
 // Bud outlines: half-width along the bud (u 0 base … 1 tip), for each type.
 function budWidth(type, u) {
@@ -1294,19 +1319,6 @@ function emitBud(bx, by, a, size, seed) {
   }
 }
 
-function stemAt(s, n) {
-  // Interpolate stem sample at arc length s.
-  for (let i = 1; i < n; i++) {
-    if (SS[i] >= s || i === n - 1) {
-      const t = clamp((s - SS[i - 1]) / Math.max(SS[i] - SS[i - 1], 1e-6), 0, 1);
-      EX = lerp(SX[i - 1], SX[i], t); EY = lerp(SY[i - 1], SY[i], t);
-      return lerp(SPH[i - 1], SPH[i], t);
-    }
-  }
-  EX = SX[0]; EY = SY[0];
-  return SPH[0];
-}
-
 /**
  * The sprig, always built (no stem = a stem of zero length bearing only its terminal leaf).
  * Everything is weighted, so it morphs: arrangement weights (B.arrangement: no stem,
@@ -1335,17 +1347,28 @@ function buildSprigVariant(j, P, B, seed) {
   // Scaled by how much stem there is, so with no stem the lone leaf points straight up.
   const curve = (P.stemCurve.value + v * 0.4 * rnd2(ss, 2)) * stemW, droop = P.stemDroop.value * (1 + 0.3 * v * rnd2(ss, 3)) * stemW;
   const zig = P.zigzag.value * DEG * stemW;
-  const ds = Math.max(1e-4, len / (STEM_MAX - 2));
-  let x = 0, y = 0, ph = 0, ni = 0, n = 0;
-  for (let k = 0; k * ds <= len && n < STEM_MAX - 1; k++) {
-    const sk = k * ds;
-    while (ni < nN && NODE_S[ni] <= sk) { ph += zig * (ni % 2 ? 1 : -1) * (ni === nN - 1 ? fracN : 1); ni++; }
-    const f = sk / len;
-    const phk = ph + curve * f + droop * f * f * 1.4;
-    SX[n] = x; SY[n] = y; SPH[n] = phk; SS[n] = sk; n++;
-    x += Math.cos(phk) * ds; y += Math.sin(phk) * ds;
+  // The kinks sit exactly on the nodes, not on the next sample: snapping them to a sample grid
+  // that slides as the stem's length eases swung every leaf's angle back and forth mid-morph.
+  const ds = Math.max(1e-4, len / (STEM_MAX - 3 - 2 * nN));
+  let x = 0, y = 0, ph = 0, ni = 0, n = 0, sk = 0, k = 0;
+  for (;;) {
+    const bendK = curve * (sk / len) + droop * (sk / len) * (sk / len) * 1.4;
+    let kind = 0;
+    while (ni < nN && NODE_S[ni] <= sk) {
+      // The leaf sits on the bisector of the kink, in the angle between stem in and stem out.
+      const kink = zig * (ni % 2 ? 1 : -1) * (ni === nN - 1 ? fracN : 1);
+      NODE_I[ni] = n;
+      SX[n] = x; SY[n] = y; SPH[n] = ph + bendK + kink / 2; SS[n] = sk; SKIND[n] = 1; n++;
+      ph += kink; ni++; kind = 2;
+    }
+    const phk = ph + bendK;
+    SX[n] = x; SY[n] = y; SPH[n] = phk; SS[n] = sk; SKIND[n] = kind; n++;
+    if (sk >= len || n >= STEM_MAX - 2) break;
+    let next = Math.min((k + 1) * ds, len);
+    if (ni < nN && NODE_S[ni] < next) next = NODE_S[ni]; else k++;
+    x += Math.cos(phk) * (next - sk); y += Math.sin(phk) * (next - sk);
+    sk = next;
   }
-  SX[n] = x; SY[n] = y; SPH[n] = SPH[n - 1]; SS[n] = n * ds; n++;
   const stemN = n;
 
   // Stem mesh.
@@ -1353,14 +1376,13 @@ function buildSprigVariant(j, P, B, seed) {
   curSeed = rnd(ss, 4);
   const sw = P.stemWidth.value * Math.sqrt(stemW), st = P.stemTaper.value;
   let m = 0;
+  // Every few samples, plus each node (so kinks stay sharp) and the tip, where the bud sits.
   const every = Math.max(1, Math.floor(stemN / 120));
-  for (let i = 0; i < stemN; i += every) {
+  for (let i = 0, c = 0; i < stemN; i++) {
+    if (SKIND[i] === 1) continue;
+    if (SKIND[i] === 0 && c++ % every !== 0 && i !== stemN - 1) continue;
     const f = SS[i] / len;
     PX[m] = SX[i] + G.wobble * 0.3 * noise1(f * 7 + ss); PY[m] = SY[i]; PW[m] = inkW(sw * (1 - st * f), f, ss); m++;
-  }
-  // Always end exactly at the tip, where the bud sits (the stride can skip it).
-  if ((stemN - 1) % every !== 0) {
-    PX[m] = SX[stemN - 1] + G.wobble * 0.3 * noise1(7 + ss); PY[m] = SY[stemN - 1]; PW[m] = inkW(sw * (1 - st), 1, ss); m++;
   }
   if (stemW > 0.001) emitStroke(sStroke, m, KIND_STEM, false);
   // Terminal bud, its type blended: Cluster adds two plump side buds to a scaled main bud.
@@ -1423,21 +1445,20 @@ function buildSprigVariant(j, P, B, seed) {
         }
         const size = (1 - grad * fi) * (1 + v * 0.12 * rnd2(ss, 70 + key));
         // The same node and position keep the same leaf shape across arrangements.
-        np = place(po, np, (i * 3 + q * 5) % nLeaf, NODE_S[i], stemN, rel, size, pres);
+        np = place(po, np, (i * 3 + q * 5) % nLeaf, NODE_I[i], rel, size, pres);
       }
     }
   }
   // The terminal leaf: all there is with no stem; otherwise weighted by Terminal = Leaf.
   const tipPres = wA[0] + stemW * wT[0];
-  if (tipPres > 0.001 && np < MAX_PLACE) np = place(po, np, 0, len, stemN, 0, lerp(1, (1 - grad) * 0.9, stemW), tipPres);
+  if (tipPres > 0.001 && np < MAX_PLACE) np = place(po, np, 0, stemN - 1, 0, lerp(1, (1 - grad) * 0.9, stemW), tipPres);
   geo.sprigNPlace[j] = np;
 }
 
-/** Add one leaf placement at arc length sAt on the stem; returns the new count. */
-function place(po, np, lv, sAt, stemN, rel, size, pres) {
+/** Add one leaf placement at stem sample si; returns the new count. */
+function place(po, np, lv, si, rel, size, pres) {
   const flip = rel >= 0 ? 1 : -1;
-  const sph = stemAt(sAt, stemN);
-  const nx = EX, ny = EY;
+  const sph = SPH[si], nx = SX[si], ny = SY[si];
   const A = lv * 3, axp = geo.leafAttach[A], ayp = geo.leafAttach[A + 1], th = geo.leafAttach[A + 2];
   const g = sph + rel, cg = Math.cos(g), sgn = Math.sin(g), cA = Math.cos(th), sA = Math.sin(th);
   const sx = Math.max(0.05, size), sy = Math.max(0.05, size) * flip;

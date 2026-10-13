@@ -63,7 +63,14 @@ export function run(slug: string, { manifest, params, presets, sketch }: SketchM
   const chrome = setupChrome(!capture);
   const presetSeconds = manifest.presetSeconds ?? 1.5;
   function applyPreset(name: string, seconds = presetSeconds) {
-    if (presets?.[name]) store.applyPreset(presets[name], seconds);
+    if (!presets?.[name]) return;
+    const own = !!instance?.morph;
+    store.applyPreset(presets[name], seconds, !own);
+    if (own) instance!.morph!(seconds);
+    // What landed at once shows now; gliding colours catch up as they move.
+    panel.syncAll();
+    panel.refreshStatus();
+    store.scheduleSave();
   }
   const panel = buildPanel({
     slug,

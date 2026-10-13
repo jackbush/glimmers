@@ -14,7 +14,7 @@ const pb = playback({}, {
 });
 // Sway goes at the bottom of Playback.
 pb.params.push(
-  { key: 'sway', label: 'Sway', value: 0.15, min: 0, max: 1, step: 0.01, uniform: false, desc: 'How much the sprig and its leaves rock at rest, each on its own slow rhythm (0 = still).' },
+  { key: 'sway', label: 'Sway', value: 0, min: 0, max: 1, step: 0.01, uniform: false, desc: 'How much the sprig and its leaves rock at rest, each on its own slow rhythm (0 = still).' },
   { key: 'swaySpeed', label: 'Sway speed', value: 0.04, min: 0.005, max: 1, step: 0.005, uniform: false, desc: 'Rocking rhythm, in cycles per second.' },
 );
 
@@ -33,7 +33,7 @@ const schema = [
       { key: 'apex', label: 'Apex', type: 'select', options: ['Acute', 'Acuminate', 'Obtuse', 'Rounded', 'Notched'], value: 'Acuminate', uniform: false, desc: 'Shape of the tip.' },
       { key: 'bend', label: 'Bend', value: 0.35, min: -2, max: 2, step: 0.01, uniform: false, desc: 'How much the midrib curves.' },
       { key: 'sCurve', label: 'S-curve', value: 0.3, min: -2, max: 2, step: 0.01, uniform: false, desc: 'Curve that reverses halfway along the leaf.' },
-      { key: 'morph', label: 'Morph time', value: 0.7, min: 0, max: 3, step: 0.05, uniform: false, desc: 'Seconds the shape takes to settle after any change: categories morph, numbers glide, leaves grow in from the stem.' },
+      { key: 'morph', label: 'Morph time', value: 0.7, min: 0, max: 3, step: 0.05, uniform: false, desc: 'Seconds the shape takes to settle after a slider or menu change: categories morph, numbers glide, leaves grow in from the stem. Presets take their own, longer morph.' },
     ],
   },
   {
