@@ -1,7 +1,7 @@
 // Shared types for the kit and the sketches. Sketches are plain JS; these are for
 // JSDoc (`@type {import('../../kit/types').Sketch}`) and the kit's own TypeScript.
 
-export type ParamType = 'range' | 'color' | 'bool';
+export type ParamType = 'range' | 'color' | 'bool' | 'select';
 export type ParamValue = number | string | boolean;
 
 /** One entry in a sketch's params.js. Extra fields (e.g. Blackstar's `uniform`) are allowed. */
@@ -13,6 +13,8 @@ export interface ParamDef {
   min?: number;
   max?: number;
   step?: number;
+  /** Select params only: the choices, in menu order. The value is one of these strings. */
+  options?: string[];
   desc?: string;
   uniform?: boolean;
   [extra: string]: unknown;

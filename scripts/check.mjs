@@ -50,6 +50,9 @@ for (const slug of slugs) {
         else if (p.value < p.min || p.value > p.max) errors.push(`${where}: default ${p.value} outside [${p.min}, ${p.max}]`);
       } else if (type === 'color') {
         if (!/^#[0-9a-f]{6}$/.test(p.value)) errors.push(`${where}: colour must be lowercase #rrggbb`);
+      } else if (type === 'select') {
+        if (!Array.isArray(p.options) || p.options.length < 2) errors.push(`${where}: select needs an options array of 2+ strings`);
+        else if (!p.options.includes(p.value)) errors.push(`${where}: default "${p.value}" isn't one of its options`);
       } else if (type === 'bool') {
         if (typeof p.value !== 'boolean') errors.push(`${where}: value must be boolean`);
       } else {

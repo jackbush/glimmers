@@ -27,7 +27,7 @@ description: Add, edit, or remove visual elements and parameters in a glimmers s
    { key: 'haloFlare', label: 'Flare', value: 0.2, min: 0, max: 1, step: 0.01, desc: 'One-line tooltip.' },
    ```
    - `key` is camelCase, unique and descriptive. It's the key in copied state, so treat it as permanent. Don't reuse a standard key (`timeScale`, `renderScale`, `adaptive`, `targetFps`, `maxDpr`).
-   - `type` is `'range'` (the default), `'color'` (lowercase `'#rrggbb'`) or `'bool'`.
+   - `type` is `'range'` (the default), `'color'` (lowercase `'#rrggbb'`), `'bool'` or `'select'` (a dropdown: `options: ['Ovate', 'Cordate']`, and the value is one of those strings).
    - The default must sit inside `[min, max]`. Pick ranges that are useful but not destructive, and pick `step` to suit the precision that matters.
    - `label` stays short (≤ 18 characters) so it fits the 124px label column. `desc` is required because it's the tooltip.
 2. Read it in the sketch as `P.<key>.value`.

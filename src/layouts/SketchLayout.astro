@@ -141,7 +141,7 @@ const { title, appTitle, background, image, imageAlt } = Astro.props;
   .group[open] summary::before { content: "▾ "; }
 
   .row { display: grid; grid-template-columns: 124px 1fr 84px; align-items: center; gap: 8px; padding: 3px 14px; }
-  .row-bool { grid-template-columns: 124px 1fr; }
+  .row-bool, .row-select { grid-template-columns: 124px 1fr; }
   .lbl { color: var(--ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: default; user-select: none; }
   .row.changed .lbl { color: var(--ink); }
   .row.changed .lbl::after { content: " •"; color: var(--accent); }
@@ -170,6 +170,11 @@ const { title, appTitle, background, image, imageAlt } = Astro.props;
   input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
   input[type=color]::-webkit-color-swatch { border: 0; border-radius: 0; }
   input[type=checkbox] { justify-self: start; accent-color: var(--accent); margin: 0; }
+  select {
+    width: 100%; padding: 2px 4px; border: 1px solid var(--line); border-radius: 2px;
+    background: #0d0d0d; color: var(--ink); font: 11px var(--mono); cursor: pointer;
+  }
+  select:focus { outline: 1px solid var(--accent); }
 
   .state { padding: 12px 14px max(14px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line); display: grid; gap: 8px; }
   .changes { color: var(--ink-dim); }

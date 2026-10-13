@@ -35,6 +35,7 @@ function writeDerived(p: Param): void {
 function coerce(p: Param, v: unknown): ParamValue {
   if (p.type === 'bool') return !!v;
   if (p.type === 'color') return typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v) ? v.toLowerCase() : p.value;
+  if (p.type === 'select') return typeof v === 'string' && p.options!.includes(v) ? v : p.value;
   const n = Number(v);
   return Number.isFinite(n) ? roundTo(n, p.decimals) : p.value;
 }

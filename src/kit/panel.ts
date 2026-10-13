@@ -56,6 +56,13 @@ export function buildPanel({ slug, store, onEdited }: PanelOptions): Panel {
       box.addEventListener('change', () => { store.setValue(p, box.checked); sync(); onEdited(); });
       wrap.appendChild(box);
       sync = () => { box.checked = !!p.value; mark(); };
+    } else if (p.type === 'select') {
+      const menu = el('select');
+      menu.id = id;
+      for (const o of p.options!) menu.appendChild(el('option', null, o)).value = o;
+      menu.addEventListener('change', () => { store.setValue(p, menu.value); sync(); onEdited(); });
+      wrap.appendChild(menu);
+      sync = () => { menu.value = String(p.value); mark(); };
     } else if (p.type === 'color') {
       const pick = el('input');
       pick.type = 'color';
