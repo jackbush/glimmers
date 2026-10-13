@@ -53,7 +53,7 @@ const BASE = {
   Cuneate: [1.25, 0, 0],
   Rounded: [0.55, 0, 0],
   Cordate: [0.5, 0.55, 0],
-  Truncate: [0.2, 0, 0],
+  Truncate: [0.35, 0, 0],
   Asymmetric: [0.6, 0.12, 1],
 };
 // Apex: [apex exponent, drawn-out tip, notch]
@@ -468,6 +468,9 @@ let stip = false; // building a stipule: plain ovate, no lobes, teeth or side ve
 // Half-width of a winged petiole where it meets the blade (0 = no wing on this blade). The
 // blade's base flares to at least this, so wing and blade share one margin.
 let wingJoin = 0;
+// How far the fill's anchors move from the midrib to the palm point (see emitBlade), and where
+// that point is.
+let palmFan = 0, palmX = 0.08;
 
 // Final-coords scratch for strokes.
 const PMAX = 4000;
@@ -511,6 +514,7 @@ function bladeOutline(ls) {
   const lobes = G.lobes, sharpE = lerp(1.2, 6, G.lobeSharp);
   // Palmate lobes radiate from a point just above the base.
   const pcx = 0.08, nl = Math.max(2, lobes);
+  palmFan = smooth(0, 0.12, palD); palmX = pcx;
   const dTh = Math.min(1.15, 4.0 / (nl - 1 + 1e-3)), off = 0.25 * (1 + Math.cos(Math.PI * nl)); // odd 0, even ½, smooth between
   const thMax = ((nl - 1) / 2 + 0.55) * dTh;
   const wsc = 1 + G.variety * 0.12 * rnd2(ls, 21);
@@ -680,12 +684,15 @@ let VS = 12;
 
 function emitBlade(ls) {
   bladeOutline(ls);
-  // Fill: quads from the midrib anchor out to the outline, per side.
+  // Fill: quads from the midrib anchor out to the outline, per side. Palmate lobes push the
+  // outline in and out along rays from the palm point, so in a deep sinus it doubles back on
+  // itself as seen from the midrib, and quads from there crossed it and filled the notch. Seen
+  // from the palm point it never doubles back, so with palmate lobing the anchors move there.
   for (let side = 0; side < 2; side++) {
     const sg = side === 0 ? 1 : -1, fx = FX[side], fy = FY[side];
     for (let i = 0; i < N; i++) {
-      toFinal(AX[i], 0); const ax0 = TX, ay0 = TY;
-      toFinal(AX[i + 1], 0); const ax1 = TX, ay1 = TY;
+      toFinal(lerp(AX[i], palmX, palmFan), 0); const ax0 = TX, ay0 = TY;
+      toFinal(lerp(AX[i + 1], palmX, palmFan), 0); const ax1 = TX, ay1 = TY;
       toFinal(fx[i], fy[i]); const ox0 = TX, oy0 = TY;
       toFinal(fx[i + 1], fy[i + 1]); const ox1 = TX, oy1 = TY;
       const u0 = i / N, u1 = (i + 1) / N;
@@ -1217,8 +1224,10 @@ function buildLeafVariant(v, seed) {
     placeLeaflet(o, mirror);
     // The midrib carries on from its stalk's opacity (petiole, or the leaflet's stalk).
     ribO = j === 0 && wS > 0.5 && pl > 0.002 ? petioleO : 0.5;
-    // Only the simple blade at the petiole's end joins the wing.
-    wingJoin = j === 0 && pl > 0.01 ? G.wing * 0.075 * wS : 0;
+    // Only the simple blade at the petiole's end joins the wing. Without a wing the base still
+    // flares to a little more than the stalk, so a wedge-shaped base doesn't taper to nothing
+    // where it meets it (which left the stalk wider than the leaf, and the midrib on bare paper).
+    wingJoin = j === 0 && pl > 0.01 ? Math.max(G.wing * 0.075, G.midribWeight * 1.8) * wS : 0;
     if (wingJoin < 0.002) wingJoin = 0;
     curSeed = rnd(ls, 2);
     emitBlade(ls);

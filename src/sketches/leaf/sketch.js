@@ -21,6 +21,14 @@ import { rng } from '../../kit/random.js';
 
 const MAX_INST = MAX_PLACE + 1, IFLOATS = 6;
 const SELECTS = ['compound', 'outline', 'base', 'apex', 'lobing', 'margin', 'venation', 'arrangement', 'terminal', 'budType'];
+// The leaf's own shape (not the stem's): in a two-phase morph these swap while the leaves
+// are shrunk to nothing (see beginMorph).
+const LEAF_KEYS = new Set([
+  'compound', 'outline', 'base', 'apex', 'lobing', 'margin', 'venation',
+  'leaflets', 'leafletPairs', 'leafletTerm', 'leafletAngle', 'width', 'bend', 'sCurve', 'lobeDepth', 'lobes', 'lobeSharpness',
+  'teeth', 'toothDepth', 'veinCount', 'veinAngle', 'veinCurve', 'veinlets', 'veinWeight', 'midribWeight',
+  'petioleLength', 'petioleFlat', 'petioleWing', 'stipules',
+]);
 // Params that change the geometry (selects in SELECTS morph and are tracked separately).
 const GEOM_KEYS = [
   'seed', 'leaflets', 'leafletAngle', 'width', 'bend', 'sCurve', 'lobeDepth', 'lobes', 'lobeSharpness',
@@ -54,7 +62,7 @@ export default function create({ canvas, P, model, degrade }) {
     w[p.options.indexOf(p.value)] = 1;
     blend[key] = w;
     // from: the weights when a preset morph started.
-    return { p, w, from: new Float32Array(w.length) };
+    return { p, w, from: new Float32Array(w.length), leaf: LEAF_KEYS.has(key) };
   });
   function easeBlends(rdt) {
     const k = P.morph.value > 0 ? 1 - Math.exp(-rdt * 4.6 / P.morph.value) : 1;
@@ -90,7 +98,7 @@ export default function create({ canvas, P, model, degrade }) {
   const eased = [];
   for (const k in P) PE[k] = P[k];
   const ease1 = (key, p, target, eps) => {
-    const e = { p, target, value: 0, from: 0, to: 0, eps };
+    const e = { p, target, value: 0, from: 0, to: 0, eps, leaf: LEAF_KEYS.has(key) };
     PE[key] = e;
     eased.push(e);
   };
@@ -126,10 +134,22 @@ export default function create({ canvas, P, model, degrade }) {
   // one ease-in-out clock, instead of each chasing its target on its own (which started
   // abruptly, finished at different times, and let the framing follow every wobble).
   // A slider change during a morph ends it, and everything chases as usual from there.
-  let morphLen = 0, morphT = 0, morphSig = NaN, morphPending = -1;
+  // Two phases when the leaf type changes (simple ↔ compound, or one compound type to
+  // another): blending a leaf into leaflets turned the old leaves into odd half-compound ones on
+  // the way. Instead the old leaves shrink back into their nodes, the leaf's shape swaps while
+  // they're gone, and the new ones grow out; the stem morphs throughout. Same-type morphs (oak
+  // to elm) stay one continuous blend.
+  let morphLen = 0, morphT = 0, morphSig = NaN, morphPending = -1, twoPhase = false;
+  // Every leaf's presence is scaled by this (1 except mid two-phase morph).
+  let leafGrow = 1;
   const viewFrom = new Float32Array(4), viewTo = new Float32Array(4);
   const smooth01 = (x) => x * x * (3 - 2 * x);
   function beginMorph(seconds) {
+    const cw = blend.compound;
+    let c0 = 0;
+    for (let i = 1; i < cw.length; i++) if (cw[i] > cw[c0]) c0 = i;
+    twoPhase = P.compound.options[c0] !== P.compound.value;
+    leafGrow = 1; // (a new preset mid-dip starts its leaves from full)
     for (let i = 0; i < eased.length; i++) { const e = eased[i]; e.from = e.value; e.to = e.target(); }
     for (let b = 0; b < blendList.length; b++) blendList[b].from.set(blendList[b].w);
     // The end: build the final shape once and measure its box.
@@ -149,14 +169,21 @@ export default function create({ canvas, P, model, degrade }) {
   }
   /** Advance the morph; returns false once it has landed (or was cut short). */
   function stepMorph(rdt) {
-    if (geomSig() !== morphSig) { morphLen = 0; return false; }
+    if (geomSig() !== morphSig) { morphLen = 0; leafGrow = 1; return false; }
     morphT = Math.min(morphLen, morphT + rdt);
     const k = morphT >= morphLen ? 1 : smooth01(morphT / morphLen);
-    for (let i = 0; i < eased.length; i++) { const e = eased[i]; e.value = k === 1 ? e.to : e.from + (e.to - e.from) * k; }
+    // Two phases: leaf shape holds at the start, then at the end, swapping at the midpoint while
+    // the leaves are shrunk to nothing (out over 0–0.45, back over 0.55–1).
+    const kl = twoPhase ? (k < 0.5 ? 0 : 1) : k;
+    leafGrow = !twoPhase ? 1 : k < 0.5 ? 1 - smooth01(Math.min(1, k / 0.45)) : smooth01(Math.max(0, (k - 0.55) / 0.45));
+    for (let i = 0; i < eased.length; i++) {
+      const e = eased[i], ke = e.leaf ? kl : k;
+      e.value = ke === 1 ? e.to : e.from + (e.to - e.from) * ke;
+    }
     for (let b = 0; b < blendList.length; b++) {
-      const { w, from, p } = blendList[b];
-      const ti = p.options.indexOf(p.value);
-      for (let i = 0; i < w.length; i++) w[i] = from[i] + ((i === ti ? 1 : 0) - from[i]) * k;
+      const { w, from, p, leaf } = blendList[b];
+      const ti = p.options.indexOf(p.value), kb = leaf ? kl : k;
+      for (let i = 0; i < w.length; i++) w[i] = from[i] + ((i === ti ? 1 : 0) - from[i]) * kb;
     }
     for (let i = 0; i < 4; i++) viewBox[i] = viewFrom[i] + (viewTo[i] - viewFrom[i]) * k;
     if (morphT >= morphLen) morphLen = 0;
@@ -352,7 +379,7 @@ export default function create({ canvas, P, model, degrade }) {
   function placed(p, th) {
     const o = p * 8, lv = geo.sprigPlace[o];
     const qa = geo.sprigPlace[o + 1], qb = geo.sprigPlace[o + 2], qc = geo.sprigPlace[o + 3], qd = geo.sprigPlace[o + 4];
-    const qx = geo.sprigPlace[o + 5], qy = geo.sprigPlace[o + 6], pres = geo.sprigPlace[o + 7];
+    const qx = geo.sprigPlace[o + 5], qy = geo.sprigPlace[o + 6], pres = geo.sprigPlace[o + 7] * leafGrow;
     const ax = geo.leafAttach[lv * 3], ay = geo.leafAttach[lv * 3 + 1];
     const nx = qa * ax + qc * ay + qx, ny = qb * ax + qd * ay + qy; // the node
     const c = Math.cos(th), s = Math.sin(th);
@@ -552,7 +579,7 @@ export default function create({ canvas, P, model, degrade }) {
         // The bud is the end of the stem: drawn first, under every leaf.
         drawRun(geo.budStart[0], geo.budCount[0], 0, 1);
         for (let p = geo.sprigNPlace[0] - 1; p >= 0; p--) {
-          if (geo.sprigPlace[p * 8 + 7] < 0.002) continue; // not grown in yet
+          if (geo.sprigPlace[p * 8 + 7] * leafGrow < 0.002) continue; // not grown in yet
           drawLeaf(geo.sprigPlace[p * 8], 1 + p);
         }
       }

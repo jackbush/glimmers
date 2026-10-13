@@ -63,9 +63,15 @@ Palettes are `leafWash / leafShade · stemWash · budColour / budShade · paper`
 - **Palette:** `#8aab55 / #3e5a28 · #8a7a5a · #7a6a4a / #2e2818 · #f2eff9` (green on lilac; autumn `#e8c64a / #9a7a1a` on `#eef0fa`).
 - **Missing:** a fan outline (a wedge widening to a broad arc, not a midrib-based blade), forking (dichotomous) venation, and tufts on short shoots.
 
-### Hawthorn (Crataegus monogyna), with its thorns
-- **Look:** the leaf is in `presets`. What's missing is the thorns: straight, sharp, 1–2 cm, at the leaf nodes, the same brown as the twig. In autumn, clusters of dark red haws.
-- **Missing:** thorns on the stem at nodes (a short tapering spike, its own placement), and fruit.
+### Hawthorn (Crataegus monogyna)
+- **Look:** small leaves, 2–4 cm, wedge-based and cut deep, almost to the midrib, into three to five lobes, the lowest pair the deepest; a few teeth near the lobe tips only; leafy, toothed stipules at the stalk's base. Alternate on a zigzag twig, with straight sharp thorns, 1–2 cm, at the nodes, the same brown as the twig. In autumn, clusters of dark red haws.
+- **Palette:** `#5e8e44 / #28482a · #6a4a3a · #8a3a2a / #3a1408 · #f9eff2` (deep green on rose, the haws dark red).
+- **Missing:** thorns (a short tapering spike at each node, its own placement), and fruit. It was a preset (pinnately lobed, Lobe depth 0.75, 3 lobes) and was cut: without its thorns, and with lobes cut that deep at that size, it read as a scrappy generic leaf. Bring it back with thorns, and look again at deep pinnate lobes on small leaves.
+
+### Tulip tree (Liriodendron tulipifera)
+- **Look:** squarish, 10–15 cm, with four pointed lobes: two at the base, broad and spreading, and two at the top either side of a tip cut straight across, as if snipped off with scissors (a shallow V, not a dent). The base is broad and nearly straight. Long stalk; a flat, duck-bill bud.
+- **Palette:** `#7aa452 / #33582e · #7a5a3a · #6a6a5a / #2a2a1e · #f3eff9` (fresh green on lilac).
+- **Missing:** a cut-off apex (the blade ending in a broad, shallow V between two points; Notched is only a small dent in a pointed tip), and four lobes placed two at the base and two at the top (palmate lobing spreads them evenly round the palm). It was a preset and was cut: Orbicular + 4 palmate lobes + Notched read as a generic lobed leaf.
 
 ### Blackthorn (Prunus spinosa)
 - **Look:** small, dull, finely toothed oval leaves, 2–4 cm, on dark purple-black twigs that end in long thorns. Blue-black sloes with a grey bloom.
@@ -94,6 +100,7 @@ Not needed for any preset to work, but most of the species would be more recogni
 | Scale leaves | A shoot covered in overlapping clasping scales instead of separate leaves | Cypress, Monkey puzzle, Coast redwood (leading shoots) |
 | Branching sprays | Side shoots, and side shoots off those, in one plane | Cypress, Larch, Cedar |
 | Thorns | Spikes at nodes, or a thorn ending the sprig | Hawthorn, Blackthorn, Robinia (better than stipules) |
+| Cut-off apex and placed lobes | A tip cut across in a shallow V; lobes at chosen positions, not spread evenly | Tulip tree |
 | Fascicles | 2–5 needles from one papery sheath | Scots pine (and every other pine) |
 | Pegs | Woody pegs under each needle | Norway spruce |
 | Fan outline and forking veins | A wedge-to-arc blade with dichotomous venation | Ginkgo |
