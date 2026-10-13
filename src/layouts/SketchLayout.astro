@@ -86,26 +86,29 @@ const { title, appTitle, background, image, imageAlt } = Astro.props;
   .disc {
     position: fixed; top: max(14px, env(safe-area-inset-top)); z-index: 3; width: 38px; height: 38px; padding: 8px;
     display: block; border: 0; border-radius: 50%; background: rgba(0, 0, 0, 0.3); color: var(--ink);
-    cursor: pointer; opacity: 0.6; transition: opacity .2s, transform .5s, background .2s;
+    cursor: pointer; opacity: 0.6; transition: opacity .2s, visibility .2s, transform .5s, background .2s;
   }
-  .disc:hover, .disc:focus-visible { opacity: 1; background: rgba(0, 0, 0, 0.6); }
+  .disc:focus-visible { opacity: 1; background: rgba(0, 0, 0, 0.6); }
   .disc svg { width: 100%; height: 100%; display: block; }
-  #back { left: max(14px, env(safe-area-inset-left)); }
+  /* Under the pane, so on narrow screens the pane covers it. */
+  #back { left: max(14px, env(safe-area-inset-left)); z-index: 1; }
   #cog { right: max(14px, env(safe-area-inset-right)); }
   #play { right: calc(max(14px, env(safe-area-inset-right)) + 46px); }
-  /* Play/pause only shows while the settings pane is open. */
-  body:not([data-pane="open"]) #play { display: none; }
+  /* Play/pause shows while the settings pane is open, and stays after it closes while paused
+     (so you can resume); once playing it fades out until the pane is next opened. */
+  body:not([data-pane="open"]):not([data-paused="true"]) #play { opacity: 0; visibility: hidden; }
   #play .icon-play, body[data-paused="true"] #play .icon-pause { display: none; }
   body[data-paused="true"] #play .icon-play { display: block; }
-  #cog:hover, #cog[aria-expanded="true"] { opacity: 1; transform: rotate(60deg); background: rgba(0, 0, 0, 0.6); }
+  #cog[aria-expanded="true"] { opacity: 1; transform: rotate(60deg); background: rgba(0, 0, 0, 0.6); }
   /* Over the black pane the dark roundels vanish, so they turn faint white. */
   body[data-pane="open"] #play, body[data-pane="open"] #cog { background: rgba(255, 255, 255, 0.1); }
-  body[data-pane="open"] #play:hover, body[data-pane="open"] #cog:hover,
   body[data-pane="open"] #play:focus-visible, body[data-pane="open"] #cog:focus-visible { background: rgba(255, 255, 255, 0.18); }
-  /* On phones the pane is full width, so the back button sits over it too. */
-  @media (max-width: 699px) {
-    body[data-pane="open"] #back { background: rgba(255, 255, 255, 0.1); }
-    body[data-pane="open"] #back:hover, body[data-pane="open"] #back:focus-visible { background: rgba(255, 255, 255, 0.18); }
+  /* Hover only where there's a real pointer: touch browsers keep :hover after a tap, which
+     left the cog dark and turned after closing the pane. */
+  @media (hover: hover) {
+    .disc:hover { opacity: 1; background: rgba(0, 0, 0, 0.6); }
+    #cog:hover { opacity: 1; transform: rotate(60deg); background: rgba(0, 0, 0, 0.6); }
+    body[data-pane="open"] #play:hover, body[data-pane="open"] #cog:hover { background: rgba(255, 255, 255, 0.18); }
   }
 
   #panel {
@@ -123,8 +126,6 @@ const { title, appTitle, background, image, imageAlt } = Astro.props;
     padding: 14px 108px 10px 16px; padding-top: max(14px, env(safe-area-inset-top));
     border-bottom: 1px solid var(--line);
   }
-  /* On phones the pane covers the screen, so leave room for the back button too. */
-  @media (max-width: 699px) { .head { padding-left: 62px; } }
   #fps { color: var(--ink-dim); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   #controls { flex: 1; overflow-y: auto; padding: 4px 0 10px; overscroll-behavior: contain; }
@@ -161,9 +162,13 @@ const { title, appTitle, background, image, imageAlt } = Astro.props;
   /* No spinner arrows on number boxes — the sliders do the stepping. */
   .num::-webkit-outer-spin-button, .num::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
   .num[type=number] { -moz-appearance: textfield; appearance: textfield; }
-  input[type=color] { width: 100%; height: 18px; padding: 0; border: 1px solid var(--line); background: none; cursor: pointer; }
+  /* iOS Safari draws the swatch as a circle by default, which stretches to an oval here. */
+  input[type=color] {
+    -webkit-appearance: none; appearance: none; width: 100%; height: 18px; padding: 0;
+    border: 1px solid var(--line); border-radius: 0; background: none; cursor: pointer;
+  }
   input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
-  input[type=color]::-webkit-color-swatch { border: 0; }
+  input[type=color]::-webkit-color-swatch { border: 0; border-radius: 0; }
   input[type=checkbox] { justify-self: start; accent-color: var(--accent); margin: 0; }
 
   .state { padding: 12px 14px max(14px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line); display: grid; gap: 8px; }

@@ -7,6 +7,11 @@ const sketches = getListed();
 ---
 
 <BaseLayout title={site.name} appTitle={site.name}>
+  <Fragment slot="head">
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Grenze+Gotisch&display=swap" />
+  </Fragment>
   <main>
     <h1>{site.name}</h1>
     <ul>
@@ -49,7 +54,7 @@ const sketches = getListed();
     padding: max(32px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 64px max(16px, env(safe-area-inset-left));
     color: var(--ink); font: 11px/1.4 var(--mono);
   }
-  h1 { margin: 16px 0 32px; font-size: 32px; line-height: 1; font-weight: 400; letter-spacing: .2em; text-transform: uppercase; }
+  h1 { margin: 32px 0 24px; font: 400 72px/1 "Grenze Gotisch", serif; }
   ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 40px; }
   a { display: block; color: inherit; text-decoration: none; }
   video, img, .blank { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: cover; background: #111; }
