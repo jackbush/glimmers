@@ -203,7 +203,7 @@ export const presets = {
   }),
   // Aspen (Populus tremula): nearly round with big blunt teeth, on a long stalk flattened
   // sideways (which is why it trembles). In autumn colour: gold washing to scarlet on the
-  // shaded half, pale yellow stalks, on pale sky-blue paper.
+  // shaded half, pale yellow stalks, on pale cream paper.
   Aspen: species({
     compound: 'Simple',
     outline: 'Orbicular', width: 1.1, base: 'Truncate', apex: 'Acute', bend: 0.05, sCurve: 0.05,
@@ -216,7 +216,7 @@ export const presets = {
     insertion: 60, tipInsertion: 40, sizeGradient: 0.2, stemWidth: 0.011, stemTaper: 0.45,
     stemCurve: 0.2, stemDroop: 0, zigzag: 8, stemTexture: 0.25, stemShading: 0.35, stemFade: 0.2,
     terminal: 'Bud', budType: 'Pointed', budStem: 0.03, budSize: 0.07, leafVariety: 0.25,
-    paper: '#edf1fa', leafWash: '#f2a52c', leafShade: '#d4402a',
+    paper: '#faf2e4', leafWash: '#f2a52c', leafShade: '#d4402a',
     stemWash: '#d8b04a', budColour: '#8a5a2a', budShade: '#3a200c',
   }),
   // Beech (Fagus sylvatica): a neat oval with a wavy, silky-fringed edge and seven or eight
@@ -334,7 +334,7 @@ export const presets = {
     venation: 'Pinnate', veinCount: 18, veinAngle: 70, veinCurve: 0, veinlets: 1,
     veinWeight: 0.003, midribWeight: 0.012,
     petioleLength: 0.2, petioleFlat: 0, petioleWing: 0, stipules: 0,
-    arrangement: 'Alternate', nodes: 6, divergence: 144, internode: 0.4, internodeTaper: 0.3, bareStem: 0.3,
+    arrangement: 'Alternate', nodes: 8, divergence: 144, internode: 0.4, internodeTaper: 0.3, bareStem: 0.3,
     insertion: 25, tipInsertion: 15, sizeGradient: 0.2, stemWidth: 0.008, stemTaper: 0.45,
     stemCurve: 0.3, stemDroop: 0.8, zigzag: 5, stemTexture: 0.1, stemShading: 0.3, stemFade: 0.2,
     terminal: 'Bud', budType: 'Pointed', budStem: 0.03, budSize: 0.03, leafVariety: 0.25,
@@ -481,7 +481,7 @@ export const presets = {
   }),
   // English oak (Quercus robur): obovate, four or five pairs of round lobes, two little
   // ears at the base and almost no stalk; leaves bunched at the shoot tip around a cluster of
-  // pale brown buds, on a stout olive-brown twig. Olive green on blue-lilac paper.
+  // pale brown buds, on a stout olive-brown twig. Olive green on pale mint paper.
   Oak: species({
     compound: 'Simple',
     outline: 'Obovate', width: 0.9, base: 'Cordate', apex: 'Rounded', bend: 0.12, sCurve: 0.15,
@@ -494,7 +494,7 @@ export const presets = {
     insertion: 72, tipInsertion: 42, sizeGradient: 0.05, stemWidth: 0.02, stemTaper: 0.35,
     stemCurve: 0.25, stemDroop: 0, zigzag: 8, stemTexture: 0.45, stemShading: 0.4, stemFade: 0.25,
     terminal: 'Bud', budType: 'Cluster', budStem: 0.03, budSize: 0.09, leafVariety: 0.4,
-    paper: '#f0eff8', leafWash: '#8ba451', leafShade: '#37512a',
+    paper: '#e8f7ec', leafWash: '#8ba451', leafShade: '#37512a',
     stemWash: '#7e684e', budColour: '#975f35', budShade: '#3d2314',
   }),
   // London plane (Platanus × hispanica): big, five sharp lobes and a few large teeth on a long

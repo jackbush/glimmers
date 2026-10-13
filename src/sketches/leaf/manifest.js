@@ -5,5 +5,5 @@ export default {
   pageColour: 'paper',
   presetSeconds: 4,
   // The cover holds on each species, then morphs to the next, and back to the first.
-  capture: { presets: { sequence: ['Oak', 'Elm', 'Beech'], hold: 1 }, crf: 31 },
+  capture: { presets: { sequence: ['Oak', 'Aspen', 'Eucalyptus'], hold: 1 }, crf: 31 },
 };

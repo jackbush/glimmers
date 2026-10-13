@@ -392,20 +392,20 @@ function layoutPalmate(L, n) {
   const pairs = Math.floor(n / 2), term = n % 2;
   const step = Math.min(0.75, 4.7 / Math.max(n, 2));
   const ll = 0.78;
-  if (term) setSlot(L, 0, 0.02, 0, 0, ll, 0.04);
+  if (term) setSlot(L, 0, 0, 0, 0, ll, 0.04);
   for (let k = 0; k < pairs; k++) {
     const a = step * (k + (term ? 1 : 0.5));
     const s = ll * (1 - 0.42 * Math.pow((k + 1) / (pairs + 0.5), 1.4));
-    setSlot(L, 1 + 2 * k, 0.02, 0, a, s, 0.04);
-    setSlot(L, 2 + 2 * k, 0.02, 0, -a, s, 0.04);
+    setSlot(L, 1 + 2 * k, 0, 0, a, s, 0.04);
+    setSlot(L, 2 + 2 * k, 0, 0, -a, s, 0.04);
   }
   RACHIS[3] = 0;
 }
 function layoutTrifoliate(L, ang) {
   L.fill(0);
   setSlot(L, 0, 0.14, 0, 0, 0.6, 0.07);
-  setSlot(L, 1, 0.02, 0, ang, 0.5, 0.03);
-  setSlot(L, 2, 0.02, 0, -ang, 0.5, 0.03);
+  setSlot(L, 1, 0, 0, ang, 0.5, 0.03);
+  setSlot(L, 2, 0, 0, -ang, 0.5, 0.03);
   RACHIS[4] = 0.14;
 }
 
@@ -1173,7 +1173,10 @@ function buildLeafVariant(v, seed) {
     const o = j * SF;
     if (slots[o + 3] <= 0.004 || slots[o + 4] < 0.004) continue;
     const c = Math.cos(slots[o + 2]), s = Math.sin(slots[o + 2]);
-    leafLine(slots[o], slots[o + 1], slots[o] + c * slots[o + 4], slots[o + 1] + s * slots[o + 4], mw * 0.5, G.midribWeight * midribScale, KIND_STEM, vs + j, 0.5);
+    // Leaflet stalks start where the stalk or rachis they grow from is (palmate and trifoliate
+    // ones right at the petiole's end), as wide as it is there, and taper into the midrib.
+    const w0 = mw * lerp(0.9, 0.45, rachisLen > 0.01 ? clamp(slots[o] / rachisLen, 0, 1) : 0);
+    leafLine(slots[o], slots[o + 1], slots[o] + c * slots[o + 4], slots[o + 1] + s * slots[o + 4], w0, G.midribWeight * midribScale, KIND_STEM, vs + j, 0.5);
   }
   if (G.wing > 0.01 && pl > 0.01) {
     // Wing: a leafy strip down each side of the petiole, widening toward the blade.
@@ -1228,6 +1231,8 @@ function buildLeafVariant(v, seed) {
     // flares to a little more than the stalk, so a wedge-shaped base doesn't taper to nothing
     // where it meets it (which left the stalk wider than the leaf, and the midrib on bare paper).
     wingJoin = j === 0 && pl > 0.01 ? Math.max(G.wing * 0.075, G.midribWeight * 1.8) * wS : 0;
+    // Leaflets flare the same way to meet their own stalks (blade units: divided by its scale).
+    wingJoin = Math.max(wingJoin, (1 - wS) * G.midribWeight * midribScale * 1.8 / Math.max(plS, 1e-3));
     if (wingJoin < 0.002) wingJoin = 0;
     curSeed = rnd(ls, 2);
     emitBlade(ls);
