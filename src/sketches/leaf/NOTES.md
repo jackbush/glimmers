@@ -12,10 +12,11 @@ One leaf (or one sprig) centred on the screen, drawn as a botanical study on war
 | `shapes.js` | Geometry (see above). | Leaf or stem shape |
 | `shaders.js` | Background pass and leaf pass. | The look |
 | `sketch.js` | Morph weights, rebuild-on-change, fitting the object to the screen, GL. | New select, new buffer |
+| `TODO.md` | Trees the engine can't draw yet (conifers, ginkgo, palms, thorns, fruit), with their looks, palettes and the features they need. | Adding an engine feature |
 
 ## Species presets
 
-`params.js` exports `presets`: each species is the current shape defaults (all groups but Finish, minus Scale and Morph time) plus its own overrides, so a species always lands on the same leaf. It also sets the colours (leaf, shade, stem and bud as they look in summer, and the paper), and leaves the rest of Finish (style, pen, wash) alone. Each paper is a very pale pastel from roughly opposite the leaf's hue: Oak olive on blue-lilac, Elm dark green on rose, Ash yellow-green on lilac. Colours glide during the morph, page colour included. A preset morph takes 4 s (manifest `presetSeconds`); the cover (manifest `capture.presets`) holds each of Oak, Elm and Ash for 1 s and morphs between them. Everything morphs, including arrangement (see below).
+`params.js` exports `presets`: each species is the current shape defaults (all groups but Finish, minus Scale and Morph time) plus its own overrides, so a species always lands on the same leaf. It also sets the colours (leaf, shade, stem and bud as they look in summer, and the paper), and leaves the rest of Finish (style, pen, wash) alone. Each paper is a very pale pastel from roughly opposite the leaf's hue (lilacs, roses, periwinkle), or opposite a strong stem or leaf colour (apricot under the blue-grey of Willow and Eucalyptus, celadon under Dogwood's red twig). There are 34, in menu order: the cover's three first (Oak, Elm, Beech: all simple, alternate and two-ranked, so they morph into each other cleanly), then simple alternate leaves, lobed leaves (Hawthorn, Plane, Sweet gum, Tulip tree), opposite ones (the maples, Dogwood, Lilac, Box), and compound ones (Ash, Rowan, Elder, Walnut, Robinia, Horse chestnut, Laburnum, Silk tree). Whitebeam's silver underside is its shade colour set paler than its wash. Morphs between very different types (simple to compound, opposite to alternate) are smooth but busier; the cover sticks to similar trees. Colours glide during the morph, page colour included. A preset morph takes 4 s (manifest `presetSeconds`); the cover (manifest `capture.presets`) holds each of Oak, Elm and Ash for 1 s and morphs between them. Everything morphs, including arrangement (see below).
 
 ## Smooth morphs and sway
 
@@ -38,6 +39,8 @@ One leaf (or one sprig) centred on the screen, drawn as a botanical study on war
 - **Pen:** one fine sepia line width for everything (Finest line px), with occasional skips (Pen skip).
 
 ## Gotchas
+
+- **Vertex budget.** Each leaf variant gets an equal share of the buffer (one share kept for the sprig). Mid-morph between two compound types, both layouts' leaflets are out at once and a variant can need more than its share (Silk tree with anything was the worst). `buildShapes` rebuilds such a variant at half, then a quarter of the resolution, then cuts it at its share. Before, the buffer overflowed: the stem and the last leaves were cut off, and an empty leaf's box (±1e9) threw the framing out for minutes. Every preset at rest uses under half its share, so none is ever rebuilt. A leaf with no vertices adds nothing to the framing box.
 
 - Shader sources are JS template strings: a backtick in a GLSL comment ends the string and breaks the build.
 - A blade's lines go to separate staging buffers (veinlets, veins, midrib, outline) and are appended in draw order. Reordering vertices in place afterwards was the biggest cost in a rebuild.

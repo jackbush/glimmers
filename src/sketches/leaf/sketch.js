@@ -328,6 +328,8 @@ export default function create({ canvas, P, model, degrade }) {
         const x = geo.verts[i * STRIDE], y = geo.verts[i * STRIDE + 1];
         if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
       }
+      // A leaf with no vertices (cut off by a full buffer) adds nothing to the box.
+      if (x0 > x1) x0 = y0 = x1 = y1 = 0;
       leafBox[v * 4] = x0; leafBox[v * 4 + 1] = y0; leafBox[v * 4 + 2] = x1; leafBox[v * 4 + 3] = y1;
     }
     // The stem's vertices plus each placed leaf's box corners (at its presence).

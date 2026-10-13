@@ -903,8 +903,10 @@ function flushStaged(leaflet) {
   return ink;
 }
 
+// Where appending stops: the buffer's end, or a leaf's own share on its last try (buildShapes).
+let vertCap = MAX_VERTS;
 function appendBuf(b) {
-  const room = MAX_VERTS - geo.count;
+  const room = vertCap - geo.count;
   const n = Math.min(b.n, room);
   if (n < b.n) geo.overflow = true;
   const src = b.a, dst = geo.verts, o = geo.count * STRIDE, m = n * STRIDE;
@@ -1111,6 +1113,10 @@ function leafLine(x0, y0, x1, y1, w0, w1, kind, ls, oEnd = 1, wing = 0) {
   bladeMode = true;
 }
 
+// Resolution divisor for a leaf that came out over its share of the vertex buffer (see
+// buildShapes).
+let resDiv = 1;
+
 function buildLeafVariant(v, seed) {
   const vs = seed * 977 + v * 131 + 17;
   jitter(vs);
@@ -1133,6 +1139,7 @@ function buildLeafVariant(v, seed) {
   const bucket = Math.pow(2, Math.ceil(Math.log2(Math.max(1, active))));
   const veinsPer = 2 * 22 * (1 + 12 * 0.3); // veinlets are ~3 segments each
   N = clamp(Math.floor(budget / (bucket * 6 * (4.2 + veinsPer * 0.1))), 10, NMAX);
+  N = Math.max(4, Math.floor(N / resDiv));
   N -= N % 2;
   VS = clamp(Math.round(N / 8), 3, 40);
   curSeed = rnd(vs, 5);
@@ -1488,7 +1495,25 @@ export function buildShapes(P, B, variety) {
   geo.nSeg = 0;
   geo.overflow = false;
   geo.nLeaf = nv;
-  for (let v = 0; v < nv; v++) buildLeafVariant(v, seed);
+  // Each leaf gets an equal share of the buffer, with one share kept for the sprig. A leaf over
+  // its share (many leaflets, mostly mid-morph between two compound types, when both layouts'
+  // leaflets are out at once) is rebuilt at half the resolution, then a quarter. Without this
+  // the buffer overflowed: the last leaves and the stem were cut off, and an empty leaf's box
+  // threw the framing out.
+  const share = Math.floor(Math.min(160000, MAX_VERTS / (nv + 1)));
+  for (let v = 0; v < nv; v++) {
+    const c0 = geo.count, s0 = geo.nSeg, o0 = geo.overflow;
+    for (resDiv = 1; ; resDiv *= 2) {
+      // Last try: still too many (veins cost the same at any resolution), so cut it at its
+      // share rather than starve the leaves after it and the stem.
+      if (resDiv === 4) vertCap = c0 + share;
+      buildLeafVariant(v, seed);
+      if (geo.count - c0 <= share || resDiv >= 4) break;
+      geo.count = c0; geo.nSeg = s0; geo.overflow = o0;
+    }
+    vertCap = MAX_VERTS;
+  }
+  resDiv = 1;
   geo.nSprig = 1;
   buildSprigVariant(0, P, B, seed);
 }
