@@ -1,7 +1,7 @@
 ---
 // The page around every sketch: a full-screen canvas, the back button (top left), the
-// play/pause button and settings cog (top right) and the settings pane, which slides in from the right. The pane's
-// rows are generated from the sketch's params.js by src/kit/panel.ts.
+// play/pause button and settings cog (top right) and the settings pane, which slides in from the right
+// (from the bottom on phones, as a sheet over the lower two thirds; the sketch fits above it). The pane's rows are generated from the sketch's params.js by src/kit/panel.ts.
 import BaseLayout from './BaseLayout.astro';
 import { url } from '../lib/sketches';
 
@@ -62,7 +62,9 @@ const { title, appTitle, background, image, imageAlt } = Astro.props;
 <style is:global>
   :root {
     --panel: #000;
-    --panel-w: min(410px, 100vw);
+    /* How much of the screen the open pane takes: a strip down the right, or on phones a sheet along the bottom. */
+    --pane-right: min(410px, 100vw);
+    --pane-bottom: 0px;
     --ease: cubic-bezier(.2, .7, .2, 1);
   }
   html, body { height: 100%; overflow: hidden; }
@@ -70,11 +72,11 @@ const { title, appTitle, background, image, imageAlt } = Astro.props;
     /* lvh = full screen height including the area behind mobile browser bars, so the bars show
        the animation through them instead of a flat page colour. */
     position: fixed; top: 0; left: 0; width: 100%; height: 100%; height: 100lvh; display: block;
-    transition: width .28s var(--ease);
+    transition: width .28s var(--ease), height .28s var(--ease);
   }
   /* With the pane open, the sketch fits the remaining area so its edges stay visible. */
-  @media (min-width: 700px) {
-    body[data-ui="on"][data-pane="open"] #stage { width: calc(100% - var(--panel-w)); }
+  body[data-ui="on"][data-pane="open"] #stage {
+    width: calc(100% - var(--pane-right)); height: calc(100dvh - var(--pane-bottom));
   }
 
   #error {
@@ -100,19 +102,24 @@ const { title, appTitle, background, image, imageAlt } = Astro.props;
   #play .icon-play, body[data-paused="true"] #play .icon-pause { display: none; }
   body[data-paused="true"] #play .icon-play { display: block; }
   #cog[aria-expanded="true"] { opacity: 1; transform: rotate(60deg); background: rgba(0, 0, 0, 0.6); }
-  /* Over the black pane the dark roundels vanish, so they turn faint white. */
-  body[data-pane="open"] #play, body[data-pane="open"] #cog { background: rgba(255, 255, 255, 0.1); }
-  body[data-pane="open"] #play:focus-visible, body[data-pane="open"] #cog:focus-visible { background: rgba(255, 255, 255, 0.18); }
+  /* Over the black pane the dark roundels vanish, so they turn faint white. (On phones the pane
+     is a bottom sheet and the roundels stay over the sketch.) */
+  @media (min-width: 700px) {
+    body[data-pane="open"] #play, body[data-pane="open"] #cog { background: rgba(255, 255, 255, 0.1); }
+    body[data-pane="open"] #play:focus-visible, body[data-pane="open"] #cog:focus-visible { background: rgba(255, 255, 255, 0.18); }
+  }
   /* Hover only where there's a real pointer: touch browsers keep :hover after a tap, which
      left the cog dark and turned after closing the pane. */
   @media (hover: hover) {
     .disc:hover { opacity: 1; background: rgba(0, 0, 0, 0.6); }
     #cog:hover { opacity: 1; transform: rotate(60deg); background: rgba(0, 0, 0, 0.6); }
+  }
+  @media (hover: hover) and (min-width: 700px) {
     body[data-pane="open"] #play:hover, body[data-pane="open"] #cog:hover { background: rgba(255, 255, 255, 0.18); }
   }
 
   #panel {
-    position: fixed; top: 0; right: 0; bottom: 0; z-index: 2; width: var(--panel-w);
+    position: fixed; top: 0; right: 0; bottom: 0; z-index: 2; width: var(--pane-right);
     display: flex; flex-direction: column; color: var(--ink); background: var(--panel);
     border-left: 1px solid var(--line); font: 11px/1.4 var(--mono);
     transform: translateX(102%); transition: transform .28s var(--ease);
@@ -120,11 +127,23 @@ const { title, appTitle, background, image, imageAlt } = Astro.props;
   /* Space toggles data-ui (on = buttons shown); the cog toggles data-pane. */
   body[data-ui="on"][data-pane="open"] #panel { transform: none; }
   body[data-ui="off"] .disc, body[data-ui="off"] #panel { display: none; }
+  /* Phones: a bottom sheet over the lower two thirds of the visible screen. */
+  @media (max-width: 699px) {
+    :root { --pane-right: 0px; --pane-bottom: 66.667dvh; }
+    #panel {
+      top: auto; left: 0; width: 100%; height: var(--pane-bottom);
+      border-left: 0; border-top: 1px solid var(--line); transform: translateY(102%);
+    }
+  }
 
   .head {
     display: flex; align-items: center; gap: 12px; min-height: 62px;
     padding: 14px 108px 10px 16px; padding-top: max(14px, env(safe-area-inset-top));
     border-bottom: 1px solid var(--line);
+  }
+  /* The sheet's head sits below the roundels, so it needn't clear them or the notch. */
+  @media (max-width: 699px) {
+    .head { min-height: 0; padding: 10px 16px; }
   }
   #fps { color: var(--ink-dim); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 

@@ -32,6 +32,15 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string | null, 
   return n;
 }
 
+/** Keep phone keyboards to their smallest form: no autocomplete/suggestion row, no auto-capitals. */
+function noSuggestions(input: HTMLInputElement): void {
+  input.autocomplete = 'off';
+  input.spellcheck = false;
+  input.enterKeyHint = 'done';
+  input.setAttribute('autocorrect', 'off');
+  input.setAttribute('autocapitalize', 'off');
+}
+
 export function buildPanel({ slug, store, onEdited, presets, onPreset }: PanelOptions): Panel {
   const controls = document.getElementById('controls')!;
   const copyBtn = document.getElementById('copy') as HTMLButtonElement;
@@ -73,8 +82,8 @@ export function buildPanel({ slug, store, onEdited, presets, onPreset }: PanelOp
       pick.id = id;
       const hex = el('input', 'num');
       hex.type = 'text';
-      hex.spellcheck = false;
       hex.maxLength = 7;
+      noSuggestions(hex);
       pick.addEventListener('input', () => { store.setValue(p, pick.value); hex.value = String(p.value); mark(); onEdited(); });
       hex.addEventListener('change', () => { store.setValue(p, hex.value.trim().replace(/^#?/, '#')); sync(); onEdited(); });
       wrap.append(pick, hex);
@@ -89,6 +98,10 @@ export function buildPanel({ slug, store, onEdited, presets, onPreset }: PanelOp
       const num = el('input', 'num');
       num.type = 'number';
       num.step = String(p.step);
+      // Phones: the compact digit pad. It has no minus key on iOS, so params that can go negative
+      // keep the default number keyboard.
+      if (p.min != null && p.min >= 0) num.inputMode = Number.isInteger(p.step) ? 'numeric' : 'decimal';
+      noSuggestions(num);
       // The number box deliberately has no min/max: type past the slider range if you need to.
       range.addEventListener('input', () => { store.setValue(p, range.value); num.value = String(p.value); mark(); onEdited(); });
       num.addEventListener('change', () => { store.setValue(p, num.value); sync(); onEdited(); });
