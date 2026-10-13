@@ -1,6 +1,5 @@
 # Glimmers
-Browser sketches in light, shape and motion.
-
+Little looks into other worlds. Invent an impossible plant, stare into the void, see some shapes.
 <img src="docs/blackstar.gif" width="840" alt="Blackstar: a black orb with a burning halo">
 
 ## Run locally
