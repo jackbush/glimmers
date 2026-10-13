@@ -13,7 +13,7 @@
 // per-frame values computed here. The frame allocates nothing.
 
 import * as SH from './shaders.js';
-import { buildShapes, geo, STRIDE, MAX_VERTS, MAX_PLACE } from './shapes.js';
+import { buildShapes, geo, STRIDE, MAX_PLACE } from './shapes.js';
 import { bodies, world, step, setWorld, addBody, kill, keyIndex, liveCount, variantOf, flip, underside, bodyScale, sizeFor } from './physics.js';
 import { rng } from '../../kit/random.js';
 
@@ -185,7 +185,6 @@ export default function create({ canvas, P, model, degrade }) {
     gl.bindVertexArray(vaoLeaf);
     vbo = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-    gl.bufferData(gl.ARRAY_BUFFER, MAX_VERTS * STRIDE * 4, gl.DYNAMIC_DRAW);
     const B = STRIDE * 4;
     gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, B, 0);
     gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 2, gl.FLOAT, false, B, 8);
@@ -193,7 +192,6 @@ export default function create({ canvas, P, model, degrade }) {
     gl.enableVertexAttribArray(3); gl.vertexAttribPointer(3, 1, gl.FLOAT, false, B, 32);
     ibo = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, ibo);
-    gl.bufferData(gl.ARRAY_BUFFER, MAX_INST * IFLOATS * 4, gl.DYNAMIC_DRAW);
     for (let a = 4; a <= 6; a++) { gl.enableVertexAttribArray(a); gl.vertexAttribDivisor(a, 1); }
     gl.bindVertexArray(null);
     geoUploaded = false;
@@ -369,8 +367,10 @@ export default function create({ canvas, P, model, degrade }) {
       }
       if (dirty) rebuild();
       if (!geoUploaded) {
+        // bufferData, not bufferSubData: fresh storage, so the upload never waits for the
+        // GPU to finish drawing from the old geometry.
         gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-        gl.bufferSubData(gl.ARRAY_BUFFER, 0, geo.verts, 0, geo.count * STRIDE);
+        gl.bufferData(gl.ARRAY_BUFFER, geo.verts, gl.DYNAMIC_DRAW, 0, Math.max(1, geo.count * STRIDE));
         geoUploaded = true;
       }
 
@@ -398,7 +398,7 @@ export default function create({ canvas, P, model, degrade }) {
       }
       buildInstances(t);
       gl.bindBuffer(gl.ARRAY_BUFFER, ibo);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, inst, 0, instTotal * IFLOATS);
+      gl.bufferData(gl.ARRAY_BUFFER, inst, gl.DYNAMIC_DRAW, 0, Math.max(1, instTotal * IFLOATS));
 
       // Draw: stems first, then leaves, onto the ground colour.
       fView[0] = cssW; fView[1] = cssH;

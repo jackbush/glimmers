@@ -393,6 +393,9 @@ const AX = new Float32Array(NMAX + 1); // midrib anchor for the fill
 const ARC = new Float32Array(NMAX + 1);
 let N = 64;
 let stip = false; // building a stipule: plain ovate, no lobes, teeth or side veins
+// Half-width of a winged petiole where it meets the blade (0 = no wing on this blade). The
+// blade's base flares to at least this, so wing and blade share one margin.
+let wingJoin = 0;
 
 // Final-coords scratch for strokes.
 const PMAX = 2400;
@@ -441,6 +444,11 @@ function bladeOutline(ls) {
       const sn = Math.max(0, Math.sin(Math.PI * t));
       const e = lerp(be, ae, smooth(0.12, 0.88, t)) * em;
       let w = W * wsc * Math.pow(sn, e);
+      if (wingJoin > 0) {
+        // Smooth max with the wing, fading out up the blade: the base flares into the wing.
+        const hw = wingJoin * (1 - smooth(0, 0.35, u)), d = w - hw;
+        w = (w + hw + Math.sqrt(d * d + 1e-4)) / 2;
+      }
       w *= 1 - acum * 0.72 * smooth(0.5, 0.97, u);
       if (pinD > 0) {
         const ph = (u - 0.05) / 0.92 * lobes;
@@ -474,9 +482,11 @@ function bladeOutline(ls) {
       if (side === 0) AX[i] = u;
     }
     if (side === 1) {
-      // Fill anchors sit on the midrib, never behind where the blade meets it (the sinus).
+      // Fill anchors sit on the midrib, never behind where the blade meets it (the sinus)
+      // nor past where it ends at the tip (a notch), or the fill would spill outside.
       const sx = Math.max(0, Math.min(LX[0][0], lx[0]));
-      for (let i = 0; i <= N; i++) AX[i] = clamp(AX[i], sx, 1);
+      const ex = Math.min(1, Math.max(LX[0][N], lx[N]));
+      for (let i = 0; i <= N; i++) AX[i] = clamp(AX[i], sx, Math.max(sx, ex));
     }
     // Margin: offset along the outward normal by a tooth profile running in arc length.
     let cum = 0;
@@ -596,8 +606,10 @@ function emitBlade(ls) {
   // Outline: up one side, back down the other.
   let n = 0;
   for (let i = 0; i <= N; i++) n = push(n, FX[0][i], FY[0][i], inkW(ow, i / N, ls));
-  for (let i = N - 1; i >= 1; i--) n = push(n, FX[1][i], FY[1][i], inkW(ow, 2 - i / N, ls));
-  emitStroke(sStroke, n, KIND_OUTLINE, true);
+  // With a wing the outline stays open at the base: the wing's edges carry it on down.
+  const open = wingJoin > 0;
+  for (let i = N - 1; i >= (open ? 0 : 1); i--) n = push(n, FX[1][i], FY[1][i], inkW(ow, 2 - i / N, ls));
+  emitStroke(sStroke, n, KIND_OUTLINE, !open);
 
   // Midrib, from where the blade meets it; in a cordate notch the stalk runs up to there.
   const tipX = LX[0][N], baseX = Math.max(0, LX[0][0]);
@@ -732,6 +744,23 @@ function emitBlade(ls) {
 }
 
 const WAX = new Float32Array(13), WAY = new Float32Array(13);
+
+/**
+ * Move the staged fills then lines into geo.verts and empty the stages, so each part
+ * (stalks, then each leaflet) is drawn whole before the next covers it. Returns the
+ * fills' area.
+ */
+function flushStaged() {
+  let ink = 0;
+  const a = sFill.a;
+  for (let t = 0; t + 2 < sFill.n; t += 3) {
+    const o = t * STRIDE;
+    ink += Math.abs((a[o + STRIDE] - a[o]) * (a[o + 2 * STRIDE + 1] - a[o + 1]) - (a[o + 2 * STRIDE] - a[o]) * (a[o + STRIDE + 1] - a[o + 1])) / 2;
+  }
+  appendBuf(sFill); appendBuf(sStroke);
+  sFill.n = sStroke.n = 0;
+  return ink;
+}
 
 function appendBuf(b) {
   const room = MAX_VERTS - geo.count;
@@ -932,6 +961,7 @@ function buildLeafVariant(v, seed) {
   jitter(vs);
   blendLayouts();
   sFill.n = sStroke.n = 0;
+  geo.leafStart[v] = geo.count;
   const wS = G.cw[0];
   // Simple leaves bend as a whole; compound leaves bend along the rachis, leaflets a little.
   buildBend(leafBend, J.bend * lerp(0.6, 1, wS), J.sCurve * lerp(0.7, 1, wS));
@@ -974,7 +1004,11 @@ function buildLeafVariant(v, seed) {
     for (let side = 0; side < 2; side++) {
       const sg = side === 0 ? 1 : -1;
       for (let i = 0; i <= 12; i++) {
-        const t = i / 12, x = lerp(-pl, 0, t), h = G.wing * 0.075 * Math.pow(t, 0.8) * sg;
+        // Simple leaves: widening up to the blade, which flares to meet it (wingJoin).
+        // Compound: no blade at the end, so it tapers to a point both ends.
+        const t = i / 12;
+        const prof = lerp(Math.pow(Math.sin(Math.PI * t), 0.7), Math.pow(t, 0.8), wS);
+        const x = lerp(-pl, 0, t), h = G.wing * 0.075 * prof * sg;
         toFinal(x, 0); WAX[i] = TX; WAY[i] = TY;
         toFinal(x, h); PX[i] = TX; PY[i] = TY; PW[i] = inkW(G.outlineW, t, vs + side);
       }
@@ -1006,7 +1040,8 @@ function buildLeafVariant(v, seed) {
     stip = false;
   }
 
-  // Leaflets.
+  // Leaflets, each drawn whole (fill, then lines) over the stalks and earlier leaflets.
+  let ink = flushStaged();
   for (let j = 0; j < MAX_SLOTS; j++) {
     const o = j * SF;
     if (slots[o + 3] <= 0.004) continue;
@@ -1015,20 +1050,16 @@ function buildLeafVariant(v, seed) {
     const mirror = slots[o + 2] < -0.01 ? -1 : 1;
     buildBend(bladeBend, (1 - wS) * J.bend * 0.5 * (1 + 0.5 * rnd2(ls, 1)), (1 - wS) * J.sCurve * 0.3);
     placeLeaflet(o, mirror);
+    // Only the simple blade at the petiole's end joins the wing.
+    wingJoin = j === 0 && pl > 0.01 ? G.wing * 0.075 * wS : 0;
+    if (wingJoin < 0.002) wingJoin = 0;
     curSeed = rnd(ls, 2);
     emitBlade(ls);
+    ink += flushStaged();
   }
+  wingJoin = 0;
 
-  // Inked area: the front fills' triangles.
-  let ink = 0;
-  for (let t = 0; t + 2 < sFill.n; t += 3) {
-    const a = sFill.a, o = t * STRIDE;
-    ink += Math.abs((a[o + STRIDE] - a[o]) * (a[o + 2 * STRIDE + 1] - a[o + 1]) - (a[o + 2 * STRIDE] - a[o]) * (a[o + STRIDE + 1] - a[o + 1])) / 2;
-  }
   geo.leafInk[v] = ink;
-
-  geo.leafStart[v] = geo.count;
-  appendBuf(sFill); appendBuf(sStroke);
   geo.leafCount[v] = geo.count - geo.leafStart[v];
 
   // Attach point: the petiole's base, and the direction the leaf grows from it.
@@ -1154,23 +1185,30 @@ function buildSprigVariant(j, P, seed, arrangement) {
   for (let L = 0; L < total && np < MAX_PLACE; L++) {
     const isTip = L >= nodes * per;
     const i = isTip ? nodes - 1 : Math.floor(L / per), q = isTip ? 0 : L % per;
-    let psi, beta, size, sAt;
+    // Pressed flat, as on a herbarium sheet: every leaf keeps its true shape and lies to one
+    // side of the stem at an angle `rel` from it (+ = the stem's left).
+    let rel, size, sAt;
     const fi = nodes > 1 ? i / (nodes - 1) : 0;
-    if (isTip) { psi = Math.PI / 2; beta = 0.02; size = (1 - grad) * 0.9; sAt = len; }
+    if (isTip) { rel = 0; size = (1 - grad) * 0.9; sAt = len; }
     else {
-      if (arrangement === 1) psi = i * div;
-      else if (arrangement === 2) psi = (dec ? i * Math.PI / 2 : 0) + q * Math.PI;
-      else psi = i * Math.PI / per + q * TAU / per;
-      beta = lerp(ins0, ins1, fi) + v * 0.12 * rnd2(ss, 40 + L);
+      const beta = lerp(ins0, ins1, fi) + v * 0.12 * rnd2(ss, 40 + L);
+      if (arrangement === 1) {
+        // Alternate: the leaf falls to whichever side its turn around the stem faces; leaves
+        // that faced front or back press nearer the stem (180° = a clean zigzag).
+        const c = Math.cos(i * div + 1e-3);
+        rel = (c >= 0 ? 1 : -1) * beta * (0.5 + 0.5 * Math.abs(c));
+      } else if (arrangement === 2) {
+        // Opposite: a pair, one each side. Decussate pairs alternate wide and narrow.
+        rel = (q === 0 ? 1 : -1) * beta * (dec && i % 2 ? 0.55 : 1);
+      } else {
+        // Whorled: fanned evenly across ±insertion, every other ring staggered narrower.
+        rel = beta * (2 * q / Math.max(1, per - 1) - 1) * (i % 2 ? 0.75 : 1);
+      }
       size = (1 - grad * fi) * (1 + v * 0.12 * rnd2(ss, 70 + L));
       sAt = NODE_S[i];
     }
-    // Leaf direction in 3D around the stem, projected onto the page: the part toward or away
-    // from the viewer is lost, so those leaves look shorter.
-    const along = Math.cos(beta), side = Math.sin(beta) * Math.cos(psi);
-    const fore = Math.max(0.3, Math.hypot(along, side));
-    const rel = Math.atan2(side, along);
-    const flip = side >= 0 ? 1 : -1;
+    const fore = 1;
+    const flip = rel >= 0 ? 1 : -1;
     const sph = stemAt(sAt, stemN);
     const nx = EX, ny = EY;
     const lv = (j * 7 + L * 3) % nLeaf;

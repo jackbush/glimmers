@@ -18,5 +18,6 @@ export default {
     'cubeland',
     'mindflow',
     // 'foliage',
+    // 'leaf',
   ],
 };
