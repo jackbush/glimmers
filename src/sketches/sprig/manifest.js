@@ -2,7 +2,7 @@ import { tour } from './tour.js';
 
 /** @type {import('../../kit/types').Manifest} */
 export default {
-  name: 'Leaf',
+  name: 'Sprig',
   year: 2026,
   pageColour: 'paper',
   presetSeconds: 4,

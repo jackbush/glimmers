@@ -1,4 +1,4 @@
-// Leaf — the order autoplay shows the presets in: a loop through all of them that keeps each
+// Sprig — the order autoplay shows the presets in: a loop through all of them that keeps each
 // morph as small as it can (by pace.js's measure), so neighbours are related trees and the big
 // jumps (a fir to a hazel) are as few as they can be. Worked out once, when the manifest loads.
 

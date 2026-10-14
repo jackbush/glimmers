@@ -13,7 +13,7 @@ export default {
 
   sketches: [
     'blackstar',
-    'leaf',
+    'sprig',
     'orb',
     'constellations',
     'cubeland',

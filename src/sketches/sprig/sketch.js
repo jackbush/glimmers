@@ -1,4 +1,4 @@
-// Leaf — one leaf (or one sprig) centred on the screen, a botanical study on warm paper. Raw
+// Sprig — one leaf (or one sprig) centred on the screen, a botanical study on warm paper. Raw
 // WebGL2.
 //
 // Each frame: ease the category morphs and every shape number toward the params → rebuild
@@ -65,7 +65,7 @@ export default function create({ canvas, P, model, degrade }) {
 
   const uniformParams = shaderParams(model.params);
   const geomParams = GEOM_KEYS.map((k) => {
-    if (!P[k]) throw new Error('leaf: unknown geometry param ' + k);
+    if (!P[k]) throw new Error('sprig: unknown geometry param ' + k);
     return P[k];
   });
 

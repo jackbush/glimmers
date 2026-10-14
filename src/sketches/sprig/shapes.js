@@ -1,4 +1,4 @@
-// Leaf — leaf and sprig geometry, built on the CPU whenever a shape param changes.
+// Sprig — leaf and sprig geometry, built on the CPU whenever a shape param changes.
 //
 // buildShapes() turns the params into one leaf mesh or, in stem mode, a few jittered leaf
 // variants plus one sprig (a stem and its leaf placements).

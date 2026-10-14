@@ -1,4 +1,4 @@
-// Leaf — compound-leaf layouts: where each leaflet sits, blended across leaf types and counts.
+// Sprig — compound-leaf layouts: where each leaflet sits, blended across leaf types and counts.
 
 import { clamp } from './util.js';
 import { G, J } from './knobs.js';

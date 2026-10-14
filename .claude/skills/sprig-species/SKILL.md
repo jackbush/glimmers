@@ -1,11 +1,11 @@
 ---
-name: leaf-species
-description: Add, edit or rename a species preset in the Leaf glimmer (src/sketches/leaf/params.js `presets`) — a tree's leaf, stem, fruit, flowers and colours. Use whenever the user asks for a new tree or plant in Leaf, wants a species to look more like itself, or names, renames or reorders presets. Covers horticultural naming conventions, the comment and colour rules, and how to check the result by eye.
+name: sprig-species
+description: Add, edit or rename a species preset in the Sprig glimmer (src/sketches/sprig/params.js `presets`) — a tree's leaf, stem, fruit, flowers and colours. Use whenever the user asks for a new tree or plant in Sprig, wants a species to look more like itself, or names, renames or reorders presets. Covers horticultural naming conventions, the comment and colour rules, and how to check the result by eye.
 ---
 
-# Leaf species presets
+# Sprig species presets
 
-Read `src/sketches/leaf/NOTES.md` (Species presets, Fruit and flowers, Trees Leaf can't draw) first. If the tree needs something the engine has no control for, build the part (`glimmers-elements`) or add it to Trees Leaf can't draw, not a half-right preset: Monkey puzzle, Lawson cypress and others were cut because they didn't read as themselves.
+Read `src/sketches/sprig/NOTES.md` (Species presets, Fruit and flowers, Trees Sprig can't draw) first. If the tree needs something the engine has no control for, build the part (`glimmers-elements`) or add it to Trees Sprig can't draw, not a half-right preset: Monkey puzzle, Lawson cypress and others were cut because they didn't read as themselves.
 
 ## Naming: horticultural conventions
 
@@ -59,8 +59,8 @@ Preset names are what a tree guide's index would print.
 
 ## Check it
 
-1. `node scripts/check.mjs leaf` should report 0 errors.
-2. Look at it: `node scripts/capture.mjs leaf --still <scratchpad>/x.png --preset 'Oak, English' --size 800x800 --dpr 2`, then read the PNG. Crop in on fruit, buds and margins at `--dpr 4`, because details that matter are small. Compare it with the tree, not just with the other presets.
+1. `node scripts/check.mjs sprig` should report 0 errors.
+2. Look at it: `node scripts/capture.mjs sprig --still <scratchpad>/x.png --preset 'Oak, English' --size 800x800 --dpr 2`, then read the PNG. Crop in on fruit, buds and margins at `--dpr 4`, because details that matter are small. Compare it with the tree, not just with the other presets.
 3. Morph to it from a very different preset and check that nothing jumps.
-4. Update `NOTES.md`: the count of presets, which ones are in autumn colour, anything new about fruit, and Trees Leaf can't draw if this retires an entry.
+4. Update `NOTES.md`: the count of presets, which ones are in autumn colour, anything new about fruit, and Trees Sprig can't draw if this retires an entry.
 5. If the preset is in the cover sequence, offer to recapture the cover (`publish-glimmer`).

@@ -1,4 +1,4 @@
-// Leaf — small maths and deterministic noise shared by the geometry modules.
+// Sprig — small maths and deterministic noise shared by the geometry modules.
 
 export const TAU = Math.PI * 2;
 export const DEG = Math.PI / 180;

@@ -1,4 +1,4 @@
-// Leaf — shaders: a botanical study in fineliner (and watercolour) on warm paper.
+// Sprig — shaders: a botanical study in fineliner (and watercolour) on warm paper.
 //
 // Two passes, straight to the canvas, drawn only when something changes (see sketch.js):
 //   1. background  the paper: its colour and grain.

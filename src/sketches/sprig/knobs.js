@@ -1,4 +1,4 @@
-// Leaf — the shape knobs: every select option as a row of numbers, and the params resolved
+// Sprig — the shape knobs: every select option as a row of numbers, and the params resolved
 // (and, per leaf variant, jittered) into the plain values the geometry reads.
 
 import { DEG, clamp, rnd2 } from './util.js';

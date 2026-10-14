@@ -16,7 +16,7 @@ npm run check    # type check + params check for every sketch
 
 - **Space** hides or shows the buttons. The setting is shared by every sketch and remembered.
 - **Cog** (top right) opens the settings pane. **Escape** closes it. Every page opens with it closed.
-- Sketches with `autoplay` in their manifest (Leaf) cycle through their presets (from a random one, then in menu order) until you open the settings pane; they start again next visit.
+- Sketches with `autoplay` in their manifest (Sprig) cycle through their presets (from a random one, then in menu order) until you open the settings pane; they start again next visit.
 - **Play/pause** (in settings) freezes the scene.
 - **Back arrow** (top left) goes back to the index.
 - Edit any parameter, then **Copy changes** and paste the result to Claude to make it the new default. Double-click a label to reset one parameter, or use **[reset]** for all of them.

@@ -1,4 +1,4 @@
-// Leaf — every default. The pane is generated from this file (fields: ParamDef in
+// Sprig — every default. The pane is generated from this file (fields: ParamDef in
 // src/kit/types.ts). Shape groups, then Finish (outline, shading and watercolour, each on or
 // off). Params without `uniform: false` are auto-declared in the shaders as `u_<key>` (`vec3`
 // for colours).

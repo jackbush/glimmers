@@ -1,4 +1,4 @@
-// Leaf — how long a preset morph should take: a small change (one maple to another) is quick,
+// Sprig — how long a preset morph should take: a small change (one maple to another) is quick,
 // a big one (three leaves to a hundred needles, simple to compound) slow, from a second to
 // nine. Measured from what's on screen to the preset.
 
