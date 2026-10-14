@@ -506,15 +506,20 @@ export default function create({ canvas, P, model, degrade }) {
   }
 
   // ---- the preset's name, bottom left (Finish → Preset name), to tell presets apart
-  // As far from the bottom and left edges as the back button is from the top and left. One
-  // element, written only when it fades in or out (its name once per morph), never every frame.
-  // It fades in over the last 300 ms of a morph (or as soon as the page's first preset lands),
-  // and out over 300 ms once anything moves away from the preset.
-  const label = document.createElement('div');
-  label.setAttribute('aria-hidden', 'true');
-  label.style.cssText = 'position:fixed;left:max(14px,env(safe-area-inset-left));bottom:max(14px,env(safe-area-inset-bottom));'
+  // As far from the bottom and left edges as the back button is from the top and left; on a
+  // phone (the site's breakpoint, under 700px) centred, as far from the bottom. One element,
+  // written only when it fades in or out (its name once per morph), never every frame. It fades
+  // in over the last 300 ms of a morph (or as soon as the page's first preset lands), and out
+  // over 300 ms once anything moves away from the preset.
+  const labelStyle = document.createElement('style');
+  labelStyle.textContent = '.sprig-label{position:fixed;left:max(14px,env(safe-area-inset-left));bottom:max(14px,env(safe-area-inset-bottom));'
     + 'pointer-events:none;white-space:nowrap;opacity:0;transition:opacity 300ms ease;'
-    + 'font:italic 300 15px/1 "Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;letter-spacing:0.02em;';
+    + 'font:italic 300 15px/1 "Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;letter-spacing:0.02em}'
+    + '@media (max-width:699px){.sprig-label{left:50%;transform:translateX(-50%)}}';
+  document.head.appendChild(labelStyle);
+  const label = document.createElement('div');
+  label.className = 'sprig-label';
+  label.setAttribute('aria-hidden', 'true');
   canvas.parentElement.appendChild(label);
   // Every preset's keys, listed once, so checking whether one still holds allocates nothing.
   const presetKeys = {};
