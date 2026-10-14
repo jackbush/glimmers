@@ -16,7 +16,7 @@ Output: a working, empty sketch at `src/sketches/<slug>/`, reachable at `/glimme
 ## 2. Pick the renderer
 
 - **Canvas 2D** for shapes, lines and particles in the low thousands. The default.
-- **Raw WebGL2** for per-pixel work (fields, noise, film effects). Copy Blackstar's structure (`sketch.js` engine + `shader.js`), and pass `quality: true` to `playback()` so it gets adaptive quality.
+- **Raw WebGL2** for per-pixel work (fields, noise, film effects). Copy Blackstar's structure (`sketch.js` engine + `shader.js`, full-screen passes), or Atlas Nights' for points and lines drawn as geometry, and pass `quality: true` to `playback()` so it gets adaptive quality. Film grain and dust come from `src/kit/film.js` (GLSL plus the Grain & damage params); a `check.mjs` that calls `scripts/lib/shader-check.mjs` keeps params and GLSL in step.
 - **three.js** (already a dependency) for 3D. See Cubeland: `InstancedMesh`, `renderer.setPixelRatio(1)`, `renderer.setSize(w, h, false)` in `resize`.
 
 ## 3. Write the files

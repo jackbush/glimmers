@@ -5,7 +5,7 @@
 // nothing, so there is no per-frame garbage for the collector to chase.
 
 import SHADER from './shader.js';
-import { FULLSCREEN_VERT, paramDecls, program, shaderParams, uploadParams } from '../../kit/gl.js';
+import { FULLSCREEN_VERT, frameUniforms, program, shaderHeader, shaderParams, uploadFrame, uploadParams } from '../../kit/gl.js';
 
 /** @type {import('../../kit/types').Sketch} */
 export default function create({ canvas, P, model, degrade }) {
@@ -19,30 +19,15 @@ export default function create({ canvas, P, model, degrade }) {
   const ANG_N = SHADER.angularSize;
   const UNIT_ANGULAR = 0, UNIT_FIELDS0 = 1, UNIT_FIELDS1 = 2;
 
-  // Per-frame CPU values (f_*): one preallocated array each, plus a flat list for the upload loop.
-  /** @type {Record<string, Float32Array>} */
-  const frameVals = {};
-  const frameList = [];
-  // Spec is a component count (1–4 → float/vec2/vec3/vec4) or [length] for a float array.
-  for (const name in SHADER.frameUniforms) {
-    const spec = SHADER.frameUniforms[name];
-    const array = Array.isArray(spec);
-    const n = array ? spec[0] : spec;
-    frameVals[name] = new Float32Array(n);
-    frameList.push({ name, n, array, arr: frameVals[name] });
-  }
+  // Per-frame CPU values (f_*), written by perFrame().
+  const { vals: frameVals, list: frameList } = frameUniforms(SHADER.frameUniforms);
 
   let ready = false, vao = null, passAngular = null, passFields = null, passComposite = null;
   let angFbo = null, fldTex0 = null, fldTex1 = null, fldFbo = null, fldW = 0, fldH = 0;
   let pxRatio = 1;
 
   function header() {
-    const vecType = ['', 'float', 'vec2', 'vec3', 'vec4'];
-    return '#version 300 es\nprecision highp float;\nprecision highp int;\n' +
-      'uniform vec2 u_res;\nuniform vec2 u_screen;\nuniform float u_time;\nuniform float u_realTime;\n' +
-      paramDecls(uniformParams) +
-      frameList.map((f) => f.array ? 'uniform float ' + f.name + '[' + f.n + '];' : 'uniform ' + vecType[f.n] + ' ' + f.name + ';').join('\n') + '\n' +
-      SHADER.common;
+    return shaderHeader(uniformParams, frameList) + SHADER.common;
   }
   function buildPass(name, head) {
     const prog = program(gl, FULLSCREEN_VERT, head + SHADER[name], name);
@@ -128,13 +113,7 @@ export default function create({ canvas, P, model, degrade }) {
       uploadParams(gl, pass.paramLocs, uniformParams);
       pass.version = model.version;
     }
-    for (let i = 0; i < frameList.length; i++) {
-      const f = frameList[i], loc = pass.frameLocs[i];
-      if (f.array || f.n === 1) gl.uniform1fv(loc, f.arr);
-      else if (f.n === 2) gl.uniform2fv(loc, f.arr);
-      else if (f.n === 3) gl.uniform3fv(loc, f.arr);
-      else gl.uniform4fv(loc, f.arr);
-    }
+    uploadFrame(gl, pass.frameLocs, frameList);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 

@@ -26,18 +26,13 @@
 //   u_time      scene seconds (scaled & pausable)
 //   u_realTime  wall-clock seconds (drives the film layer, so grain keeps running while paused)
 
+import { FILM_GLSL } from '../../kit/film.js';
+import { hash1, hash2 } from '../../kit/random.js';
+
 const MAX_POINTS = 12;
 const TAU = Math.PI * 2;
 
 // ---------------------------------------------------------------- CPU noise (allocation-free)
-function hash1(n) {
-  n |= 0;
-  n = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
-  n = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
-  n ^= n >>> 16;
-  return (n >>> 0) / 4294967296;
-}
-function hash2(a, b) { return hash1(Math.imul(a | 0, 0x27d4eb2d) ^ Math.imul(b | 0, 0x165667b1)); }
 // 1D gradient noise, roughly -1..1.
 function noise1(x) {
   const i = Math.floor(x), f = x - i;
@@ -169,17 +164,7 @@ float fbm3(vec3 p) {
   return s / 0.875;
 }
 
-// Integer hash (PCG) → 0..1 per integer cell.
-uint pcg(uint v) {
-  uint state = v * 747796405u + 2891336453u;
-  uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
-  return (word >> 22u) ^ word;
-}
-float hash(vec3 p) {
-  uvec3 u = uvec3(ivec3(floor(p)));
-  return float(pcg(u.x + pcg(u.y + pcg(u.z)))) * (1.0 / 4294967295.0);
-}
-
+${FILM_GLSL}
 // Pass-to-pass packing: values in ±1.5 stored as 0..1 (works for RGBA8 and half-float targets).
 vec4 encode(vec4 v) { return clamp(v / 3.0 + 0.5, 0.0, 1.0); }
 vec4 decode(vec4 v) { return (v - 0.5) * 3.0; }
@@ -304,26 +289,9 @@ void main() {
   // --- exposure
   col *= u_exposure;
 
-  // --- dust: sparse white specks, one candidate per cell per frame
-  float cell = 48.0 * px;
-  vec2 cid = floor(fc / cell);
-  if (hash(vec3(cid, frame + 101.0)) < u_dust * 0.05) {
-    vec2 cpos = (cid + 0.2 + 0.6 * vec2(hash(vec3(cid, frame + 7.0)), hash(vec3(cid, frame + 13.0)))) * cell;
-    vec2 dd = fc - cpos;
-    dd.x /= mix(1.0, 3.0, hash(vec3(cid, frame + 29.0)));
-    float rad = mix(0.7, 2.6, hash(vec3(cid, frame + 19.0))) * px;
-    col += (1.0 - smoothstep(rad * 0.4, rad, length(dd))) * mix(0.4, 0.9, hash(vec3(cid, frame + 23.0)));
-  }
-
-  // --- grain: white, per film frame, two scales, clumped, screened over the image
-  float gs = max(u_grainSize * px, 0.5);
-  vec2 gp = floor(fc / gs);
-  float gn = (hash(vec3(gp, frame)) + hash(vec3(gp, frame + 1000.0)) + hash(vec3(gp, frame + 2000.0))) / 3.0;
-  vec2 gp2 = floor(fc / (gs * 2.3));
-  float gn2 = (hash(vec3(gp2, frame + 3000.0)) + hash(vec3(gp2, frame + 4000.0))) * 0.5;
-  float grain = pow(clamp((mix(gn, gn2, 0.3) - 0.5) * 3.2, 0.0, 1.0), u_grainSharpness);
-  grain *= mix(1.0, 2.0 * hash(vec3(floor(fc / (gs * 4.0)), frame + 77.0)), u_grainClump) * u_grainAmount;
-  col = 1.0 - (1.0 - clamp(col, 0.0, 1.0)) * (1.0 - clamp(grain, 0.0, 1.0));
+  // --- dust, then grain last (src/kit/film.js)
+  col = filmDust(col, fc, px, frame, u_dust);
+  col = filmGrain(col, fc, px, frame, u_grainAmount, u_grainSize, u_grainSharpness, u_grainClump);
 
   outColor = vec4(col, 1.0);
 }`,

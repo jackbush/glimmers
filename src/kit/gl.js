@@ -1,5 +1,5 @@
 // WebGL2 plumbing shared by the shader sketches: compiling and linking, a fullscreen
-// triangle, and params as uniforms. A param without `uniform: false` (selects excepted) is
+// triangle, params as uniforms, and per-frame CPU values (f_*) as uniforms. A param without `uniform: false` (selects excepted) is
 // `uniform float u_<key>` in GLSL, or `vec3` for a colour.
 
 /** Vertex shader for a pass that covers the target: one triangle from the vertex id, no buffers. */
@@ -70,5 +70,62 @@ export function uploadParams(gl, locs, params) {
     const p = params[i];
     if (p.type === 'color') gl.uniform3fv(locs[i], p.rgb);
     else gl.uniform1f(locs[i], p.type === 'bool' ? (p.value ? 1 : 0) : /** @type {number} */ (p.value));
+  }
+}
+
+/**
+ * @typedef {{ name: string, n: number, array: boolean, arr: Float32Array }} FrameUniform
+ * One per-frame value: `n` floats, uploaded as float/vec2/vec3/vec4 (n 1–4), mat3 (n 9), or a
+ * float array of length n (`array`).
+ */
+
+/**
+ * Preallocate the per-frame values a sketch's CPU code writes each frame.
+ * @param {Record<string, number | [number]>} spec name → component count (1–4 → float…vec4,
+ *   9 → mat3, column-major) or [length] for a float array
+ */
+export function frameUniforms(spec) {
+  /** @type {Record<string, Float32Array>} */
+  const vals = {};
+  /** @type {FrameUniform[]} */
+  const list = [];
+  for (const name in spec) {
+    const s = spec[name];
+    const array = Array.isArray(s);
+    const n = array ? s[0] : s;
+    vals[name] = new Float32Array(n);
+    list.push({ name, n, array, arr: vals[name] });
+  }
+  return { vals, list };
+}
+
+/**
+ * The GLSL preamble every pass shares: version and precision, the built-ins (u_res, u_screen,
+ * u_time, u_realTime), one uniform per param and one per frame value.
+ * @param {import('./types').Param[]} params from shaderParams()
+ * @param {FrameUniform[]} list from frameUniforms()
+ */
+export function shaderHeader(params, list) {
+  const type = (/** @type {number} */ n) => (n === 9 ? 'mat3' : ['', 'float', 'vec2', 'vec3', 'vec4'][n]);
+  return '#version 300 es\nprecision highp float;\nprecision highp int;\n' +
+    'uniform vec2 u_res;\nuniform vec2 u_screen;\nuniform float u_time;\nuniform float u_realTime;\n' +
+    paramDecls(params) +
+    list.map((f) => f.array ? 'uniform float ' + f.name + '[' + f.n + '];' : 'uniform ' + type(f.n) + ' ' + f.name + ';').join('\n') + '\n';
+}
+
+/**
+ * Upload every frame value (the program must be in use). Allocation-free.
+ * @param {WebGL2RenderingContext} gl
+ * @param {(WebGLUniformLocation | null)[]} locs one per frame value, in order
+ * @param {FrameUniform[]} list from frameUniforms()
+ */
+export function uploadFrame(gl, locs, list) {
+  for (let i = 0; i < list.length; i++) {
+    const f = list[i], loc = locs[i];
+    if (f.array || f.n === 1) gl.uniform1fv(loc, f.arr);
+    else if (f.n === 2) gl.uniform2fv(loc, f.arr);
+    else if (f.n === 3) gl.uniform3fv(loc, f.arr);
+    else if (f.n === 4) gl.uniform4fv(loc, f.arr);
+    else gl.uniformMatrix3fv(loc, false, f.arr);
   }
 }

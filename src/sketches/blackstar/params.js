@@ -4,6 +4,7 @@
 // or the kit for the standard Playback params).
 
 import { playback } from '../../kit/standard.js';
+import { film } from '../../kit/film.js';
 
 export default [
   playback({ timeScale: 0.41 }, {
@@ -81,14 +82,5 @@ export default [
       { key: 'burnColor', label: 'Burn colour', type: 'color', value: '#fff3d2', desc: 'What blown highlights clip to.', when: { key: 'burnHighlights', not: [0] } },
     ],
   },
-  {
-    group: 'Grain & damage',
-    params: [
-      { key: 'grainAmount', label: 'Grain amount', value: 0.1, min: 0, max: 0.8, step: 0.005, desc: 'Strength of the light grain (screened over the image).' },
-      { key: 'grainSize', label: 'Grain size (px)', value: 0.5, min: 0.5, max: 6, step: 0.05, desc: 'Size of individual grains in canvas pixels.', when: { key: 'grainAmount', not: [0] } },
-      { key: 'grainSharpness', label: 'Grain sparsity', value: 1.4, min: 0.3, max: 4, step: 0.01, desc: 'Higher = fewer, brighter specks; lower = even haze.', when: { key: 'grainAmount', not: [0] } },
-      { key: 'grainClump', label: 'Grain clumping', value: 0.5, min: 0, max: 1, step: 0.01, desc: 'Uneven grain density, like real emulsion.', when: { key: 'grainAmount', not: [0] } },
-      { key: 'dust', label: 'Dust', value: 0.03, min: 0, max: 1, step: 0.01, desc: 'Density of white dust specks per frame.' },
-    ],
-  },
+  film(),
 ];

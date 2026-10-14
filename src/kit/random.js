@@ -14,3 +14,19 @@ export function rng(seed) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+
+/**
+ * Integer hash → [0, 1). Stateless, for values that must come out the same at any time
+ * (a shooting star's slot, say) without stepping a generator.
+ * @param {number} n an integer
+ */
+export function hash1(n) {
+  n |= 0;
+  n = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
+  n = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
+  n ^= n >>> 16;
+  return (n >>> 0) / 4294967296;
+}
+
+/** Two integers → [0, 1). */
+export function hash2(/** @type {number} */ a, /** @type {number} */ b) { return hash1(Math.imul(a | 0, 0x27d4eb2d) ^ Math.imul(b | 0, 0x165667b1)); }
