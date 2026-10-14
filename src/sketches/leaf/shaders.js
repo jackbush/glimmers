@@ -4,21 +4,22 @@
 //   1. background  the paper: its colour and grain.
 //   2. leaf        the leaf geometry (one instance, or a sprig's stem and leaves), drawn
 //                  leaflet by leaflet: the fill marks the stencil, the veins are clipped to
-//                  it, then the pen outline.
+//                  it, then the pen outline. Fruit last, filled like leaves in their colours.
 //
-// u_style (set by sketch.js from the Style select) builds up the finish:
-//   0 Outline      fills are bare paper (they hide what's beneath); pen outline and veins.
-//   1 Shaded pen   + hatching: solid pen lines only, tone from how many lines are drawn,
-//                  wandering and broken like a hand-held fineliner. No greys.
-//   2 Watercolour  + a transparent wash under the pen work: shaded half, blooms, grain,
-//                  a halo (or overshoot) against the pen line, lifted veins.
-// Pen lines are all the same fine width, like one fineliner. Veins are drawn along both
+// The finish is three layers, each on or off (Finish: Outline, Shading, Watercolour). With all
+// off, fills are bare paper (they still hide what's beneath).
+//   u_penLines     pen outline, and pen edges along veins and stalks.
+//   u_shading      hatching: solid lines only, tone from how many lines are drawn, wandering
+//                  and broken like a hand-held fineliner. No greys. Its own width and ink.
+//   u_watercolour  a transparent wash under the pen work: shaded half, blooms, grain, a halo
+//                  (or overshoot) against the pen line, lifted veins.
+// Outline lines are all the same fine width, like one fineliner. Veins are drawn along both
 // edges (one line down the thinnest); stalks are pen-edged and fade into the midrib
 // (`o` in the along slot: 1 stalk → 0 vein).
 //
 // Uniforms:
-//   u_<key>   every param without `uniform: false` (auto-declared by sketch.js)
-//   u_style   0 / 1 / 2, see above
+//   u_<key>   every param without `uniform: false` (auto-declared by sketch.js), including
+//             the finish's three toggles (0 or 1)
 //   f_view    canvas size in CSS px          f_px     canvas px per CSS px
 
 const paperFn = `
@@ -64,11 +65,11 @@ void main() {
   v_acrossPx = 0.0;
   v_wPx = 0.0;
   v_s = 0.0;
-  if (k == 0 || k == 7) {
-    // Fills (leaf and bud): v_s is the signed distance past the margin along each spoke, as a share of the
+  if (k == 0 || k == 7 || k == 8) {
+    // Fills (leaf, bud and fruit): v_s is the signed distance past the margin along each spoke, as a share of the
     // spoke (−1 at the midrib, 0 at the margin). For a wash that overshoots the pen line,
     // margin vertices are pushed out along their spoke first.
-    float grow = u_style > 1.5 ? max(0.0, u_washGapJitter - u_washGap) + 0.003 : 0.0;
+    float grow = u_watercolour > 0.5 ? max(0.0, u_washGapJitter - u_washGap) + 0.003 : 0.0;
     bool outer = abs(a_attr.y) > 0.5;
     c += (M * a_nrm) * (outer ? grow * a_attr.x : 0.0);
     v_s = outer ? grow : -1.0;
@@ -109,6 +110,8 @@ vec3 wash(vec3 paper, vec3 pig, float d) { return mix(paper, pig, clamp(d, 0.0, 
 float penW() { return max(u_minLine * 0.5 * f_px, 0.35); }
 // A solid pen line of half-width penW() at distance d (device px) from its centre.
 float pen(float d) { return clamp(penW() - d + 0.5, 0.0, 1.0); }
+// The same for hatching, at Hatch weight.
+float hatchPen(float d) { return clamp(max(u_hatchWeight * 0.5 * f_px, 0.35) - d + 0.5, 0.0, 1.0); }
 // The fineliner skipping now and then.
 float skipAt(vec2 p) { return smoothstep(u_penSkip * 0.7, u_penSkip * 0.7 + 0.12, field(p * 9.0, 5.0) + 0.5); }
 
@@ -127,7 +130,7 @@ float hatch(vec2 p, float th, float tone, float layer) {
   float gapIn = step(fract(g), 1.0 - 0.18 * u_hatchWonk);
   // Too dense to draw at this size: leave lines out rather than let them merge into grey.
   keep *= step(hash21(vec2(li * 1.7, layer)), clamp(0.35 / fw, 0.0, 1.0));
-  return pen(abs(fract(h + 0.5) - 0.5) / fw) * keep * gapIn;
+  return hatchPen(abs(fract(h + 0.5) - 0.5) / fw) * keep * gapIn;
 }
 
 void main() {
@@ -135,8 +138,8 @@ void main() {
   float alpha;
   vec3 paper = paperAt();
   float skip = skipAt(v_lp);
-  if (v_kind == 0 || v_kind == 7) {
-    bool bud = v_kind == 7;
+  if (v_kind == 0 || v_kind == 7 || v_kind == 8) {
+    bool bud = v_kind == 7, fruit = v_kind == 8;
     float across = v_bl.x, a = abs(across);
     float fw = max(fwidth(v_s), 1e-4);
     float inside = clamp(-v_s / fw, 0.0, 1.0);            // within the pen outline
@@ -145,11 +148,21 @@ void main() {
     // Which half is shaded, bleeding unevenly across the midrib.
     float bleed = across + field(v_lp * 1.4, 2.0) * u_shadeBlend * 0.8;
     float shaded = 1.0 - smoothstep(-u_shadeBlend * 0.5, u_shadeBlend * 0.5, bleed);
-    if (u_style > 1.5) {
+    // Gloss: a fruit's highlight on its lit side, a patch reserved from the wash with a crisp
+    // edge that wanders like the wash's own (Halo jitter), growing with Gloss. across runs −1…1
+    // over the width, along 0…1 over the length, so ×2 makes it round on a round fruit.
+    float gloss = 0.0;
+    if (fruit && u_fruitGloss > 0.0) {
+      float gd = length(vec2(across - 0.4, (v_bl.y - 0.68) * 2.0)) + u_washGapJitter * field(v_lp * 6.0, 7.0);
+      gloss = clamp((0.3 * u_fruitGloss - gd) / max(fwidth(gd), 1e-4), 0.0, 1.0) * u_fruitHighlightOpacity * inside;
+    }
+    if (u_watercolour > 0.5) {
       // --- the wash, stopping short of (or overshooting) the pen line by a wandering margin.
       float gap = (u_washGap + u_washGapJitter * field(v_lp * 2.2, 7.0) * 2.0) * smoothstep(0.0, 0.08, v_bl.y);
       float washIn = clamp((-gap - v_s) / fw, 0.0, 1.0);
-      vec3 pig = bud ? mix(u_budColour, u_budShade, shaded * u_halfShade) : mix(u_leafWash, u_leafShade, shaded * u_halfShade);
+      vec3 pig = bud ? mix(u_budColour, u_budShade, shaded * u_halfShade)
+        : fruit ? mix(u_fruitColour, u_fruitShade, shaded * u_halfShade)
+        : mix(u_leafWash, u_leafShade, shaded * u_halfShade);
       float d = u_washDensity;
       d *= 1.0 + u_bloom * field(v_lp * u_bloomScale / 6.0, 1.0) * 1.4;     // blooms
       d *= 1.0 + u_grain * grainAt() * 0.9;                                  // granulation
@@ -157,13 +170,14 @@ void main() {
       col = mix(paper, wash(paper, pig, d), washIn);
       alpha = max(inside, washIn);
     }
-    if (u_style > 0.5) {
+    col = mix(col, u_fruitHighlight, gloss);
+    if (u_shading > 0.5) {
       // --- pen hatching: more lines where it's darker; cross-hatching in the darkest.
       float tone = u_hatching * clamp(shaded * 0.7 + smoothstep(0.55, 1.0, a) * 0.45 + field(v_lp * 2.0, 4.0) * 0.4, 0.0, 1.0);
       float th = radians(u_hatchAngle);
       float lines = hatch(v_pos, th, tone, 1.0);
       lines = max(lines, hatch(v_pos, th - 1.4, (tone - 0.5) * 2.0 * u_crossHatch, 2.0));
-      col = mix(col, u_penColour, lines * u_penOpacity * skip * inside);
+      col = mix(col, u_hatchColour, lines * (1.0 - gloss) * u_hatchOpacity * inside);
     }
   } else {
     float ax = abs(v_acrossPx);
@@ -180,7 +194,7 @@ void main() {
       float o2 = clamp(o * 2.0, 0.0, 1.0);  // the midrib's base still carries the stalk's wash
       if (u_pass > 3.5) {
         // Pen along the edges (or down the middle of the thinnest).
-        alpha = edges * mix(u_penVeins, u_penOpacity, o2) * skip;
+        alpha = edges * mix(u_penVeins, u_penOpacity, o2) * skip * u_penLines;
         col = u_penColour;
       } else if (u_pass > 2.5) {
         if (ax > inner) discard;
@@ -189,12 +203,12 @@ void main() {
         // Inside: kept clear of hatching; in watercolour, lifted toward paper (or, at the
         // midrib's base, the stalk's wash carrying on).
         alpha = clamp(inner - ax + 0.5, 0.0, 1.0);
-        vec3 lifted = u_style > 1.5 ? wash(paper, mix(u_leafWash, u_leafShade, 0.3), u_washDensity * (1.0 - u_veinLift)) : paper;
-        vec3 stalk = u_style > 1.5 ? wash(paper, u_stemWash, 0.85 + u_grain * grainAt() * 0.5) : paper;
+        vec3 lifted = u_watercolour > 0.5 ? wash(paper, mix(u_leafWash, u_leafShade, 0.3), u_washDensity * (1.0 - u_veinLift)) : paper;
+        vec3 stalk = u_watercolour > 0.5 ? wash(paper, u_stemWash, 0.85 + u_grain * grainAt() * 0.5) : paper;
         col = mix(lifted, stalk, o2);
       } else if (u_pass > 0.5) {
         // Watercolour only: pigment pooled along the vein's sides.
-        alpha = u_style > 1.5 ? line * u_veinPool * (1.0 - o) * smoothstep(0.55 * v_wPx, v_wPx, ax) * (1.0 - smoothstep(0.85 * v_wPx, v_wPx, ax)) * 0.8 : 0.0;
+        alpha = u_watercolour > 0.5 ? line * u_veinPool * (1.0 - o) * smoothstep(0.55 * v_wPx, v_wPx, ax) * (1.0 - smoothstep(0.85 * v_wPx, v_wPx, ax)) * 0.8 : 0.0;
         col = wash(paper, u_leafShade, u_washDensity + 0.3);
       } else {
         // Stalk: a wash between pen edges, with fibrous texture and a little pen shading;
@@ -208,21 +222,21 @@ void main() {
         float base = u_stemBase > 0.5 ? smoothstep(0.0, max(u_stemFade, 1e-3), along) : 1.0;
         float gaps = field(vec2(along * 18.0, sa > 0.0 ? 1.7 : 4.3), 6.0) + 0.5;
         float penKeep = u_stemBase > 0.5 ? step(1.0 - base, gaps * 0.9) : 1.0;
-        vec3 fillCol = u_style > 1.5 ? wash(paper, u_stemWash, d * base) : paper;
-        float edgeP = pen(abs(ax - max(v_wPx - penW(), 0.0))) * u_penOpacity * skip * penKeep;
+        vec3 fillCol = u_watercolour > 0.5 ? wash(paper, u_stemWash, d * base) : paper;
+        float edgeP = pen(abs(ax - max(v_wPx - penW(), 0.0))) * u_penOpacity * skip * penKeep * u_penLines;
         // Pen shading: short broken strokes across the shaded side.
         float hs = along * u_hatchDensity * 0.9 + field(vec2(along * 4.0, sa), 3.0) * 0.6;
         float fwh = max(fwidth(hs), 1e-4);
-        float shadeSide = smoothstep(0.05, 0.5, -sa) * u_stemShading * (u_style > 0.5 ? 1.0 : 0.0);
+        float shadeSide = smoothstep(0.05, 0.5, -sa) * u_stemShading * u_shading;
         float keepH = step(hash21(vec2(floor(hs + 0.5), 3.7)), shadeSide * base) * step(fwh, 0.4);
-        float hatchP = pen(abs(fract(hs + 0.5) - 0.5) / fwh) * keepH * u_penOpacity;
-        col = mix(fillCol, u_penColour, max(edgeP, hatchP));
-        float fillA = u_style > 1.5 ? mix(max(edgeP, hatchP), 1.0, base) : 1.0;
+        float hatchP = hatchPen(abs(fract(hs + 0.5) - 0.5) / fwh) * keepH * u_hatchOpacity;
+        col = mix(mix(fillCol, u_hatchColour, hatchP), u_penColour, edgeP);
+        float fillA = u_watercolour > 0.5 ? mix(max(edgeP, hatchP), 1.0, base) : 1.0;
         alpha = line * smoothstep(0.0, 0.3, o) * fillA;
       }
     } else {
       // Pen outline.
-      alpha = line * u_penOpacity * skip;
+      alpha = line * u_penOpacity * skip * u_penLines;
       col = u_penColour;
     }
   }

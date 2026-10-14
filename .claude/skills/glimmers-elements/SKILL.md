@@ -36,7 +36,7 @@ description: Add, edit, or remove visual elements and parameters in a glimmers s
 
 ## Presets
 
-A sketch can `export const presets = { Name: { key: value, … } }` from `params.js`. The pane shows them as a Preset dropdown; picking one morphs every key it names (numbers and colours glide over the manifest's `presetSeconds`, default 1.5 s; selects and bools switch). Keys it doesn't name are left alone. `check.mjs` validates every key and value. For the cover, `manifest.capture.presets = { sequence: [...], hold }` holds on each preset and morphs to the next, looping. Leaf builds its species presets from the current shape defaults plus overrides (see its params.js).
+A sketch can `export const presets = { Name: { key: value, … } }` from `params.js`. The pane shows them as a Preset dropdown; picking one morphs every key it names (numbers and colours glide over the manifest's `presetSeconds`, default 1.5 s; selects and bools switch). Keys it doesn't name are left alone. `check.mjs` validates every key and value. For the cover, `manifest.capture.presets = { sequence: [...], hold }` holds on each preset and morphs to the next, looping. Leaf builds its species presets from the current shape defaults plus overrides; adding or renaming one follows the `leaf-species` skill.
 
 ## Adding a visual element
 

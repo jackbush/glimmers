@@ -4,12 +4,12 @@
 // Each frame: ease the category morphs and every shape number toward the params → rebuild
 // the geometry while anything is still easing (shapes.js) → ease the
 // framing (tip up, Scale × 90% of the short side) → sway → draw the paper, then the leaf
-// (shaders.js). With Sway at 0 and nothing changing, a frame draws nothing and the last
+// and its fruit (shaders.js). With Sway at 0 and nothing changing, a frame draws nothing and the last
 // image stays on screen.
 //
 // Smooth morphs: shape numbers are eased copies (counts go fractional, and shapes.js grows
-// the newest node, leaflet pair or vein in as the fraction rises); categories, including
-// arrangement, terminal and bud type, are eased weights; each leaf has a presence and is
+// the newest node, leaflet pair, vein or fruit in as the fraction rises); categories, including
+// arrangement, terminal, bud type and fruit, are eased weights; each leaf has a presence and is
 // scaled about where it attaches, so leaves grow out of and shrink back into the stem.
 // Presets instead morph on one clock: see beginMorph.
 //
@@ -22,7 +22,7 @@ import { rng } from '../../kit/random.js';
 import { FULLSCREEN_VERT, paramDecls, program, shaderParams, uploadParams } from '../../kit/gl.js';
 
 const MAX_INST = MAX_PLACE + 1, IFLOATS = 6;
-const SELECTS = ['compound', 'outline', 'base', 'apex', 'lobing', 'margin', 'venation', 'arrangement', 'terminal', 'budType'];
+const SELECTS = ['compound', 'outline', 'base', 'apex', 'lobing', 'margin', 'venation', 'arrangement', 'terminal', 'budType', 'fruit'];
 // The leaf's own shape (not the stem's): in a two-phase morph these swap while the leaves
 // are shrunk to nothing (see beginMorph).
 const LEAF_KEYS = new Set([
@@ -37,8 +37,12 @@ const GEOM_KEYS = [
   'teeth', 'toothDepth', 'veinCount', 'veinAngle', 'veinCurve', 'veinlets', 'veinWeight', 'midribWeight',
   'petioleLength', 'petioleFlat', 'petioleWing', 'stipules', 'outlineWeight', 'wobble',
   'arrangement', 'nodes', 'divergence', 'decussate', 'whorlCount', 'internode', 'internodeTaper', 'bareStem',
-  'insertion', 'tipInsertion', 'sizeGradient', 'stemWidth', 'stemTaper', 'stemCurve', 'stemDroop', 'zigzag',
+  'insertion', 'tipInsertion', 'sizeGradient', 'stemWidth', 'stemTaper', 'stemCurve', 'stemDroop', 'zigzag', 'stemWander',
   'terminal', 'budType', 'budSize', 'budStem', 'leafVariety',
+  'fruit', 'fruitNodes', 'fruitTip', 'fruitCount', 'fruitSize', 'fruitLength', 'fruitPeduncle', 'fruitStalk', 'fruitHang', 'fruitSpread',
+  'fruitAsym', 'fruitSeeds', 'fruitCup', 'fruitSpines', 'fruitSpineCount',
+  // Pen lines on fruit stop at the highlight, so these move geometry too.
+  'fruitGloss', 'fruitHighlightOpacity', 'washGapJitter',
 ];
 
 /** @type {import('../../kit/types').Sketch} */
@@ -207,7 +211,7 @@ export default function create({ canvas, P, model, degrade }) {
 
   function header() {
     return '#version 300 es\nprecision highp float;\nprecision highp int;\nprecision highp sampler2D;\n' +
-      'uniform vec2 f_view;\nuniform float f_px;\nuniform float u_style;\n' +
+      'uniform vec2 f_view;\nuniform float f_px;\n' +
       paramDecls(uniformParams);
   }
   /** A program whose fragment shader (and the vertex shader, if it wants them) gets header(). */
@@ -216,14 +220,13 @@ export default function create({ canvas, P, model, degrade }) {
     const loc = (n) => gl.getUniformLocation(prog, n);
     gl.useProgram(prog);
     gl.uniform1i(loc('u_noise'), UNIT_NOISE);
-    return { prog, version: -1, fView: loc('f_view'), fPx: loc('f_px'), uPass: loc('u_pass'), uStemBase: loc('u_stemBase'), uStyle: loc('u_style'), paramLocs: uniformParams.map((p) => loc('u_' + p.key)) };
+    return { prog, version: -1, fView: loc('f_view'), fPx: loc('f_px'), uPass: loc('u_pass'), uStemBase: loc('u_stemBase'), paramLocs: uniformParams.map((p) => loc('u_' + p.key)) };
   }
   function use(pr) {
     gl.useProgram(pr.prog);
     gl.uniform2fv(pr.fView, fView);
     gl.uniform1f(pr.fPx, fPx);
     if (pr.version !== model.version) {
-      gl.uniform1f(pr.uStyle, P.style.options.indexOf(P.style.value));
       uploadParams(gl, pr.paramLocs, uniformParams);
       pr.version = model.version;
     }
@@ -336,9 +339,9 @@ export default function create({ canvas, P, model, degrade }) {
       if (x0 > x1) x0 = y0 = x1 = y1 = 0;
       leafBox[v * 4] = x0; leafBox[v * 4 + 1] = y0; leafBox[v * 4 + 2] = x1; leafBox[v * 4 + 3] = y1;
     }
-    // The stem's vertices plus each placed leaf's box corners (at its presence).
+    // The stem's, bud's and fruit's vertices plus each placed leaf's box corners (at its presence).
     box[0] = box[1] = 1e9; box[2] = box[3] = -1e9;
-    for (let i = geo.sprigStart[0]; i < geo.budStart[0] + geo.budCount[0]; i++) grow(geo.verts[i * STRIDE], geo.verts[i * STRIDE + 1]);
+    for (let i = geo.sprigStart[0]; i < geo.fruitStart[0] + geo.fruitCount[0]; i++) grow(geo.verts[i * STRIDE], geo.verts[i * STRIDE + 1]);
     for (let p = 0; p < geo.sprigNPlace[0]; p++) {
       placed(p, 0);
       const lv = geo.sprigPlace[p * 8];
@@ -553,6 +556,8 @@ export default function create({ canvas, P, model, degrade }) {
         if (geo.sprigPlace[p * 8 + 7] * leafGrow < 0.002) continue; // not grown in yet
         drawLeaf(geo.sprigPlace[p * 8], 1 + p);
       }
+      // Fruit over the leaves.
+      drawRun(geo.fruitStart[0], geo.fruitCount[0], 0, 1);
       gl.disable(gl.BLEND);
       gl.bindVertexArray(null);
     },

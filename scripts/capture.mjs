@@ -4,7 +4,7 @@
 // (`brew install ffmpeg`).
 //
 //   node scripts/capture.mjs <slug> [--seconds 6] [--start 0] [--fps 30] [--size 840x525] [--dpr 2] [--crf 26] [--no-pingpong] [--url …]
-//   node scripts/capture.mjs <slug> --still out.png [--start 0] [--size 1200x630] [--dpr 2] [--set key=value …]
+//   node scripts/capture.mjs <slug> --still out.png [--start 0] [--size 1200x630] [--dpr 2] [--preset name] [--set key=value …]
 //
 // The page runs in capture mode (?capture): code defaults, no buttons or pane, no adaptive
 // quality, and frames rendered one at a time at a fixed timestep, so the result doesn't depend
@@ -18,6 +18,8 @@
 // --dpr 2 renders it at retina resolution. --start skips into the animation first.
 // --still writes a single PNG frame (at --start) instead of a cover: share images, icons.
 // --set overrides a param for this capture (repeatable), e.g. --set orbRadius=0.7.
+// --preset lands on one of the sketch's presets instead of the manifest's sequence (a still of
+// any species, say), before --set applies.
 // A manifest `capture.presets` ({ sequence, hold }) morphs through the sketch's presets instead:
 // each held for `hold` s, then morphed to the next over `presetSeconds`, looping (no ping-pong).
 
@@ -27,7 +29,7 @@ import { join } from 'node:path';
 import { cli, ensureServer, launch, sleep } from './lib/chrome.mjs';
 import { MANIFEST_DEFAULTS } from '../src/kit/manifest.js';
 
-const { args, opt, has } = cli(['--seconds', '--start', '--fps', '--size', '--dpr', '--crf', '--url', '--still', '--set']);
+const { args, opt, has } = cli(['--seconds', '--start', '--fps', '--size', '--dpr', '--crf', '--url', '--still', '--set', '--preset']);
 const still = opt('--still', null);
 // --set key=value, repeatable. Numbers and true/false are converted; anything else stays a string.
 const argv = process.argv.slice(2);
@@ -52,7 +54,8 @@ const { default: manifest } = await import(join(dir, 'manifest.js'));
 const { presetHold, ...captureDefaults } = MANIFEST_DEFAULTS.capture;
 const preset = { ...captureDefaults, animate: {}, ...(manifest.capture || {}) };
 // A preset sequence (manifest capture.presets): hold each, morph to the next, loop.
-const seq = preset.presets?.sequence || [];
+const only = opt('--preset', null);
+const seq = only ? [only] : preset.presets?.sequence || [];
 const hold = preset.presets?.hold ?? presetHold;
 const morph = manifest.presetSeconds ?? MANIFEST_DEFAULTS.presetSeconds;
 const period = hold + morph;

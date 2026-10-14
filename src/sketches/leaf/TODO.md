@@ -1,6 +1,6 @@
 # Leaf: trees we can't draw yet
 
-Every broadleaf in `presets` (params.js) is buildable from today's controls. The trees below aren't: conifers above all, plus a few broadleaves with something the engine has no part for. For each one: what it looks like, a palette in the presets' format (summer colours, and a very pale paper from across the colour wheel), and what the engine is missing. The features they need are listed by how many trees each one unlocks, at the end.
+Every broadleaf in `presets` (params.js) is buildable from today's controls. The trees below aren't: conifers above all, plus a few broadleaves with something the engine has no part for. Fruit (berries, drupes, nuts in cups, keys, pods, burrs) exist now; where a tree below needs one, it says which type. For each one: what it looks like, a palette in the presets' format (summer colours, and a very pale paper from across the colour wheel), and what the engine is missing. The features they need are listed by how many trees each one unlocks, at the end.
 
 Palettes are `leafWash / leafShade · stemWash · budColour / budShade · paper`. Where a tree has no bud worth drawing, the "bud" colours are for whatever feature ends the sprig (a cone, an aril).
 
@@ -14,7 +14,7 @@ Palettes are `leafWash / leafShade · stemWash · budColour / budShade · paper`
 ### Yew (Taxus baccata)
 - **Look:** flat, soft, linear needles, 1–3 cm, dark glossy green above, with two pale yellow-green bands beneath. They spiral round the shoot but twist at the base to lie flat in two neat rows either side, like a comb. Green shoots; tiny green-brown buds. In autumn, single seeds sit in a fleshy red cup (the aril).
 - **Palette:** `#2e4a2c / #0f2412 · #5a7a3a · #c8302a / #6a0e0a · #f9eef0` (near-black green on blush, the aril red).
-- **Missing:** many short leaves (40–80 per sprig, past today's 10 nodes and 56 placements), a leaf twist so spiralled leaves lie in two ranks, stripes on the leaf surface (stomatal bands), and fruit: the aril.
+- **Missing:** many short leaves (40–80 per sprig, past today's 10 nodes and 56 placements), a leaf twist so spiralled leaves lie in two ranks, and stripes on the leaf surface (stomatal bands). The aril can be a Nut with a deep Cup: the cup takes the bud colours (set them red), the seed the fruit colours (near-black).
 
 ### Norway spruce (Picea abies)
 - **Look:** stiff, square-sectioned, sharp needles, 1–2.5 cm, dark glossy green, standing all round the shoot. Each sits on a small woody peg that stays when the needle drops, so older twig is rough. The orange-brown shoot shows through underneath, where the needles part. Conical, pointed, red-brown buds.
@@ -29,7 +29,7 @@ Palettes are `leafWash / leafShade · stemWash · budColour / budShade · paper`
 ### European larch (Larix decidua)
 - **Look:** soft, bright fresh-green needles, 2–3 cm. They come in tufts of 20–40 on knobbly short side shoots, and singly, spiralled, on the season's long shoot. A deciduous conifer, so they turn gold in autumn. Pale straw-yellow shoots; small cones like wooden rosebuds sit upright along the branches.
 - **Palette:** `#8fb257 / #3e5e28 · #c8a76a · #8a6040 / #3a2416 · #f3eff9` (spring green on lilac).
-- **Missing:** rosettes (a fan of many needles from one knob on a short shoot), short shoots off the main stem, and cones.
+- **Missing:** rosettes (a fan of many needles from one knob on a short shoot), short shoots off the main stem, and cones (overlapping scales; no fruit type draws them).
 
 ### Cedar of Lebanon (Cedrus libani)
 - **Look:** like larch but evergreen, stiffer and darker: rosettes of 10–15 dark grey-green needles, 2–3 cm, on short shoots, held in flat tiers. Barrel-shaped cones stand upright.
@@ -44,7 +44,7 @@ Palettes are `leafWash / leafShade · stemWash · budColour / budShade · paper`
 ### Common juniper (Juniperus communis)
 - **Look:** short, rigid, very sharp needles, 1–1.5 cm, in whorls of three, standing out from a slender triangular shoot. Each has one broad white band on its upper face. Blue-black "berries" (fleshy cones) with a grey bloom.
 - **Palette:** `#6a8a72 / #2a4430 · #7a5a40 · #3a4a6a / #141a2a · #faefe9` (grey-green on peach, the berries blue-black).
-- **Missing:** many whorled nodes (today's 10 nodes is too few), stomatal bands, and fruit.
+- **Missing:** many whorled nodes (today's 10 nodes is too few) and stomatal bands. The berries are a Berry with grey-blue colours.
 
 ### Monkey puzzle (Araucaria araucana)
 - **Look:** thick, leathery, triangular leaves, 3–4 cm, ending in a sharp spine. They overlap in tight spirals that cover the branch completely, so the branch reads as a scaly green rope. Glossy dark green; they last for decades.
@@ -66,7 +66,7 @@ Palettes are `leafWash / leafShade · stemWash · budColour / budShade · paper`
 ### Hawthorn (Crataegus monogyna)
 - **Look:** small leaves, 2–4 cm, wedge-based and cut deep, almost to the midrib, into three to five lobes, the lowest pair the deepest; a few teeth near the lobe tips only; leafy, toothed stipules at the stalk's base. Alternate on a zigzag twig, with straight sharp thorns, 1–2 cm, at the nodes, the same brown as the twig. In autumn, clusters of dark red haws.
 - **Palette:** `#5e8e44 / #28482a · #6a4a3a · #8a3a2a / #3a1408 · #f9eff2` (deep green on rose, the haws dark red).
-- **Missing:** thorns (a short tapering spike at each node, its own placement), and fruit. It was a preset (pinnately lobed, Lobe depth 0.75, 3 lobes) and was cut: without its thorns, and with lobes cut that deep at that size, it read as a scrappy generic leaf. Bring it back with thorns, and look again at deep pinnate lobes on small leaves.
+- **Missing:** thorns (a short tapering spike at each node, its own placement); the haws are a Berry, in clusters (stage 2 of the roadmap draws those better). It was a preset (pinnately lobed, Lobe depth 0.75, 3 lobes) and was cut: without its thorns, and with lobes cut that deep at that size, it read as a scrappy generic leaf. Bring it back with thorns, and look again at deep pinnate lobes on small leaves.
 
 ### Tulip tree (Liriodendron tulipifera)
 - **Look:** squarish, 10–15 cm, with four pointed lobes: two at the base, broad and spreading, and two at the top either side of a tip cut straight across, as if snipped off with scissors (a shallow V, not a dent). The base is broad and nearly straight. Long stalk; a flat, duck-bill bud.
@@ -76,7 +76,7 @@ Palettes are `leafWash / leafShade · stemWash · budColour / budShade · paper`
 ### Blackthorn (Prunus spinosa)
 - **Look:** small, dull, finely toothed oval leaves, 2–4 cm, on dark purple-black twigs that end in long thorns. Blue-black sloes with a grey bloom.
 - **Palette:** `#5a7a48 / #24381f · #2e2026 · #3a3a5a / #14141e · #faf0ea` (dull green on peach, the twigs near black).
-- **Missing:** a thorn-tipped stem (the sprig ending in a thorn rather than a bud), side thorns, and fruit.
+- **Missing:** a thorn-tipped stem (the sprig ending in a thorn rather than a bud) and side thorns. The sloes are a Berry (or Drupe) in blue-black with gloss off.
 
 ### Chusan palm (Trachycarpus fortunei)
 - **Look:** a fan up to a metre across, split into 40–50 stiff, pleated, strap-shaped segments radiating from one point at the top of a long, toothed stalk; the segment tips flop over. Dark green above, grey-green beneath. Brown fibre wraps the trunk.
@@ -85,14 +85,14 @@ Palettes are `leafWash / leafShade · stemWash · budColour / budShade · paper`
 
 ## Fruit, flowers and catkins (for trees we already have)
 
-Not needed for any preset to work, but most of the species would be more recognisable with them: acorns in cups (Oak), beech mast (Beech), sycamore and field maple keys, ash keys, conkers in spiny cases (Horse chestnut), catkins (Hazel, Birch, Alder, Willow), holly berries, rowan berries, elderberries, cherries, laburnum pods. All need the same fruit element: a small shape placed at nodes or at the tip, with its own colours.
+Fruit are done for the trees whose fruit is single or in small fans: `Apple, Crab`, Ash, Beech, Cherry, `Chestnut, Horse`, `Chestnut, Sweet`, Hazel, Holly, Laburnum, `Maple, Field`, `Maple, Norway`, `Oak, English`, `Oak, Holm`, Plane, Robinia, Sycamore and Walnut. Still to come, as they need branching clusters (stage 2): rowan, elder, whitebeam and dogwood berries in flat or drooping heads, laburnum and robinia pods hanging in long chains, plane balls strung along one stalk. Flowers: cherry blossom, magnolia cups, elderflower and rowan flat heads, hawthorn may, horse chestnut candles, laburnum chains, lime flowers hanging from their bract, and catkins (Hazel, Birch, Alder, Willow). Clusters and flowers need a branching flower stalk (corymb, umbel, raceme, spike) on top of today's fan; petals can reuse the blade outline (entire margin, no veins).
 
 ## Features, by how many trees they unlock
 
 | Feature | What it is | Unlocks |
 |---|---|---|
 | Many leaves per sprig | Past 10 nodes and 56 placements, with a cheap shared needle leaf (no veins, low resolution) so 100+ fit the vertex budget | Scots pine, Yew, Norway spruce, Silver fir, Juniper, Monkey puzzle, Coast redwood |
-| Fruit and cones | A shape at nodes or the tip with its own colours; cones as overlapping scales | Yew, Larch, Cedar, Cypress, Juniper, Hawthorn, Blackthorn, and most current presets |
+| Cones | Overlapping scales, as a fruit type (fruit themselves are done) | Larch, Cedar, Cypress, Scots pine, Alder |
 | Stomatal bands | Pale stripes along the leaf surface, either side of the midrib | Yew, Silver fir, Juniper, Coast redwood |
 | Two-rank twist | Spiralled leaves twisting at the base to lie flat in two rows | Yew, Silver fir, Coast redwood |
 | Spiral foreshortening | Leaves pointing toward or away from the viewer drawn shorter, so dense spirals read in 3D | Scots pine, Norway spruce, Monkey puzzle |
@@ -106,3 +106,14 @@ Not needed for any preset to work, but most of the species would be more recogni
 | Fan outline and forking veins | A wedge-to-arc blade with dichotomous venation | Ginkgo |
 | More palmate segments and pleating | Up to ~50 segments, each folded down its length | Chusan palm |
 | Size along the shoot both ways | Leaves small at both ends of the shoot | Coast redwood |
+
+## Roadmap
+
+In build order. Stages 1–2 only add placed elements, so they improve nearly every current preset without touching the vertex budget; 3 changes the buffers and unlocks the most new trees; 4–5 build on 3.
+
+1. **Fruit at nodes and the tip.** Done: the Fruit group (Berry, Drupe, Nut, Key, Pod, Burr), clusters fanned from a stalk in the axils and at the tip, morphing like everything else (see NOTES.md). On 15 presets, plus `Apple, Crab` and `Oak, Holm`, new for it. Gives the yew aril, sloes, juniper berries and hawthorn haws once their other features land.
+2. **Clusters on branching stalks (fruit and flowers).** Corymbs, umbels, racemes and spikes carrying fruit or flowers, growing from today's Cluster stalk; petals from the blade outline. Rowan, Elder, Whitebeam and Dogwood berry heads; laburnum and robinia pod chains; cherry blossom, magnolia, elderflower, may, horse chestnut candles, laburnum flower chains, lime bracts; catkins as a dense spike (Hazel, Birch, Alder, Willow).
+3. **Many cheap leaves.** A shared low-resolution needle drawn per placement so 100–300 fit the budget, past today's 10 nodes and 56 placements. Then: two-rank twist + stomatal bands → yew, silver fir, coast redwood (plus size along the shoot both ways); fascicles + foreshortening + bud ring → Scots pine; pegs → spruce; whorls of three → juniper. Also gives Box denser shoots, longer Willow and Eucalyptus sprigs, and room for dense clusters in 1–2.
+4. **Short shoots and side branches.** Spur knobs carrying rosettes, side shoots in one plane. Cedar, larch, ginkgo; spur clusters on Cherry; side twigs carrying fruit.
+5. **Overlapping scales.** One feature for cones (pine, cedar's barrel, larch's rosebud, alder's little cones) and scale leaves (cypress sprays, monkey puzzle).
+6. **One-offs.** Thorns (Hawthorn, Blackthorn, Robinia), cut-off apex (Tulip tree), fan blade with forking veins (Ginkgo), pleated segments (Chusan palm).
