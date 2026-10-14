@@ -3,8 +3,8 @@
 //
 // Each frame: ease the category morphs and every shape number toward the params → rebuild
 // the geometry while anything is still easing (shapes.js) → ease the
-// framing (tip up, Scale × 90% of the short side) → sway → draw the paper, then the leaf
-// and its fruit (shaders.js). With Sway at 0 and nothing changing, a frame draws nothing and the last
+// framing (tip up, Scale × 90% of the short side) → sway → draw the paper, then the leaves,
+// fruit and flowers in stem order (shaders.js). With Sway at 0 and nothing changing, a frame draws nothing and the last
 // image stays on screen.
 //
 // Smooth morphs: shape numbers are eased copies (counts go fractional, and shapes.js grows
@@ -22,7 +22,7 @@ import { rng } from '../../kit/random.js';
 import { FULLSCREEN_VERT, paramDecls, program, shaderParams, uploadParams } from '../../kit/gl.js';
 
 const MAX_INST = MAX_PLACE + 1, IFLOATS = 6;
-const SELECTS = ['compound', 'outline', 'base', 'apex', 'lobing', 'margin', 'venation', 'arrangement', 'terminal', 'budType', 'fruit'];
+const SELECTS = ['compound', 'outline', 'base', 'apex', 'lobing', 'margin', 'venation', 'arrangement', 'terminal', 'budType', 'fruit', 'fruitForm', 'flower', 'flowerForm'];
 // The leaf's own shape (not the stem's): in a two-phase morph these swap while the leaves
 // are shrunk to nothing (see beginMorph).
 const LEAF_KEYS = new Set([
@@ -37,10 +37,14 @@ const GEOM_KEYS = [
   'teeth', 'toothDepth', 'veinCount', 'veinAngle', 'veinCurve', 'veinlets', 'veinWeight', 'midribWeight',
   'petioleLength', 'petioleFlat', 'petioleWing', 'stipules', 'outlineWeight', 'wobble',
   'arrangement', 'nodes', 'divergence', 'decussate', 'whorlCount', 'internode', 'internodeTaper', 'bareStem',
-  'insertion', 'tipInsertion', 'sizeGradient', 'stemWidth', 'stemTaper', 'stemCurve', 'stemDroop', 'zigzag', 'stemWander',
+  'insertion', 'tipInsertion', 'sizeGradient', 'stemWidth', 'stemTaper', 'stemCurve', 'stemDroop', 'zigzag', 'stemWander', 'spreadOut',
   'terminal', 'budType', 'budSize', 'budStem', 'leafVariety',
   'fruit', 'fruitNodes', 'fruitTip', 'fruitCount', 'fruitSize', 'fruitLength', 'fruitPeduncle', 'fruitStalk', 'fruitHang', 'fruitSpread',
-  'fruitAsym', 'fruitSeeds', 'fruitCup', 'fruitSpines', 'fruitSpineCount',
+  'fruitForm', 'fruitAxis', 'fruitRays', 'fruitTaper', 'fruitBract', 'fruitCurve',
+  'fruitAsym', 'fruitSeeds', 'fruitCup', 'fruitSpines', 'fruitSpineCount', 'fruitCut', 'fruitKernels',
+  'flower', 'flowerNodes', 'flowerTip', 'flowerForm', 'flowerAxis', 'flowerRays', 'flowerTaper', 'flowerCount', 'flowerSize',
+  'flowerLength', 'flowerPeduncle', 'flowerBract', 'flowerStalk', 'flowerHang', 'flowerSpread', 'flowerCurve', 'flowerPetals',
+  'flowerNotch', 'flowerStamens', 'flowerFlare',
   // Pen lines on fruit stop at the highlight, so these move geometry too.
   'fruitGloss', 'fruitHighlightOpacity', 'washGapJitter',
 ];
@@ -421,11 +425,11 @@ export default function create({ canvas, P, model, degrade }) {
   // Veins draw as one network: pool once, mark insides, pen edges outside the insides,
   // then fill each inside pixel once.
   let stencilRef = 0;
-  function drawLeaf(v, inst) {
+  /** Segments s0 … s1 of leaf variant v, as instance `inst`. */
+  function drawLeaf(v, inst, s0, s1) {
     const b = inst * IFLOATS * 4;
     gl.vertexAttribPointer(4, 4, gl.FLOAT, false, IFLOATS * 4, b);
     gl.vertexAttribPointer(5, 2, gl.FLOAT, false, IFLOATS * 4, b + 16);
-    const s0 = geo.leafSegStart[v], s1 = s0 + geo.leafSegCount[v];
     for (let k = s0; k < s1; k++) {
       const start = geo.seg[k * 3], count = geo.seg[k * 3 + 1], mode = geo.seg[k * 3 + 2];
       if (mode === SEG_FILL) {
@@ -549,15 +553,30 @@ export default function create({ canvas, P, model, degrade }) {
       stencilRef = 0;
       gl.stencilMask(0xff);
       gl.clear(gl.STENCIL_BUFFER_BIT);
-      // Sprig leaves one at a time, tip first, so leaves nearer the base cover those above.
-      // The bud is the end of the stem: drawn first, under every leaf.
+      // Back layer, with the stem: the bud at its end, and every stalk (leaf stalks, rachises,
+      // fruit and flower stalks), so a stalk can pass behind a leaf, fruit or flower but never in
+      // front of something hanging across the stem it grows from.
       drawRun(geo.budStart[0], geo.budCount[0], 0, 1);
-      for (let p = geo.sprigNPlace[0] - 1; p >= 0; p--) {
+      const nPl = geo.sprigNPlace[0];
+      for (let p = nPl - 1; p >= 0; p--) {
         if (geo.sprigPlace[p * 8 + 7] * leafGrow < 0.002) continue; // not grown in yet
-        drawLeaf(geo.sprigPlace[p * 8], 1 + p);
+        const v = geo.sprigPlace[p * 8], s0 = geo.leafSegStart[v];
+        drawLeaf(v, 1 + p, s0, s0 + geo.leafStalkSegs[v]);
       }
-      // Fruit over the leaves.
-      drawRun(geo.fruitStart[0], geo.fruitCount[0], 0, 1);
+      for (let c = 0; c < geo.nCl; c++) drawRun(geo.clStart[c], geo.clStalk[c], 0, 1);
+      // Then the rest in natural order, node by node from the tip, so whatever grows nearer the
+      // base covers what's above it: at each node its fruit and flowers, then its leaves.
+      let p = nPl - 1;
+      for (let n = geo.sprigNodes; n >= 0; n--) {
+        for (let c = 0; c < geo.nCl; c++) {
+          if (geo.clNode[c] === n) drawRun(geo.clStart[c] + geo.clStalk[c], geo.clCount[c] - geo.clStalk[c], 0, 1);
+        }
+        for (; p >= 0 && geo.placeNode[p] === n; p--) {
+          if (geo.sprigPlace[p * 8 + 7] * leafGrow < 0.002) continue;
+          const v = geo.sprigPlace[p * 8], s0 = geo.leafSegStart[v];
+          drawLeaf(v, 1 + p, s0 + geo.leafStalkSegs[v], s0 + geo.leafSegCount[v]);
+        }
+      }
       gl.disable(gl.BLEND);
       gl.bindVertexArray(null);
     },

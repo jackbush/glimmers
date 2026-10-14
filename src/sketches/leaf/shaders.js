@@ -4,7 +4,8 @@
 //   1. background  the paper: its colour and grain.
 //   2. leaf        the leaf geometry (one instance, or a sprig's stem and leaves), drawn
 //                  leaflet by leaflet: the fill marks the stencil, the veins are clipped to
-//                  it, then the pen outline. Fruit last, filled like leaves in their colours.
+//                  it, then the pen outline. Fruit and flowers last, filled like leaves in their
+//                  colours.
 //
 // The finish is three layers, each on or off (Finish: Outline, Shading, Watercolour). With all
 // off, fills are bare paper (they still hide what's beneath).
@@ -65,8 +66,8 @@ void main() {
   v_acrossPx = 0.0;
   v_wPx = 0.0;
   v_s = 0.0;
-  if (k == 0 || k == 7 || k == 8) {
-    // Fills (leaf, bud and fruit): v_s is the signed distance past the margin along each spoke, as a share of the
+  if (k == 0 || k >= 7) {
+    // Fills (leaf, bud, fruit, petals, flower centres): v_s is the signed distance past the margin along each spoke, as a share of the
     // spoke (−1 at the midrib, 0 at the margin). For a wash that overshoots the pen line,
     // margin vertices are pushed out along their spoke first.
     float grow = u_watercolour > 0.5 ? max(0.0, u_washGapJitter - u_washGap) + 0.003 : 0.0;
@@ -138,8 +139,8 @@ void main() {
   float alpha;
   vec3 paper = paperAt();
   float skip = skipAt(v_lp);
-  if (v_kind == 0 || v_kind == 7 || v_kind == 8) {
-    bool bud = v_kind == 7, fruit = v_kind == 8;
+  if (v_kind == 0 || v_kind >= 7) {
+    bool bud = v_kind == 7, fruit = v_kind == 8 || v_kind == 13; // fruit and nuts take gloss
     float across = v_bl.x, a = abs(across);
     float fw = max(fwidth(v_s), 1e-4);
     float inside = clamp(-v_s / fw, 0.0, 1.0);            // within the pen outline
@@ -161,7 +162,13 @@ void main() {
       float gap = (u_washGap + u_washGapJitter * field(v_lp * 2.2, 7.0) * 2.0) * smoothstep(0.0, 0.08, v_bl.y);
       float washIn = clamp((-gap - v_s) / fw, 0.0, 1.0);
       vec3 pig = bud ? mix(u_budColour, u_budShade, shaded * u_halfShade)
-        : fruit ? mix(u_fruitColour, u_fruitShade, shaded * u_halfShade)
+        : v_kind == 8 || v_kind == 14 ? mix(u_fruitColour, u_fruitShade, shaded * u_halfShade)
+        : v_kind == 13 ? mix(u_seedColour, u_seedShade, shaded * u_halfShade)
+        : v_kind == 12 ? u_fruitFlesh * mix(1.0, 0.9, shaded * u_halfShade)
+        : v_kind == 15 ? u_seedScar * mix(1.0, 0.85, shaded * u_halfShade)
+        : v_kind == 9 ? mix(u_flowerColour, u_flowerShade, shaded * u_halfShade)
+        : v_kind == 10 ? u_flowerCentre * mix(1.0, 0.55, shaded * u_halfShade)
+        : v_kind == 11 ? mix(u_bractColour, u_leafShade, shaded * u_halfShade * 0.4)
         : mix(u_leafWash, u_leafShade, shaded * u_halfShade);
       float d = u_washDensity;
       d *= 1.0 + u_bloom * field(v_lp * u_bloomScale / 6.0, 1.0) * 1.4;     // blooms

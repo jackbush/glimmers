@@ -1,6 +1,7 @@
 // Leaf — every default. The pane is generated from this file (fields: ParamDef in
-// src/kit/types.ts). Shape groups, then Finish (outline, shading and watercolour, each on or off). Params without
-// `uniform: false` are auto-declared in the shaders as `u_<key>` (`vec3` for colours).
+// src/kit/types.ts). Shape groups, then Finish (outline, shading and watercolour, each on or
+// off). Params without `uniform: false` are auto-declared in the shaders as `u_<key>` (`vec3`
+// for colours).
 
 import { playback } from '../../kit/standard.js';
 
@@ -92,6 +93,7 @@ const schema = [
       { key: 'stemDroop', label: 'Droop', value: -0.06, min: -1, max: 1.5, step: 0.01, uniform: false, desc: 'Extra bend toward the tip, as if weighed down.', when: { key: 'arrangement', not: ['No stem'] } },
       { key: 'zigzag', label: 'Zigzag °', value: 25.5, min: 0, max: 40, step: 0.5, uniform: false, desc: 'Kink at each node, away from its leaf (hornbeam, elm).', when: { key: 'arrangement', not: ['No stem'] } },
       { key: 'stemWander', label: 'Wander', value: 0.4, min: 0, max: 1, step: 0.01, uniform: false, desc: 'Slow wiggles in the stem\'s direction, as a hand draws a twig (it bows fruit stalks too); 0 = smooth curves.', when: { key: 'arrangement', not: ['No stem'] } },
+      { key: 'spreadOut', label: 'Spread out', value: 0.6, min: 0, max: 1, step: 0.01, uniform: false, desc: 'How far leaves, fruit and flowers turn away from those they overlap, so more of each shows (0 = where they grow).', when: { key: 'arrangement', not: ['No stem'] } },
       { key: 'terminal', label: 'Terminal', type: 'select', options: ['Leaf', 'Bud', 'Bare'], value: 'Bud', uniform: false, desc: 'What ends the sprig: a leaf, a bud, or a bare shoot tapering to a point (robinia).', when: { key: 'arrangement', not: ['No stem'] } },
       { key: 'budType', label: 'Bud', type: 'select', options: ['Pointed', 'Plump', 'Scaled', 'Cluster'], value: 'Pointed', uniform: false, desc: 'Shape of the terminal bud: long and pointed (beech), plump (lime), scaled (horse chestnut), or a cluster (oak).', when: { key: 'terminal', is: ['Bud'] } },
       { key: 'budSize', label: 'Bud size', value: 0.055, min: 0.02, max: 0.4, step: 0.005, uniform: false, desc: 'Length of the terminal bud, as a fraction of leaf length.', when: { key: 'terminal', is: ['Bud'] } },
@@ -108,21 +110,54 @@ const schema = [
       { key: 'fruit', label: 'Fruit', type: 'select', options: ['None', 'Berry', 'Drupe', 'Nut', 'Key', 'Pod', 'Burr'], value: 'None', uniform: false, desc: 'Fruit on the sprig: a berry (holly), a drupe (cherry, walnut, crab apple), a nut in its cup (acorn, hazel), a winged key (sycamore, ash), a pod (laburnum), or a spiny burr (conker, sweet chestnut, plane ball).' },
       { key: 'fruitNodes', label: 'At nodes', value: 2, min: 0, max: 10, step: 1, uniform: false, desc: 'How many nodes, from the base up, have a cluster in the axil.', when: { key: 'fruit', not: ['None'] } },
       { key: 'fruitTip', label: 'At tip', type: 'bool', value: false, uniform: false, desc: 'A cluster at the end of the sprig.', when: { key: 'fruit', not: ['None'] } },
-      { key: 'fruitCount', label: 'Per cluster', value: 2, min: 1, max: 5, step: 1, uniform: false, desc: 'Fruit in each cluster, fanned from the end of its stalk.', when: { key: 'fruit', not: ['None'] } },
+      { key: 'fruitForm', label: 'Cluster', type: 'select', options: ['Fan', 'Raceme', 'Corymb'], value: 'Fan', uniform: false, desc: 'How each cluster is built: a fan from one point, a raceme of fruit in turn along an axis (chains, candles), or a corymb of rays branching to a flat top (elder, rowan).', when: { key: 'fruit', not: ['None'] } },
+      { key: 'fruitAxis', label: 'Axis length', value: 0.5, min: 0, max: 2, step: 0.01, uniform: false, desc: 'Length of the raceme\'s axis, or of the corymb\'s rays, relative to leaf length.', when: { key: 'fruitForm', not: ['Fan'] } },
+      { key: 'fruitRays', label: 'Rays', value: 4, min: 1, max: 8, step: 1, uniform: false, desc: 'Rays the corymb branches into.', when: { key: 'fruitForm', is: ['Corymb'] } },
+      { key: 'fruitTaper', label: 'Tip taper', value: 0.4, min: 0, max: 1, step: 0.01, uniform: false, desc: 'How much smaller the fruit (and their stalks) get toward the raceme\'s tip, where they open last.', when: { key: 'fruitForm', is: ['Raceme'] } },
+      { key: 'fruitCount', label: 'Per cluster', value: 2, min: 1, max: 40, step: 1, uniform: false, desc: 'Fruit in each cluster.', when: { key: 'fruit', not: ['None'] } },
       { key: 'fruitSize', label: 'Fruit size', value: 0.12, min: 0.02, max: 0.4, step: 0.005, uniform: false, desc: 'Width of each fruit, relative to leaf length (keys and pods are longer than they are wide).', when: { key: 'fruit', not: ['None'] } },
       { key: 'fruitLength', label: 'Fruit length', value: 1, min: 0.5, max: 2.5, step: 0.01, uniform: false, desc: 'How long each fruit is for its width: 1 is the type\'s natural shape (round berries, a stout acorn), more draws it out.', when: { key: 'fruit', not: ['None'] } },
       { key: 'fruitPeduncle', label: 'Cluster stalk', value: 0, min: 0, max: 1, step: 0.01, uniform: false, desc: 'Length of the stalk the whole cluster hangs from, before it fans out (a pair of maple keys), relative to leaf length.', when: { key: 'fruit', not: ['None'] } },
+      { key: 'fruitBract', label: 'Bract', value: 0, min: 0, max: 1, step: 0.01, uniform: false, desc: 'A pale leafy strap along the cluster stalk, as on a lime (0 = none), in the bract colour.', when: { key: 'fruitPeduncle', not: [0] } },
       { key: 'fruitStalk', label: 'Fruit stalk', value: 0.15, min: 0, max: 1, step: 0.01, uniform: false, desc: 'Length of each fruit\'s own stalk, from where the cluster fans out, relative to leaf length.', when: { key: 'fruit', not: ['None'] } },
       { key: 'fruitHang', label: 'Hang °', value: 60, min: 0, max: 180, step: 1, uniform: false, desc: 'Angle between the stem (toward its tip) and the middle of each cluster: 0 points along the stem, 180 hangs back down it.', when: { key: 'fruit', not: ['None'] } },
-      { key: 'fruitSpread', label: 'Spread °', value: 40, min: 0, max: 180, step: 1, uniform: false, desc: 'How wide each cluster fans.', when: { key: 'fruit', not: ['None'] } },
+      { key: 'fruitSpread', label: 'Spread °', value: 40, min: 0, max: 180, step: 1, uniform: false, desc: 'How wide each cluster fans: across a fan or a corymb\'s rays, or between the stalks either side of a raceme.', when: { key: 'fruit', not: ['None'] } },
+      { key: 'fruitCurve', label: 'Curve', value: 0, min: -1.5, max: 1.5, step: 0.01, uniform: false, desc: 'How much a raceme\'s axis curves (a hanging chain), and keys and pods with it.', when: { key: 'fruit', not: ['None'] } },
       { key: 'fruitAsym', label: 'Key wing', value: 1, min: 0, max: 1, step: 0.01, uniform: false, desc: 'A key\'s wing on both sides of the seed (0, ash) or off one side (1, sycamore and maples).', when: { key: 'fruit', is: ['Key'] } },
       { key: 'fruitSeeds', label: 'Pod seeds', value: 5, min: 1, max: 10, step: 1, uniform: false, desc: 'Seeds bulging along each pod.', when: { key: 'fruit', is: ['Pod'] } },
       { key: 'fruitCup', label: 'Cup', value: 0.45, min: 0, max: 1, step: 0.01, uniform: false, desc: 'How far the cup comes up the nut (0 = none), in bud colours.', when: { key: 'fruit', is: ['Nut'] } },
       { key: 'fruitSpines', label: 'Spines', value: 0.4, min: 0, max: 1, step: 0.01, uniform: false, desc: 'Length of a burr\'s spines.', when: { key: 'fruit', is: ['Burr'] } },
       { key: 'fruitSpineCount', label: 'Spine count', value: 24, min: 6, max: 40, step: 1, uniform: false, desc: 'Spines round each burr.', when: { key: 'fruitSpines', not: [0] } },
-      { key: 'fruitGloss', label: 'Gloss', value: 0.4, min: 0, max: 1, step: 0.01, desc: 'Size of the highlight on each fruit\'s lit side: a crisp-edged patch left unpainted, as in watercolour (0 = none).', when: { key: 'fruit', not: ['None'] } },
+      { key: 'fruitCut', label: 'Cut open', type: 'bool', value: false, uniform: false, desc: 'Show each burr sliced flat through its middle: the cut face of the husk, and the nuts inside it, whole and shiny (Gloss).', when: { key: 'fruit', is: ['Burr'] } },
+      { key: 'fruitKernels', label: 'Nuts inside', value: 1, min: 1, max: 4, step: 1, uniform: false, desc: 'Nuts in a cut burr: one round conker with its pale scar, or two or more packed like orange segments (beech, sweet chestnut).', when: { key: 'fruitCut', is: [true] } },
+      { key: 'fruitGloss', label: 'Gloss', value: 0.4, min: 0, max: 1, step: 0.01, desc: 'Size of the highlight on each fruit\'s lit side (on a burr, on its nuts): a crisp-edged patch left unpainted, as in watercolour (0 = none).', when: { key: 'fruit', not: ['None'] } },
       { key: 'fruitHighlight', label: 'Highlight', type: 'color', value: '#fffaf0', desc: 'Colour of the highlight: warm white, like paper left bare.', when: { key: 'fruitGloss', not: [0] } },
       { key: 'fruitHighlightOpacity', label: 'Opacity', value: 1, min: 0, max: 1, step: 0.01, desc: 'How strongly the highlight covers the wash and hatching: 1 = solid, lower lets the fruit\'s colour through.', when: { key: 'fruitGloss', not: [0] } },
+    ],
+  },
+  {
+    group: 'Flowers',
+    params: [
+      { key: 'flower', label: 'Flowers', type: 'select', options: ['None', 'Open', 'Cup', 'Pea', 'Catkin'], value: 'None', uniform: false, desc: 'Flowers on the sprig: open, seen face on (cherry, elder, rowan, lime, horse chestnut), a cup seen from the side (magnolia), a pea flower (laburnum, robinia), or a catkin (hazel, birch, alder, willow).' },
+      { key: 'flowerNodes', label: 'At nodes', value: 0, min: 0, max: 10, step: 1, uniform: false, desc: 'How many nodes, from the tip down, have a cluster in the axil (flowers come on the new growth).', when: { key: 'flower', not: ['None'] } },
+      { key: 'flowerTip', label: 'At tip', type: 'bool', value: true, uniform: false, desc: 'A cluster at the end of the sprig.', when: { key: 'flower', not: ['None'] } },
+      { key: 'flowerForm', label: 'Cluster', type: 'select', options: ['Fan', 'Raceme', 'Corymb'], value: 'Fan', uniform: false, desc: 'How each cluster is built: a fan from one point, a raceme of flowers in turn along an axis (chains, candles), or a corymb of rays branching to a flat top (elder, rowan).', when: { key: 'flower', not: ['None'] } },
+      { key: 'flowerAxis', label: 'Axis length', value: 0.5, min: 0, max: 2, step: 0.01, uniform: false, desc: 'Length of the raceme\'s axis, or of the corymb\'s rays, relative to leaf length.', when: { key: 'flowerForm', not: ['Fan'] } },
+      { key: 'flowerRays', label: 'Rays', value: 4, min: 1, max: 8, step: 1, uniform: false, desc: 'Rays the corymb branches into.', when: { key: 'flowerForm', is: ['Corymb'] } },
+      { key: 'flowerTaper', label: 'Tip taper', value: 0.4, min: 0, max: 1, step: 0.01, uniform: false, desc: 'How much smaller the flowers (and their stalks) get toward the raceme\'s tip, where they open last.', when: { key: 'flowerForm', is: ['Raceme'] } },
+      { key: 'flowerCount', label: 'Per cluster', value: 1, min: 1, max: 40, step: 1, uniform: false, desc: 'Flowers in each cluster.', when: { key: 'flower', not: ['None'] } },
+      { key: 'flowerSize', label: 'Flower size', value: 0.2, min: 0.01, max: 0.8, step: 0.005, uniform: false, desc: 'Across each flower (or a catkin\'s width), relative to leaf length.', when: { key: 'flower', not: ['None'] } },
+      { key: 'flowerLength', label: 'Flower length', value: 1, min: 0.3, max: 3, step: 0.01, uniform: false, desc: 'How long petals, cups and catkins are for their width: 1 is the type\'s natural shape.', when: { key: 'flower', not: ['None'] } },
+      { key: 'flowerPeduncle', label: 'Cluster stalk', value: 0, min: 0, max: 1, step: 0.01, uniform: false, desc: 'Length of the stalk the whole cluster hangs from, relative to leaf length.', when: { key: 'flower', not: ['None'] } },
+      { key: 'flowerBract', label: 'Bract', value: 0, min: 0, max: 1, step: 0.01, uniform: false, desc: 'A pale leafy strap along the cluster stalk, as on a lime (0 = none), in the bract colour.', when: { key: 'flowerPeduncle', not: [0] } },
+      { key: 'flowerStalk', label: 'Flower stalk', value: 0.1, min: 0, max: 1, step: 0.01, uniform: false, desc: 'Length of each flower\'s own stalk, relative to leaf length.', when: { key: 'flower', not: ['None'] } },
+      { key: 'flowerHang', label: 'Hang °', value: 20, min: 0, max: 180, step: 1, uniform: false, desc: 'Angle between the stem (toward its tip) and the middle of each cluster: 0 stands up along the stem (a candle), 180 hangs back down it (a chain).', when: { key: 'flower', not: ['None'] } },
+      { key: 'flowerSpread', label: 'Spread °', value: 40, min: 0, max: 180, step: 1, uniform: false, desc: 'How wide each cluster fans: across a fan or a corymb\'s rays, or between the stalks either side of a raceme.', when: { key: 'flower', not: ['None'] } },
+      { key: 'flowerCurve', label: 'Curve', value: 0, min: -1.5, max: 1.5, step: 0.01, uniform: false, desc: 'How much a raceme\'s axis curves (a hanging chain), and catkins with it.', when: { key: 'flower', not: ['None'] } },
+      { key: 'flowerPetals', label: 'Petals', value: 5, min: 3, max: 9, step: 1, uniform: false, desc: 'Petals on each open flower.', when: { key: 'flower', is: ['Open'] } },
+      { key: 'flowerNotch', label: 'Petal notch', value: 0, min: 0, max: 1, step: 0.01, uniform: false, desc: 'A notch cut into the end of each petal (cherry).', when: { key: 'flower', is: ['Open'] } },
+      { key: 'flowerStamens', label: 'Stamens', value: 0.5, min: 0, max: 1, step: 0.01, uniform: false, desc: 'Length of the ring of stamens in an open flower (0 = none); their anthers in the centre colour.', when: { key: 'flower', is: ['Open'] } },
+      { key: 'flowerFlare', label: 'Cup flare', value: 0.5, min: 0, max: 1, step: 0.01, uniform: false, desc: 'How far a cup flower\'s side petals open out.', when: { key: 'flower', is: ['Cup'] } },
     ],
   },
   {
@@ -160,6 +195,14 @@ const schema = [
       { key: 'budShade', label: 'Bud shade', type: 'color', value: '#030101', desc: 'The bud\'s shaded half.', when: { key: 'watercolour', is: [true] } },
       { key: 'fruitColour', label: 'Fruit', type: 'color', value: '#b8282a', desc: 'The fruit\'s wash.', when: { key: 'watercolour', is: [true] } },
       { key: 'fruitShade', label: 'Fruit shade', type: 'color', value: '#4a0a0c', desc: 'The fruit\'s shaded half.', when: { key: 'watercolour', is: [true] } },
+      { key: 'seedColour', label: 'Nut', type: 'color', value: '#7a3618', desc: 'The nuts in a cut burr.', when: { key: 'watercolour', is: [true] } },
+      { key: 'seedShade', label: 'Nut shade', type: 'color', value: '#2a0e06', desc: 'The nuts\' shaded half.', when: { key: 'watercolour', is: [true] } },
+      { key: 'seedScar', label: 'Nut scar', type: 'color', value: '#c9ad80', desc: 'The pale scar (hilum) on a single nut, where it was joined to the husk.', when: { key: 'watercolour', is: [true] } },
+      { key: 'fruitFlesh', label: 'Cut flesh', type: 'color', value: '#f2eedc', desc: 'The cut face of a burr\'s husk.', when: { key: 'watercolour', is: [true] } },
+      { key: 'flowerColour', label: 'Petals', type: 'color', value: '#f6f0f2', desc: 'The petals\' (or catkins\') wash.', when: { key: 'watercolour', is: [true] } },
+      { key: 'flowerShade', label: 'Petal shade', type: 'color', value: '#d8b8c4', desc: 'The petals\' shaded half.', when: { key: 'watercolour', is: [true] } },
+      { key: 'flowerCentre', label: 'Flower centre', type: 'color', value: '#c8a030', desc: 'The centre of an open flower, and its anthers\' wash.', when: { key: 'watercolour', is: [true] } },
+      { key: 'bractColour', label: 'Bract', type: 'color', value: '#cdd59c', desc: 'The pale wash of a cluster\'s bract (lime), shading toward the leaf shade.', when: { key: 'watercolour', is: [true] } },
       { key: 'stemWash', label: 'Stem wash', type: 'color', value: '#876a3b', desc: 'Stalk and stem.', when: { key: 'watercolour', is: [true] } },
       { key: 'shadeBlend', label: 'Shade softness', value: 0.58, min: 0.02, max: 1, step: 0.01, desc: 'How softly the shade colour bleeds across the midrib into the light half.' },
       { key: 'wobble', label: 'Wobble', value: 0.007, min: 0, max: 0.02, step: 0.0005, uniform: false, desc: 'Hand unevenness in the outline and veins, as a fraction of leaf length.' },
@@ -180,7 +223,7 @@ export default schema;
 // side of the hue wheel. The
 // rest of Finish (outline, shading, wash) is left as it is. Alphabetical, as the menu shows them.
 
-const SHAPE_GROUPS = ['Leaf', 'Lobes', 'Margin', 'Veins', 'Stalk', 'Stem', 'Fruit'];
+const SHAPE_GROUPS = ['Leaf', 'Lobes', 'Margin', 'Veins', 'Stalk', 'Stem', 'Fruit', 'Flowers'];
 const NOT_SHAPE = ['scale', 'morph'];
 const base = {};
 for (const g of schema) {
@@ -191,8 +234,8 @@ const species = (values) => ({ ...base, ...values });
 
 export const presets = {
   // Alder (Alnus glutinosa): rounded and broadest near the top, the tip dented in, doubly
-  // toothed; leaves in three ranks, and a purple bud held up on its own short stalk. Dark
-  // glossy green on pale shell-pink paper.
+  // toothed; leaves in three ranks, a purple bud held up on its own short stalk, and long
+  // purple-brown catkins hanging at the tip. Dark glossy green on pale shell-pink paper.
   Alder: species({
     compound: 'Simple',
     outline: 'Obovate', width: 1.15, base: 'Cuneate', apex: 'Notched', bend: 0.05, sCurve: 0.05,
@@ -205,8 +248,11 @@ export const presets = {
     insertion: 55, tipInsertion: 40, sizeGradient: 0.25, stemWidth: 0.011, stemTaper: 0.45,
     stemCurve: 0.2, stemDroop: 0, zigzag: 10, stemTexture: 0.3, stemShading: 0.35, stemFade: 0.2,
     terminal: 'Bud', budType: 'Pointed', budStem: 0.1, budSize: 0.1, leafVariety: 0.25,
+    flower: 'Catkin', flowerTip: true, flowerCount: 3, flowerSize: 0.06, flowerLength: 1.5, flowerStalk: 0.06,
+    flowerHang: 150, flowerSpread: 40, flowerCurve: 0.5,
     paper: '#f9efef', leafWash: '#4c7a3a', leafShade: '#203f22',
     stemWash: '#6a4a40', budColour: '#6a3a4a', budShade: '#2a1420',
+    flowerColour: '#9a5a4a', flowerShade: '#3a2018',
   }),
   // Crab apple (Malus sylvestris): oval, finely round-toothed and drawn to a short point on a
   // longish stalk, crowded on spurs; little sour apples, yellow-green blushed red, hang in
@@ -223,9 +269,11 @@ export const presets = {
     insertion: 55, tipInsertion: 40, sizeGradient: 0.15, stemWidth: 0.016, stemTaper: 0.4,
     stemCurve: 0.2, stemDroop: 0.05, zigzag: 10, stemTexture: 0.35, stemShading: 0.4, stemFade: 0.2,
     terminal: 'Bud', budType: 'Plump', budStem: 0.03, budSize: 0.06, leafVariety: 0.25,
-    fruit: 'Drupe', fruitNodes: 2, fruitCount: 3, fruitSize: 0.22, fruitStalk: 0.35, fruitHang: 130, fruitSpread: 45, fruitGloss: 0.5,
+    fruit: 'Drupe', fruitNodes: 2, fruitCount: 3, fruitSize: 0.22, fruitStalk: 0.35, fruitHang: 130,
+    fruitSpread: 45, fruitGloss: 0.5,
     paper: '#f3eff9', leafWash: '#6a9a4a', leafShade: '#2e5a2e',
-    stemWash: '#7a4a3a', budColour: '#7a4a3a', budShade: '#2e1810', fruitColour: '#cfc458', fruitShade: '#b8402a',
+    stemWash: '#7a4a3a', budColour: '#7a4a3a', budShade: '#2e1810', fruitColour: '#cfc458',
+    fruitShade: '#b8402a',
   }),
   // Ash (Fraxinus excelsior): pinnate, eleven finely toothed lanceolate leaflets, in
   // opposite pairs that turn 90° at each node on a smooth, stout grey twig, ending in the
@@ -243,9 +291,11 @@ export const presets = {
     insertion: 50, tipInsertion: 32, sizeGradient: 0.15, stemWidth: 0.012, stemTaper: 0.3,
     stemCurve: 0.15, stemDroop: 0, zigzag: 0, stemTexture: 0.15, stemShading: 0.35, stemFade: 0.2,
     terminal: 'Bud', budType: 'Scaled', budStem: 0.03, budSize: 0.055, leafVariety: 0.2,
-    fruit: 'Key', fruitNodes: 0, fruitTip: true, fruitCount: 5, fruitSize: 0.09, fruitPeduncle: 0.12, fruitStalk: 0.12, fruitHang: 170, fruitSpread: 40, fruitAsym: 0, fruitGloss: 0,
+    fruit: 'Key', fruitNodes: 0, fruitTip: true, fruitCount: 5, fruitSize: 0.09, fruitPeduncle: 0.12,
+    fruitStalk: 0.12, fruitHang: 170, fruitSpread: 40, fruitAsym: 0, fruitGloss: 0,
     paper: '#f4eff8', leafWash: '#98bc62', leafShade: '#3f6336',
-    stemWash: '#8e9183', budColour: '#211f1c', budShade: '#080808', fruitColour: '#a8a050', fruitShade: '#585a24',
+    stemWash: '#8e9183', budColour: '#211f1c', budShade: '#080808', fruitColour: '#a8a050',
+    fruitShade: '#585a24',
   }),
   // Aspen (Populus tremula): nearly round with big blunt teeth, on a long stalk flattened
   // sideways (which is why it trembles). In autumn colour: gold washing to scarlet on the
@@ -281,13 +331,17 @@ export const presets = {
     insertion: 58, tipInsertion: 38, sizeGradient: 0.2, stemWidth: 0.01, stemTaper: 0.5,
     stemCurve: 0.15, stemDroop: 0.05, zigzag: 18, stemTexture: 0.2, stemShading: 0.35, stemFade: 0.2,
     terminal: 'Bud', budType: 'Pointed', budStem: 0.03, budSize: 0.22, leafVariety: 0.25,
-    fruit: 'Burr', fruitNodes: 2, fruitCount: 1, fruitSize: 0.2, fruitStalk: 0.25, fruitHang: 120, fruitSpread: 0, fruitSpines: 0.3, fruitSpineCount: 30, fruitGloss: 0,
+    fruit: 'Burr', fruitNodes: 2, fruitCount: 1, fruitSize: 0.2, fruitStalk: 0.3, fruitHang: 40,
+    fruitSpread: 0, fruitSpines: 0.3, fruitSpineCount: 30, fruitGloss: 0.35,
+    fruitCut: true, fruitKernels: 2,
     paper: '#ecf2f6', leafWash: '#c8783a', leafShade: '#8a4220',
-    stemWash: '#6b4a3a', budColour: '#a8683a', budShade: '#4a2a16', fruitColour: '#8a6438', fruitShade: '#3a2610',
+    stemWash: '#6b4a3a', budColour: '#a8683a', budShade: '#4a2a16', fruitColour: '#8a6438',
+    fruitShade: '#3a2610',
+    seedColour: '#8a5a30', seedShade: '#3a2210', fruitFlesh: '#efe6cc',
   }),
   // Silver birch (Betula pendula): small, triangular and doubly toothed on long thin stalks,
-  // hanging from fine dark red-brown twigs that droop at the tips. Bright yellow-green on
-  // pale periwinkle paper.
+  // hanging from fine dark red-brown twigs that droop at the tips, with a pair of brown
+  // catkins at the end. Bright yellow-green on pale periwinkle paper.
   'Birch, Silver': species({
     compound: 'Simple',
     outline: 'Ovate', width: 1.15, base: 'Truncate', apex: 'Acuminate', bend: 0.1, sCurve: 0.1,
@@ -300,8 +354,11 @@ export const presets = {
     insertion: 55, tipInsertion: 35, sizeGradient: 0.35, stemWidth: 0.006, stemTaper: 0.6,
     stemCurve: 0.4, stemDroop: 0.6, zigzag: 15, stemTexture: 0.15, stemShading: 0.3, stemFade: 0.2,
     terminal: 'Bud', budType: 'Pointed', budStem: 0.03, budSize: 0.06, leafVariety: 0.25,
+    flower: 'Catkin', flowerTip: true, flowerCount: 2, flowerSize: 0.08, flowerLength: 1.7, flowerStalk: 0.08,
+    flowerHang: 160, flowerSpread: 30, flowerCurve: 0.4,
     paper: '#eff0f9', leafWash: '#8bab4a', leafShade: '#3d5e2a',
     stemWash: '#5a3a30', budColour: '#4f3628', budShade: '#1f140e',
+    flowerColour: '#a89058', flowerShade: '#5a4a28',
   }),
   // Box (Buxus sempervirens): tiny, glossy ovals with a dented tip, packed in opposite pairs
   // along a green twig. Dark glossy green on blush paper.
@@ -320,11 +377,10 @@ export const presets = {
     paper: '#f8eef2', leafWash: '#3e6a34', leafShade: '#18301a',
     stemWash: '#7a8a4a', budColour: '#6a7a3a', budShade: '#2a3018',
   }),
-  // Wild cherry (Prunus avium): drooping, broadest above the middle, toothed, drawn out to a
-  // point on a long stalk; leaves crowded on short spurs of glossy red-brown bark round a
-  // cluster of shiny buds, cherries dangling in pairs on long stalks. In autumn: orange-scarlet
-  // washing to crimson, on pale celadon paper.
-  Cherry: species({
+  // Japanese cherry (Prunus serrulata): toothed, drawn out to a long fine point, opening bronze
+  // and greening, crowded on spurs; in spring, clusters of three or four pink-flushed blossoms
+  // with notched petals hang on long stalks among them. Fresh bronze-green on pale celadon paper.
+  'Cherry, Japanese': species({
     compound: 'Simple',
     outline: 'Obovate', width: 0.9, base: 'Rounded', apex: 'Acuminate', bend: 0.15, sCurve: 0.1,
     lobing: 'Unlobed',
@@ -336,14 +392,41 @@ export const presets = {
     insertion: 50, tipInsertion: 35, sizeGradient: 0.1, stemWidth: 0.016, stemTaper: 0.35,
     stemCurve: 0.15, stemDroop: 0, zigzag: 5, stemTexture: 0.3, stemShading: 0.4, stemFade: 0.2,
     terminal: 'Bud', budType: 'Cluster', budStem: 0.03, budSize: 0.08, leafVariety: 0.25,
-    fruit: 'Drupe', fruitNodes: 3, fruitCount: 2, fruitSize: 0.17, fruitStalk: 0.45, fruitHang: 140, fruitSpread: 25, fruitGloss: 0.7,
+    fruit: 'None', fruitNodes: 3, fruitCount: 2, fruitSize: 0.17, fruitStalk: 0.45, fruitHang: 140,
+    fruitSpread: 25, fruitGloss: 0.7,
+    flower: 'Open', flowerNodes: 2, flowerTip: true, flowerCount: 4, flowerSize: 0.22, flowerStalk: 0.35,
+    flowerHang: 60, flowerSpread: 80, flowerNotch: 0.6, flowerStamens: 0.6,
+    paper: '#ecf5ef', leafWash: '#86a052', leafShade: '#4a5a2c',
+    stemWash: '#7a3a32', budColour: '#8a3a28', budShade: '#36120a', fruitColour: '#b01828',
+    fruitShade: '#3a0410',
+    flowerColour: '#fbeef2', flowerShade: '#e8a6bc', flowerCentre: '#d8a838',
+  }),
+  // Wild cherry (Prunus avium): drooping, broadest above the middle, toothed, drawn out to a
+  // point on a long stalk; leaves crowded on short spurs of glossy red-brown bark round a
+  // cluster of shiny buds, cherries dangling in pairs on long stalks. In autumn: orange-scarlet
+  // washing to crimson, on pale celadon paper.
+  'Cherry, Wild': species({
+    compound: 'Simple',
+    outline: 'Obovate', width: 0.9, base: 'Rounded', apex: 'Acuminate', bend: 0.15, sCurve: 0.1,
+    lobing: 'Unlobed',
+    margin: 'Serrate', teeth: 30, toothDepth: 0.015,
+    venation: 'Pinnate', veinCount: 10, veinAngle: 45, veinCurve: 0.3, veinlets: 4,
+    veinWeight: 0.005, midribWeight: 0.012,
+    petioleLength: 0.3, petioleFlat: 0, petioleWing: 0, stipules: 0,
+    arrangement: 'Alternate', nodes: 3, divergence: 144, internode: 0.2, internodeTaper: 0.3, bareStem: 0.45,
+    insertion: 50, tipInsertion: 35, sizeGradient: 0.1, stemWidth: 0.016, stemTaper: 0.35,
+    stemCurve: 0.15, stemDroop: 0, zigzag: 5, stemTexture: 0.3, stemShading: 0.4, stemFade: 0.2,
+    terminal: 'Bud', budType: 'Cluster', budStem: 0.03, budSize: 0.08, leafVariety: 0.25,
+    fruit: 'Drupe', fruitNodes: 3, fruitCount: 2, fruitSize: 0.17, fruitStalk: 0.45, fruitHang: 140,
+    fruitSpread: 25, fruitGloss: 0.7,
     paper: '#ecf5ef', leafWash: '#e0602e', leafShade: '#9e1f2e',
-    stemWash: '#7a3a32', budColour: '#8a3a28', budShade: '#36120a', fruitColour: '#b01828', fruitShade: '#3a0410',
+    stemWash: '#7a3a32', budColour: '#8a3a28', budShade: '#36120a', fruitColour: '#b01828',
+    fruitShade: '#3a0410',
   }),
   // Horse chestnut (Aesculus hippocastanum): a hand of seven big leaflets, broadest near their
   // tips and doubly toothed, on a long stalk; opposite pairs on a stout twig ending in the huge,
-  // sticky, glossy dark red-brown bud; pale green conker cases with stout spines. Deep green
-  // on rose paper.
+  // sticky, glossy dark red-brown bud; a candle of white, red-eyed flowers standing at the tip,
+  // and pale green conker cases with stout spines hanging lower down. Deep green on rose paper.
   'Chestnut, Horse': species({
     compound: 'Palmate', leaflets: 7, leafletAngle: 55,
     outline: 'Obovate', width: 0.9, base: 'Cuneate', apex: 'Acuminate', bend: 0.05, sCurve: 0.05,
@@ -356,9 +439,17 @@ export const presets = {
     insertion: 35, tipInsertion: 25, sizeGradient: 0.1, stemWidth: 0.025, stemTaper: 0.3,
     stemCurve: 0.1, stemDroop: 0, zigzag: 0, stemTexture: 0.3, stemShading: 0.4, stemFade: 0.2,
     terminal: 'Bud', budType: 'Scaled', budStem: 0.02, budSize: 0.2, leafVariety: 0.15,
-    fruit: 'Burr', fruitNodes: 0, fruitTip: true, fruitCount: 2, fruitSize: 0.4, fruitStalk: 0.15, fruitHang: 0, fruitSpread: 60, fruitSpines: 0.45, fruitSpineCount: 16, fruitGloss: 0.15,
+    fruit: 'Burr', fruitNodes: 1, fruitTip: false, fruitCount: 2, fruitSize: 0.4, fruitStalk: 0.15,
+    fruitHang: 150, fruitSpread: 60, fruitSpines: 0.45, fruitSpineCount: 16, fruitGloss: 0.6,
+    flower: 'Open', flowerTip: true, flowerForm: 'Raceme', flowerAxis: 1.0, flowerCount: 30, flowerSize: 0.16,
+    flowerStalk: 0.1, flowerTaper: 0.75, flowerSpread: 150, flowerHang: 0, flowerPeduncle: 0.23,
+    flowerStamens: 0.6,
+    fruitCut: true, fruitKernels: 1,
     paper: '#f8eef4', leafWash: '#4f8040', leafShade: '#1e3e22',
-    stemWash: '#8a6a4a', budColour: '#6a2a1a', budShade: '#2a0c06', fruitColour: '#b4c070', fruitShade: '#56682c',
+    stemWash: '#8a6a4a', budColour: '#6a2a1a', budShade: '#2a0c06', fruitColour: '#b4c070',
+    fruitShade: '#56682c',
+    flowerColour: '#f8f4ee', flowerShade: '#e0c0c8', flowerCentre: '#d8402a',
+    seedColour: '#8a3c18', seedShade: '#2e0e04', fruitFlesh: '#f2eedc',
   }),
   // Sweet chestnut (Castanea sativa): long, narrow and glossy, every one of its many straight
   // veins ending in a bristle-tipped tooth; spiralled round a stout olive twig, plump red bud,
@@ -375,12 +466,17 @@ export const presets = {
     insertion: 55, tipInsertion: 35, sizeGradient: 0.2, stemWidth: 0.014, stemTaper: 0.45,
     stemCurve: 0.2, stemDroop: 0.05, zigzag: 10, stemTexture: 0.35, stemShading: 0.4, stemFade: 0.2,
     terminal: 'Bud', budType: 'Plump', budStem: 0.03, budSize: 0.07, leafVariety: 0.2,
-    fruit: 'Burr', fruitNodes: 0, fruitTip: true, fruitCount: 2, fruitSize: 0.25, fruitStalk: 0.08, fruitHang: 20, fruitSpread: 60, fruitSpines: 0.9, fruitSpineCount: 40, fruitGloss: 0,
+    fruit: 'Burr', fruitNodes: 0, fruitTip: true, fruitCount: 2, fruitSize: 0.25, fruitStalk: 0.08,
+    fruitHang: 20, fruitSpread: 60, fruitSpines: 0.9, fruitSpineCount: 40, fruitGloss: 0.45,
+    fruitCut: true, fruitKernels: 3,
     paper: '#f2eef8', leafWash: '#5c8a3c', leafShade: '#27471f',
-    stemWash: '#7a5a3c', budColour: '#8c3f2a', budShade: '#3a160e', fruitColour: '#a8b050', fruitShade: '#4a5a22',
+    stemWash: '#7a5a3c', budColour: '#8c3f2a', budShade: '#3a160e', fruitColour: '#a8b050',
+    fruitShade: '#4a5a22',
+    seedColour: '#8c4a22', seedShade: '#341608', fruitFlesh: '#f0ead2',
   }),
   // Dogwood (Cornus sanguinea): smooth ovals whose few veins arch round to meet at the tip, in
-  // opposite pairs on a blood-red twig. Mid-green on pale celadon paper, to set off the red.
+  // opposite pairs on a blood-red twig, ending in a flat head of black berries. Mid-green on
+  // pale celadon paper, to set off the red.
   Dogwood: species({
     compound: 'Simple',
     outline: 'Ovate', width: 0.9, base: 'Rounded', apex: 'Acuminate', bend: 0.1, sCurve: 0.05,
@@ -393,11 +489,17 @@ export const presets = {
     insertion: 50, tipInsertion: 35, sizeGradient: 0.2, stemWidth: 0.011, stemTaper: 0.45,
     stemCurve: 0.1, stemDroop: 0, zigzag: 0, stemTexture: 0.1, stemShading: 0.4, stemFade: 0.2,
     terminal: 'Bud', budType: 'Pointed', budStem: 0.03, budSize: 0.05, leafVariety: 0.2,
+    fruit: 'Berry', fruitTip: true, fruitNodes: 0, fruitForm: 'Corymb', fruitRays: 4, fruitAxis: 0.2,
+    fruitCount: 14, fruitSize: 0.07, fruitStalk: 0.07, fruitPeduncle: 0.45, fruitSpread: 100, fruitHang: 10,
+    fruitGloss: 0.5,
     paper: '#eef5f0', leafWash: '#6a9448', leafShade: '#2c4a2a',
     stemWash: '#9a2a24', budColour: '#8a3a2a', budShade: '#3a1208',
+    fruitColour: '#2a2438', fruitShade: '#08060e',
   }),
   // Elder (Sambucus nigra): five or seven pointed, toothed leaflets, in opposite pairs on a
-  // stout grey twig rough with corky warts; purplish scaled bud. Deep green on rose paper.
+  // stout grey twig rough with corky warts; purplish scaled bud. A flat-topped head of cream
+  // elderflower at the tip and, lower down, a drooping head of black berries, as a botanical
+  // plate shows both seasons. Deep green on rose paper.
   Elder: species({
     compound: 'Pinnate', leaflets: 7, leafletAngle: 60,
     outline: 'Elliptic', width: 0.75, base: 'Cuneate', apex: 'Acuminate', bend: 0.08, sCurve: 0.05,
@@ -410,8 +512,15 @@ export const presets = {
     insertion: 50, tipInsertion: 35, sizeGradient: 0.15, stemWidth: 0.018, stemTaper: 0.3,
     stemCurve: 0.1, stemDroop: 0, zigzag: 0, stemTexture: 0.7, stemShading: 0.4, stemFade: 0.2,
     terminal: 'Bud', budType: 'Scaled', budStem: 0.03, budSize: 0.07, leafVariety: 0.2,
+    flower: 'Open', flowerTip: true, flowerForm: 'Corymb', flowerRays: 6, flowerAxis: 0.3, flowerCount: 40,
+    flowerSize: 0.09, flowerStalk: 0.1, flowerSpread: 80, flowerHang: 0, flowerPeduncle: 0.25,
+    flowerStamens: 0.6, fruit: 'Berry', fruitNodes: 1, fruitForm: 'Corymb', fruitRays: 5, fruitAxis: 0.25,
+    fruitCount: 30, fruitSize: 0.05, fruitStalk: 0.07, fruitPeduncle: 0.2, fruitHang: 150, fruitSpread: 90,
+    fruitGloss: 0.5,
     paper: '#f8eef3', leafWash: '#5a8a40', leafShade: '#24461f',
     stemWash: '#8a8070', budColour: '#6a3a4a', budShade: '#2a1420',
+    flowerColour: '#f4eedc', flowerShade: '#d8d0a8', flowerCentre: '#d8c070', fruitColour: '#3a2040',
+    fruitShade: '#0e0612',
   }),
   // Elm (Ulmus): the lopsided base is the giveaway; doubly toothed, a dozen or more straight
   // parallel veins running out into the teeth, on a very short stalk; two-ranked on a
@@ -449,8 +558,9 @@ export const presets = {
     stemWash: '#a0704a', budColour: '#8a9a8a', budShade: '#3a4a40',
   }),
   // Hazel (Corylus avellana): almost round, soft and hairy, heart-shaped at the base with a
-  // short sudden point, doubly toothed; zigzag twig, plump green-brown bud, nuts in their
-  // deep frilled husks. Mid-green on blush paper.
+  // short sudden point, doubly toothed; zigzag twig, plump green-brown bud, yellow lamb's-tail
+  // catkins hanging near the tip, nuts in their deep frilled husks lower down. Mid-green on
+  // blush paper.
   Hazel: species({
     compound: 'Simple',
     outline: 'Orbicular', width: 1, base: 'Cordate', apex: 'Acuminate', bend: 0.1, sCurve: 0.05,
@@ -463,9 +573,14 @@ export const presets = {
     insertion: 65, tipInsertion: 45, sizeGradient: 0.25, stemWidth: 0.01, stemTaper: 0.5,
     stemCurve: 0.2, stemDroop: 0.05, zigzag: 28, stemTexture: 0.3, stemShading: 0.35, stemFade: 0.2,
     terminal: 'Bud', budType: 'Plump', budStem: 0.03, budSize: 0.07, leafVariety: 0.3,
-    fruit: 'Nut', fruitNodes: 2, fruitCount: 3, fruitSize: 0.16, fruitStalk: 0.08, fruitHang: 70, fruitSpread: 60, fruitCup: 0.95, fruitGloss: 0.2,
+    fruit: 'Nut', fruitNodes: 2, fruitCount: 3, fruitSize: 0.16, fruitStalk: 0.08, fruitHang: 70,
+    fruitSpread: 60, fruitCup: 0.95, fruitGloss: 0.2,
+    flower: 'Catkin', flowerTip: false, flowerNodes: 1, flowerCount: 3, flowerSize: 0.07, flowerLength: 1.6,
+    flowerStalk: 0.05, flowerHang: 170, flowerSpread: 40, flowerCurve: 0.6,
     paper: '#f8eff3', leafWash: '#6b9a4c', leafShade: '#2f5530',
-    stemWash: '#8a6a4a', budColour: '#6e7a3a', budShade: '#2e3418', fruitColour: '#a07a40', fruitShade: '#4a3218',
+    stemWash: '#8a6a4a', budColour: '#6e7a3a', budShade: '#2e3418', fruitColour: '#a07a40',
+    fruitShade: '#4a3218',
+    flowerColour: '#e0c860', flowerShade: '#9a8030',
   }),
   // Holly (Ilex aquifolium): thick, glossy and wavy, its edge running out into sharp spines;
   // short-stalked on a green twig, glossy red berries bunched in the axils. Near-black green
@@ -482,13 +597,15 @@ export const presets = {
     insertion: 55, tipInsertion: 40, sizeGradient: 0.2, stemWidth: 0.012, stemTaper: 0.45,
     stemCurve: 0.15, stemDroop: 0, zigzag: 6, stemTexture: 0.1, stemShading: 0.35, stemFade: 0.2,
     terminal: 'Bud', budType: 'Pointed', budStem: 0.03, budSize: 0.04, leafVariety: 0.25,
-    fruit: 'Berry', fruitNodes: 3, fruitCount: 3, fruitSize: 0.12, fruitStalk: 0.08, fruitHang: 70, fruitSpread: 70, fruitGloss: 0.6,
+    fruit: 'Berry', fruitNodes: 3, fruitCount: 3, fruitSize: 0.12, fruitStalk: 0.08, fruitHang: 70,
+    fruitSpread: 70, fruitGloss: 0.6,
     paper: '#faeef0', leafWash: '#2f5a32', leafShade: '#122a18',
-    stemWash: '#4a6a3a', budColour: '#4a6a3a', budShade: '#1a2a14', fruitColour: '#c4202a', fruitShade: '#5a0610',
+    stemWash: '#4a6a3a', budColour: '#4a6a3a', budShade: '#1a2a14', fruitColour: '#c4202a',
+    fruitShade: '#5a0610',
   }),
   // Laburnum (Laburnum anagyroides): three smooth oval leaflets on a long stalk, crowded on
-  // short spurs of a green-grey twig; silky silver bud, and dry pods hanging in threes.
-  // Grey-green on pale peach paper.
+  // short spurs of a green-grey twig; a long hanging chain of yellow pea flowers, and dry pods
+  // hanging along a short stalk. Grey-green on pale peach paper.
   Laburnum: species({
     compound: 'Trifoliate', leafletAngle: 50,
     outline: 'Elliptic', width: 0.9, base: 'Cuneate', apex: 'Acute', bend: 0.05, sCurve: 0.02,
@@ -501,12 +618,19 @@ export const presets = {
     insertion: 50, tipInsertion: 35, sizeGradient: 0.15, stemWidth: 0.011, stemTaper: 0.4,
     stemCurve: 0.15, stemDroop: 0.05, zigzag: 8, stemTexture: 0.15, stemShading: 0.35, stemFade: 0.2,
     terminal: 'Bud', budType: 'Pointed', budStem: 0.03, budSize: 0.06, leafVariety: 0.2,
-    fruit: 'Pod', fruitNodes: 2, fruitCount: 3, fruitSize: 0.11, fruitStalk: 0.1, fruitHang: 150, fruitSpread: 30, fruitSeeds: 5, fruitGloss: 0,
+    fruit: 'Pod', fruitNodes: 1, fruitCount: 4, fruitSize: 0.11, fruitStalk: 0.1, fruitHang: 150,
+    fruitSpread: 30, fruitSeeds: 5, fruitGloss: 0,
+    flower: 'Pea', flowerTip: true, flowerForm: 'Raceme', flowerHang: 170, flowerAxis: 0.9, flowerCount: 20,
+    flowerSize: 0.09, flowerStalk: 0.05, flowerTaper: 0.4, flowerCurve: 0.4, fruitForm: 'Raceme',
+    fruitAxis: 0.3, fruitTaper: 0.2,
     paper: '#faefe9', leafWash: '#7a9a60', leafShade: '#3a5434',
-    stemWash: '#6a8a5a', budColour: '#9a9a8a', budShade: '#3a3a30', fruitColour: '#a8a070', fruitShade: '#5a5034',
+    stemWash: '#6a8a5a', budColour: '#9a9a8a', budShade: '#3a3a30', fruitColour: '#a8a070',
+    fruitShade: '#5a5034',
+    flowerColour: '#f2d23a', flowerShade: '#c8961a',
   }),
   // Lime (Tilia × europaea): heart-shaped and lopsided, finely toothed, drawn to a point, on a
-  // longish stalk; a zigzag red twig with fat, shiny red buds. Fresh green on lilac paper.
+  // longish stalk; a zigzag red twig with fat, shiny red buds; little cream flowers hanging
+  // from a pale strap of a bract. Fresh green on lilac paper.
   Lime: species({
     compound: 'Simple',
     outline: 'Cordate', width: 1, base: 'Cordate', apex: 'Acuminate', bend: 0.1, sCurve: 0.1,
@@ -519,11 +643,15 @@ export const presets = {
     insertion: 60, tipInsertion: 40, sizeGradient: 0.25, stemWidth: 0.011, stemTaper: 0.45,
     stemCurve: 0.2, stemDroop: 0.05, zigzag: 30, stemTexture: 0.15, stemShading: 0.35, stemFade: 0.2,
     terminal: 'Bud', budType: 'Plump', budStem: 0.03, budSize: 0.07, leafVariety: 0.25,
+    flower: 'Open', flowerTip: false, flowerNodes: 2, flowerCount: 5, flowerPeduncle: 0.5, flowerBract: 0.8,
+    flowerStalk: 0.12, flowerHang: 150, flowerSpread: 70, flowerSize: 0.1, flowerStamens: 1,
     paper: '#f4eff9', leafWash: '#7aa04e', leafShade: '#355a2c',
     stemWash: '#7a3a2a', budColour: '#b0402a', budShade: '#4a1208',
+    flowerColour: '#f2eab0', flowerShade: '#c8b860', flowerCentre: '#e0c860', bractColour: '#d4dca0',
   }),
   // Magnolia (Magnolia × soulangeana): big, smooth and broadest near the tip, crowded at the
-  // end of a stout twig behind a huge bud in grey fur. Mid-green on lavender paper.
+  // end of a stout twig, which ends in a big pink-flushed cup of a flower. Mid-green on
+  // lavender paper.
   Magnolia: species({
     compound: 'Simple',
     outline: 'Obovate', width: 0.9, base: 'Cuneate', apex: 'Acute', bend: 0.1, sCurve: 0.05,
@@ -535,9 +663,11 @@ export const presets = {
     arrangement: 'Alternate', nodes: 3, divergence: 144, internode: 0.2, internodeTaper: 0.3, bareStem: 0.45,
     insertion: 45, tipInsertion: 30, sizeGradient: 0.1, stemWidth: 0.018, stemTaper: 0.35,
     stemCurve: 0.15, stemDroop: 0, zigzag: 5, stemTexture: 0.3, stemShading: 0.4, stemFade: 0.2,
-    terminal: 'Bud', budType: 'Pointed', budStem: 0.02, budSize: 0.32, leafVariety: 0.2,
+    terminal: 'Bare', budType: 'Pointed', budStem: 0.02, budSize: 0.32, leafVariety: 0.2,
+    flower: 'Cup', flowerTip: true, flowerSize: 0.45, flowerFlare: 0.6, flowerHang: 0, flowerStalk: 0.02,
     paper: '#f3eff9', leafWash: '#5f8a48', leafShade: '#2a4a2a',
     stemWash: '#6a5a48', budColour: '#8a8470', budShade: '#3a3628',
+    flowerColour: '#f6e8ee', flowerShade: '#c86a96',
   }),
   // Field maple (Acer campestre): small, with five rounded blunt lobes and no teeth, in
   // opposite pairs on a corky twig; its pair of keys spreads out flat. In autumn butter-yellow,
@@ -554,9 +684,11 @@ export const presets = {
     insertion: 55, tipInsertion: 40, sizeGradient: 0.2, stemWidth: 0.02, stemTaper: 0.4,
     stemCurve: 0.1, stemDroop: 0, zigzag: 0, stemTexture: 0.7, stemShading: 0.4, stemFade: 0.2,
     terminal: 'Bud', budType: 'Pointed', budStem: 0.03, budSize: 0.05, leafVariety: 0.25,
-    fruit: 'Key', fruitNodes: 1, fruitTip: false, fruitCount: 2, fruitSize: 0.22, fruitPeduncle: 0.4, fruitStalk: 0.02, fruitHang: 150, fruitSpread: 150, fruitAsym: 1, fruitGloss: 0,
+    fruit: 'Key', fruitNodes: 1, fruitTip: false, fruitCount: 2, fruitSize: 0.22, fruitPeduncle: 0.4,
+    fruitStalk: 0.02, fruitHang: 150, fruitSpread: 150, fruitAsym: 1, fruitGloss: 0,
     paper: '#eeeefa', leafWash: '#e8c23a', leafShade: '#d4902c',
-    stemWash: '#8a6a40', budColour: '#6a4a30', budShade: '#2a1a0e', fruitColour: '#c08a50', fruitShade: '#6a3a1c',
+    stemWash: '#8a6a40', budColour: '#6a4a30', budShade: '#2a1a0e', fruitColour: '#c08a50',
+    fruitShade: '#6a3a1c',
   }),
   // Norway maple (Acer platanoides): broad, five lobes drawn out into a few long fine points,
   // on a long stalk, in opposite pairs; red-brown scaled bud, a pair of keys spread wide.
@@ -573,9 +705,11 @@ export const presets = {
     insertion: 55, tipInsertion: 40, sizeGradient: 0.2, stemWidth: 0.015, stemTaper: 0.4,
     stemCurve: 0.1, stemDroop: 0, zigzag: 0, stemTexture: 0.2, stemShading: 0.35, stemFade: 0.2,
     terminal: 'Bud', budType: 'Scaled', budStem: 0.03, budSize: 0.09, leafVariety: 0.2,
-    fruit: 'Key', fruitNodes: 1, fruitTip: false, fruitCount: 2, fruitSize: 0.24, fruitPeduncle: 0.45, fruitStalk: 0.02, fruitHang: 150, fruitSpread: 120, fruitAsym: 1, fruitGloss: 0,
+    fruit: 'Key', fruitNodes: 1, fruitTip: false, fruitCount: 2, fruitSize: 0.24, fruitPeduncle: 0.45,
+    fruitStalk: 0.02, fruitHang: 150, fruitSpread: 120, fruitAsym: 1, fruitGloss: 0,
     paper: '#f9eef4', leafWash: '#5e9446', leafShade: '#24502a',
-    stemWash: '#7a5a40', budColour: '#9a3a2a', budShade: '#3a120a', fruitColour: '#a8a860', fruitShade: '#5a5a2a',
+    stemWash: '#7a5a40', budColour: '#9a3a2a', budShade: '#3a120a', fruitColour: '#a8a860',
+    fruitShade: '#5a5a2a',
   }),
   // English oak (Quercus robur): obovate, four or five pairs of round lobes, two little
   // ears at the base and almost no stalk; leaves bunched at the shoot tip around a cluster of
@@ -593,9 +727,11 @@ export const presets = {
     insertion: 72, tipInsertion: 42, sizeGradient: 0.05, stemWidth: 0.02, stemTaper: 0.35,
     stemCurve: 0.25, stemDroop: 0, zigzag: 8, stemTexture: 0.45, stemShading: 0.4, stemFade: 0.25,
     terminal: 'Bud', budType: 'Cluster', budStem: 0.03, budSize: 0.09, leafVariety: 0.4,
-    fruit: 'Nut', fruitNodes: 2, fruitCount: 2, fruitSize: 0.15, fruitLength: 1.25, fruitStalk: 0.35, fruitHang: 110, fruitSpread: 30, fruitCup: 0.45, fruitGloss: 0.3,
+    fruit: 'Nut', fruitNodes: 2, fruitCount: 2, fruitSize: 0.15, fruitLength: 1.25, fruitStalk: 0.35,
+    fruitHang: 110, fruitSpread: 30, fruitCup: 0.45, fruitGloss: 0.3,
     paper: '#e8f7ec', leafWash: '#8ba451', leafShade: '#37512a',
-    stemWash: '#7e684e', budColour: '#975f35', budShade: '#3d2314', fruitColour: '#a49a48', fruitShade: '#4e4a1c',
+    stemWash: '#7e684e', budColour: '#975f35', budShade: '#3d2314', fruitColour: '#a49a48',
+    fruitShade: '#4e4a1c',
   }),
   // Holm oak (Quercus ilex): an evergreen oak with leathery, holly-like leaves, dark and glossy,
   // narrowly oval, the edge running out into a few tiny spine-tipped points, grey-felted
@@ -612,13 +748,15 @@ export const presets = {
     insertion: 50, tipInsertion: 35, sizeGradient: 0.2, stemWidth: 0.013, stemTaper: 0.45,
     stemCurve: 0.2, stemDroop: 0, zigzag: 6, stemTexture: 0.35, stemShading: 0.4, stemFade: 0.2,
     terminal: 'Bud', budType: 'Cluster', budStem: 0.03, budSize: 0.05, leafVariety: 0.25,
-    fruit: 'Nut', fruitNodes: 3, fruitCount: 2, fruitSize: 0.15, fruitLength: 1.6, fruitStalk: 0.12, fruitHang: 80, fruitSpread: 85, fruitCup: 0.55, fruitGloss: 0.3,
+    fruit: 'Nut', fruitNodes: 3, fruitCount: 2, fruitSize: 0.15, fruitLength: 1.6, fruitStalk: 0.12,
+    fruitHang: 80, fruitSpread: 85, fruitCup: 0.55, fruitGloss: 0.3,
     paper: '#faf0ea', leafWash: '#3e5e3c', leafShade: '#1a2e1e',
-    stemWash: '#6a6a5a', budColour: '#7a6a50', budShade: '#30281a', fruitColour: '#8a7a3a', fruitShade: '#3e3416',
+    stemWash: '#6a6a5a', budColour: '#7a6a50', budShade: '#30281a', fruitColour: '#8a7a3a',
+    fruitShade: '#3e3416',
   }),
   // London plane (Platanus × hispanica): big, five sharp lobes and a few large teeth on a long
   // stalk, alternate (which tells it from a maple); pale olive twig, cone-shaped bud, bristly
-  // seed balls hanging on long threads. Mid-green on pale violet paper.
+  // seed balls strung along long hanging threads. Mid-green on pale violet paper.
   Plane: species({
     compound: 'Simple',
     outline: 'Orbicular', width: 1.25, base: 'Truncate', apex: 'Acuminate', bend: 0.05, sCurve: 0.05,
@@ -631,13 +769,17 @@ export const presets = {
     insertion: 60, tipInsertion: 40, sizeGradient: 0.25, stemWidth: 0.013, stemTaper: 0.45,
     stemCurve: 0.2, stemDroop: 0, zigzag: 20, stemTexture: 0.2, stemShading: 0.35, stemFade: 0.2,
     terminal: 'Bud', budType: 'Pointed', budStem: 0.03, budSize: 0.08, leafVariety: 0.25,
-    fruit: 'Burr', fruitNodes: 2, fruitCount: 1, fruitSize: 0.2, fruitStalk: 0.8, fruitHang: 150, fruitSpread: 0, fruitSpines: 0.15, fruitSpineCount: 40, fruitGloss: 0,
+    fruit: 'Burr', fruitNodes: 2, fruitCount: 3, fruitSize: 0.2, fruitStalk: 0, fruitHang: 150, fruitSpread: 0,
+    fruitSpines: 0.15, fruitSpineCount: 40, fruitGloss: 0,
+    fruitForm: 'Raceme', fruitPeduncle: 0.5, fruitAxis: 0.5, fruitTaper: 0.1,
     paper: '#f4eef9', leafWash: '#6c9446', leafShade: '#2e5028',
-    stemWash: '#8a7a5a', budColour: '#7a5a3a', budShade: '#2e1e10', fruitColour: '#8a6a40', fruitShade: '#3a2814',
+    stemWash: '#8a7a5a', budColour: '#7a5a3a', budShade: '#2e1e10', fruitColour: '#8a6a40',
+    fruitShade: '#3a2814',
   }),
   // False acacia (Robinia pseudoacacia): up to fifteen small, smooth oval leaflets, dented at
   // the tip, with a pair of spines (stipules) at each node of a zigzag twig; the buds hide
-  // under the leaf scars; flat red-brown pods. Bright yellow-green on pale violet paper.
+  // under the leaf scars; hanging chains of white pea flowers, and flat red-brown pods. Bright
+  // yellow-green on pale violet paper.
   Robinia: species({
     compound: 'Pinnate', leaflets: 15, leafletAngle: 70,
     outline: 'Elliptic', width: 1.1, base: 'Rounded', apex: 'Notched', bend: 0.05, sCurve: 0.02,
@@ -650,12 +792,19 @@ export const presets = {
     insertion: 50, tipInsertion: 35, sizeGradient: 0.1, stemWidth: 0.012, stemTaper: 0.35,
     stemCurve: 0.15, stemDroop: 0, zigzag: 20, stemTexture: 0.25, stemShading: 0.35, stemFade: 0.2,
     terminal: 'Bare', budType: 'Pointed', budStem: 0.03, budSize: 0.05, leafVariety: 0.2,
-    fruit: 'Pod', fruitNodes: 2, fruitCount: 2, fruitSize: 0.09, fruitStalk: 0.1, fruitHang: 150, fruitSpread: 25, fruitSeeds: 6, fruitGloss: 0.1,
+    fruit: 'Pod', fruitNodes: 2, fruitCount: 3, fruitSize: 0.09, fruitStalk: 0.1, fruitHang: 150,
+    fruitSpread: 25, fruitSeeds: 6, fruitGloss: 0.1,
+    flower: 'Pea', flowerTip: false, flowerNodes: 2, flowerForm: 'Raceme', flowerHang: 160, flowerAxis: 0.7,
+    flowerCount: 16, flowerSize: 0.08, flowerStalk: 0.05, flowerTaper: 0.4, flowerCurve: 0.3,
+    fruitForm: 'Raceme', fruitAxis: 0.25, fruitTaper: 0.1,
     paper: '#f3eef9', leafWash: '#88aa50', leafShade: '#3d5e2a',
-    stemWash: '#6a5a48', budColour: '#6a5a48', budShade: '#2a2018', fruitColour: '#8a5a3a', fruitShade: '#3a2014',
+    stemWash: '#6a5a48', budColour: '#6a5a48', budShade: '#2a2018', fruitColour: '#8a5a3a',
+    fruitShade: '#3a2014',
+    flowerColour: '#faf8f0', flowerShade: '#d8d0b0',
   }),
   // Rowan (Sorbus aucuparia): a long pinnate leaf of up to fifteen narrow, toothed leaflets,
-  // alternate on a grey-purple twig with a dark, hairy, purple bud. Fresh green on lilac paper.
+  // alternate on a grey-purple twig with a dark, hairy, purple bud; a domed head of
+  // orange-red berries at the tip. Fresh green on lilac paper.
   Rowan: species({
     compound: 'Pinnate', leaflets: 15, leafletAngle: 75,
     outline: 'Lanceolate', width: 0.7, base: 'Rounded', apex: 'Acute', bend: 0.08, sCurve: 0.05,
@@ -668,8 +817,12 @@ export const presets = {
     insertion: 45, tipInsertion: 35, sizeGradient: 0.1, stemWidth: 0.013, stemTaper: 0.35,
     stemCurve: 0.15, stemDroop: 0, zigzag: 5, stemTexture: 0.2, stemShading: 0.35, stemFade: 0.2,
     terminal: 'Bud', budType: 'Pointed', budStem: 0.03, budSize: 0.08, leafVariety: 0.2,
+    fruit: 'Berry', fruitTip: true, fruitNodes: 0, fruitForm: 'Corymb', fruitRays: 5, fruitAxis: 0.25,
+    fruitCount: 30, fruitSize: 0.075, fruitStalk: 0.06, fruitPeduncle: 0.15, fruitSpread: 100, fruitHang: 10,
+    fruitGloss: 0.4,
     paper: '#f2eff9', leafWash: '#6a9a4a', leafShade: '#2a502c',
     stemWash: '#6a5048', budColour: '#5a3a4a', budShade: '#24141e',
+    fruitColour: '#e8501a', fruitShade: '#8a1a0a',
   }),
   // Sycamore (Acer pseudoplatanus): five-lobed with coarse rounded teeth, on a long red stalk,
   // in opposite pairs that turn at each node; big green scaled bud, and a pair of winged keys
@@ -686,9 +839,11 @@ export const presets = {
     insertion: 55, tipInsertion: 40, sizeGradient: 0.2, stemWidth: 0.016, stemTaper: 0.4,
     stemCurve: 0.1, stemDroop: 0, zigzag: 0, stemTexture: 0.2, stemShading: 0.35, stemFade: 0.2,
     terminal: 'Bud', budType: 'Scaled', budStem: 0.03, budSize: 0.1, leafVariety: 0.2,
-    fruit: 'Key', fruitNodes: 0, fruitTip: true, fruitCount: 2, fruitSize: 0.26, fruitPeduncle: 0.5, fruitStalk: 0.04, fruitHang: 170, fruitSpread: 60, fruitAsym: 1, fruitGloss: 0,
+    fruit: 'Key', fruitNodes: 0, fruitTip: true, fruitCount: 2, fruitSize: 0.26, fruitPeduncle: 0.5,
+    fruitStalk: 0.04, fruitHang: 170, fruitSpread: 60, fruitAsym: 1, fruitGloss: 0,
     paper: '#f8eef3', leafWash: '#5a8642', leafShade: '#24462a',
-    stemWash: '#9a5040', budColour: '#7a9a50', budShade: '#2e4020', fruitColour: '#b8a868', fruitShade: '#6a5a2c',
+    stemWash: '#9a5040', budColour: '#7a9a50', budShade: '#2e4020', fruitColour: '#b8a868',
+    fruitShade: '#6a5a2c',
   }),
   // Walnut (Juglans regia): seven to nine big, smooth, oval leaflets, the end one largest;
   // alternate on a thick olive twig with a squat black velvet bud; green walnuts at the tip.
@@ -705,12 +860,15 @@ export const presets = {
     insertion: 50, tipInsertion: 35, sizeGradient: 0.1, stemWidth: 0.02, stemTaper: 0.3,
     stemCurve: 0.1, stemDroop: 0, zigzag: 5, stemTexture: 0.3, stemShading: 0.4, stemFade: 0.2,
     terminal: 'Bud', budType: 'Plump', budStem: 0.03, budSize: 0.08, leafVariety: 0.2,
-    fruit: 'Drupe', fruitNodes: 0, fruitTip: true, fruitCount: 2, fruitSize: 0.28, fruitStalk: 0.08, fruitHang: 30, fruitSpread: 50, fruitGloss: 0.25,
+    fruit: 'Drupe', fruitNodes: 0, fruitTip: true, fruitCount: 2, fruitSize: 0.28, fruitStalk: 0.08,
+    fruitHang: 30, fruitSpread: 50, fruitGloss: 0.25,
     paper: '#f3eff9', leafWash: '#6a8e44', leafShade: '#2c4a26',
-    stemWash: '#7a6a50', budColour: '#2a2420', budShade: '#0a0806', fruitColour: '#9ab060', fruitShade: '#46602a',
+    stemWash: '#7a6a50', budColour: '#2a2420', budShade: '#0a0806', fruitColour: '#9ab060',
+    fruitShade: '#46602a',
   }),
   // Whitebeam (Sorbus aria): oval and doubly toothed with straight veins, dark above and
-  // white-felted beneath, so the shaded half is silver; plump green bud. On pale peach paper.
+  // white-felted beneath, so the shaded half is silver; plump green bud, and a loose head of
+  // scarlet berries. On pale peach paper.
   Whitebeam: species({
     compound: 'Simple',
     outline: 'Elliptic', width: 1, base: 'Cuneate', apex: 'Obtuse', bend: 0.1, sCurve: 0.05,
@@ -723,11 +881,16 @@ export const presets = {
     insertion: 55, tipInsertion: 38, sizeGradient: 0.2, stemWidth: 0.012, stemTaper: 0.45,
     stemCurve: 0.2, stemDroop: 0, zigzag: 8, stemTexture: 0.25, stemShading: 0.35, stemFade: 0.2,
     terminal: 'Bud', budType: 'Plump', budStem: 0.03, budSize: 0.1, leafVariety: 0.2,
+    fruit: 'Berry', fruitTip: true, fruitNodes: 0, fruitForm: 'Corymb', fruitRays: 4, fruitAxis: 0.2,
+    fruitCount: 14, fruitSize: 0.09, fruitStalk: 0.08, fruitPeduncle: 0.15, fruitSpread: 90, fruitHang: 15,
+    fruitGloss: 0.4,
     paper: '#f9efeb', leafWash: '#6f8c55', leafShade: '#b8c4b0',
     stemWash: '#7a6a5a', budColour: '#7a9a4a', budShade: '#2e4020',
+    fruitColour: '#d8301e', fruitShade: '#6a0c08',
   }),
   // White willow (Salix alba): long, narrow and finely toothed, silvery with silky hairs,
-  // pressed up along a slim golden twig that droops. Silver-green on pale apricot paper.
+  // pressed up along a slim golden twig that droops, slender yellow catkins standing out from
+  // the upper nodes. Silver-green on pale apricot paper.
   Willow: species({
     compound: 'Simple',
     outline: 'Lanceolate', width: 0.55, base: 'Cuneate', apex: 'Acuminate', bend: 0.25, sCurve: 0.1,
@@ -740,7 +903,10 @@ export const presets = {
     insertion: 30, tipInsertion: 20, sizeGradient: 0.3, stemWidth: 0.007, stemTaper: 0.5,
     stemCurve: 0.3, stemDroop: 0.5, zigzag: 5, stemTexture: 0.2, stemShading: 0.3, stemFade: 0.2,
     terminal: 'Bud', budType: 'Pointed', budStem: 0.02, budSize: 0.04, leafVariety: 0.25,
+    flower: 'Catkin', flowerTip: false, flowerNodes: 2, flowerCount: 1, flowerSize: 0.06, flowerLength: 1.6,
+    flowerStalk: 0.03, flowerHang: 35, flowerSpread: 0, flowerCurve: 0.25,
     paper: '#faf0e8', leafWash: '#8ea07a', leafShade: '#47604a',
     stemWash: '#9a7a3a', budColour: '#8a6a3a', budShade: '#3a2a14',
+    flowerColour: '#d8d070', flowerShade: '#8a8a3a',
   }),
 };

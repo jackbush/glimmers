@@ -19,7 +19,7 @@
 //            so lines can keep a minimum width in screen px. across = ±1, along = arc length.
 //   kind:    KIND_* below.
 //
-// Fruit (emitFruits) hang from the sprig's nodes and tip, in sprig coordinates.
+// Fruit and flowers (emitClusters) hang from the sprig's nodes and tip, in sprig coordinates.
 
 import { DEG, TAU, clamp, lerp, noise1, rnd, rnd2, smooth } from './util.js';
 import { G, J, jitter, resolveKnobs } from './knobs.js';
@@ -29,9 +29,13 @@ export const STRIDE = 9;
 export const MAX_VERTS = 420000;
 export const MAX_VARIANTS = 16;
 export const MAX_PLACE = 56;
+// Fruit and flower clusters on a sprig: two bearers × (10 nodes + the tip), with room to spare.
+const MAX_CL = 24;
 
-export const KIND_FILL = 0, KIND_OUTLINE = 1, KIND_VEIN = 2, KIND_RIB = 3, KIND_STEM = 6, KIND_BUD = 7, KIND_FRUIT = 8;
-// Kind written by spokeVtx: leaf fill, or a bud or fruit (filled the same way, in their colours).
+export const KIND_FILL = 0, KIND_OUTLINE = 1, KIND_VEIN = 2, KIND_RIB = 3, KIND_STEM = 6, KIND_BUD = 7, KIND_FRUIT = 8,
+  KIND_FLOWER = 9, KIND_CENTRE = 10, KIND_BRACT = 11, KIND_FLESH = 12, KIND_SEED = 13, KIND_HUSK = 14, KIND_SCAR = 15;
+// Kind written by spokeVtx: leaf fill, or a bud, fruit, petal, flower centre, bract, cut flesh,
+// nut (a seed), husk or a conker's scar (filled the same way, in their colours; only fruit and nuts take gloss). Shaders treat 0 and 7 and up as fills.
 let fillKind = KIND_FILL;
 
 
@@ -48,6 +52,9 @@ export const geo = {
   nSeg: 0,
   leafSegStart: new Int32Array(MAX_VARIANTS),
   leafSegCount: new Int32Array(MAX_VARIANTS),
+  // How many of a leaf's first segments are its stalks (petiole, rachis, leaflet stalks, wing),
+  // which the renderer draws in the back layer with the stem.
+  leafStalkSegs: new Int32Array(MAX_VARIANTS),
   verts: new Float32Array(MAX_VERTS * STRIDE),
   count: 0,
   nLeaf: 0,
@@ -59,9 +66,19 @@ export const geo = {
   // The terminal bud, drawn after the leaves (it sits beyond them).
   budStart: new Int32Array(MAX_VARIANTS),
   budCount: new Int32Array(MAX_VARIANTS),
-  // Fruit (stalks, then each fruit), drawn over the leaves.
+  // All the fruit and flowers (for the framing box), and each cluster's own run and node, so
+  // the renderer can layer clusters among the leaves in stem order.
   fruitStart: new Int32Array(MAX_VARIANTS),
   fruitCount: new Int32Array(MAX_VARIANTS),
+  nCl: 0,
+  clStart: new Int32Array(MAX_CL),
+  clCount: new Int32Array(MAX_CL),
+  // How much of each cluster's run is its stalks (and bract), drawn in the back layer.
+  clStalk: new Int32Array(MAX_CL),
+  clNode: new Int32Array(MAX_CL),
+  // The node each placement grows from (the tip is node sprigNodes), and how many nodes.
+  placeNode: new Int32Array(MAX_PLACE),
+  sprigNodes: 0,
   // Per placement: leaf variant, mat2 column-major (a, b, c, d), tx, ty, presence (0–1).
   sprigPlace: new Float32Array(MAX_VARIANTS * MAX_PLACE * 8),
   sprigNPlace: new Int32Array(MAX_VARIANTS),
@@ -72,8 +89,8 @@ export const geo = {
 // into geo.verts at the end.
 
 function vbuf(cap) { return { a: new Float32Array(cap * STRIDE), n: 0, cap }; }
-// sFill also takes the fruit: up to 55 burrs of 40 spines each.
-const sFill = vbuf(150000), sStroke = vbuf(130000);
+// sFill also takes the fruit and flowers (emitClusters stops adding them when it's full).
+const sFill = vbuf(250000), sStroke = vbuf(130000);
 // A blade's lines go to their own stages, appended in draw order (veinlets, other veins,
 // midrib, outline), so nothing has to be reordered afterwards.
 const sVeinlet = vbuf(60000), sRib = vbuf(8000), sOutline = vbuf(12000);
@@ -739,6 +756,7 @@ function buildLeafVariant(v, seed) {
     bladeMode = true;
   }
   flushStaged(false);
+  geo.leafStalkSegs[v] = geo.nSeg - geo.leafSegStart[v];
   // Stipules, over the stalk, each drawn whole (like a leaflet) so the second covers the first
   // where they overlap at their bases.
   if (G.stipules > 0.01) {
@@ -814,38 +832,61 @@ const BUD_LEN = { Pointed: 1.6, Plump: 0.9, Scaled: 1.0 };
 let bwP = 0, bwPl = 0, bwS = 1;
 function budW(u) { return bwP * budWidth('Pointed', u) + bwPl * budWidth('Plump', u) + bwS * budWidth('Scaled', u); }
 
+// Where emitShape writes: sFill, or sStroke for a shape that must sit under the stalks drawn
+// there (a lime's bract).
+let shapeBuf = sFill;
+// Flat fills have no shaded half (spines, a cut face): every outer vertex gets one `across`
+// value, inside the margin threshold, instead of ±1 by side.
+let flatFill = false;
+
 /**
- * A filled shape with a pen outline, from (bx, by) along angle a, `len` long: `wfn(u, side)` is
- * its half-width (in units of `wid`, usually its length) at u (0 base … 1 tip) on side 0 (left)
- * or 1 (right); `mir` 1 swaps the sides. Filled like a leaf (shaded half and all) in the colours
- * of `kind`. Fill and outline go to the same stage, so each shape is drawn whole before the next
- * covers it.
+ * A point on a curved axis, into EX/EY: u (0 … 1) along an axis `len` long leaving (bx, by) at
+ * angle a and turning by `bend` radians along its length (an arc), then w across it (+ = left).
  */
-function emitShape(bx, by, a, len, wid, M, wfn, kind, mir) {
-  const c = Math.cos(a), sn = Math.sin(a);
+function arcAt(bx, by, a, len, bend, u, w) {
+  const th = a + bend * u;
+  let x, y;
+  if (Math.abs(bend) < 1e-4) { x = bx + u * len * Math.cos(a); y = by + u * len * Math.sin(a); }
+  else { const r = len / bend; x = bx + r * (Math.sin(th) - Math.sin(a)); y = by - r * (Math.cos(th) - Math.cos(a)); }
+  EX = x - w * Math.sin(th); EY = y + w * Math.cos(th);
+}
+
+/**
+ * A filled shape with a pen outline, from (bx, by) along angle a, `len` long, its axis curving by
+ * `bend` radians: `wfn(u, side)` is its half-width (in units of `wid`, usually its length) at u
+ * (0 base … 1 tip) on side 0 (left) or 1 (right); `mir` 1 swaps the sides. `notch` (a share of
+ * the length) cuts a V into a blunt tip: the fill's anchors stop short of it and the outline
+ * dips in. Filled like a leaf (shaded half and all) in the colours of `kind`. Fill and outline
+ * go to the same stage, so each shape is drawn whole before the next covers it.
+ */
+function emitShape(bx, by, a, len, wid, M, wfn, kind, mir, bend, notch) {
+  const uMax = 1 - notch;
   fillKind = kind;
   for (let side = 0; side < 2; side++) {
     const sg = side === 0 ? 1 : -1;
     for (let i = 0; i < M; i++) {
       const u0 = i / M, u1 = (i + 1) / M;
       const w0 = wfn(u0, side ^ mir) * wid * sg, w1 = wfn(u1, side ^ mir) * wid * sg;
-      const x0 = u0 * len, x1 = u1 * len;
-      fillQuad(sFill, bx + x0 * c, by + x0 * sn, bx + x0 * c - w0 * sn, by + x0 * sn + w0 * c,
-        bx + x1 * c, by + x1 * sn, bx + x1 * c - w1 * sn, by + x1 * sn + w1 * c, sg, u0, u1);
+      arcAt(bx, by, a, len, bend, Math.min(u0, uMax), 0); const ax0 = EX, ay0 = EY;
+      arcAt(bx, by, a, len, bend, Math.min(u1, uMax), 0); const ax1 = EX, ay1 = EY;
+      arcAt(bx, by, a, len, bend, u0, w0); const ox0 = EX, oy0 = EY;
+      arcAt(bx, by, a, len, bend, u1, w1);
+      fillQuad(shapeBuf, ax0, ay0, ox0, oy0, ax1, ay1, EX, EY, flatFill ? 0.6 : sg, u0, u1);
     }
   }
   fillKind = KIND_FILL;
-  // Outline: up one side, down the other.
+  // Outline: up one side, (into the notch,) down the other.
   let m = 0;
   for (let i = 0; i <= M; i++) {
-    const u = i / M, x = u * len, w = wfn(u, mir) * wid;
-    PX[m] = bx + x * c - w * sn; PY[m] = by + x * sn + w * c; PW[m] = G.outlineW; m++;
+    arcAt(bx, by, a, len, bend, i / M, wfn(i / M, mir) * wid);
+    PX[m] = EX; PY[m] = EY; PW[m] = G.outlineW; m++;
   }
-  for (let i = M - 1; i >= 1; i--) {
-    const u = i / M, x = u * len, w = -wfn(u, 1 - mir) * wid;
-    PX[m] = bx + x * c - w * sn; PY[m] = by + x * sn + w * c; PW[m] = G.outlineW; m++;
+  if (notch > 0) { arcAt(bx, by, a, len, bend, uMax, 0); PX[m] = EX; PY[m] = EY; PW[m] = G.outlineW; m++; }
+  for (let i = notch > 0 ? M : M - 1; i >= 1; i--) {
+    arcAt(bx, by, a, len, bend, i / M, -wfn(i / M, 1 - mir) * wid);
+    PX[m] = EX; PY[m] = EY; PW[m] = G.outlineW; m++;
   }
-  emitStroke(sFill, m, KIND_OUTLINE, true);
+  emitStroke(shapeBuf, m, KIND_OUTLINE, true);
 }
 
 /**
@@ -857,7 +898,7 @@ function emitBud(bx, by, a, size, seed) {
   if (size < 1e-4) return;
   const len = size * (bwP * BUD_LEN.Pointed + bwPl * BUD_LEN.Plump + bwS * BUD_LEN.Scaled);
   const c = Math.cos(a), sn = Math.sin(a);
-  emitShape(bx, by, a, len, len, 20, budW, KIND_BUD, 0);
+  emitShape(bx, by, a, len, len, 20, budW, KIND_BUD, 0, 0, 0);
   if (bwS < 0.02) return;
   // Scales: arcs across the bud, alternating sides, each overlapping the next.
   for (let k = 0; k < 5; k++) {
@@ -881,11 +922,17 @@ function emitBud(bx, by, a, size, seed) {
 const FW = new Float32Array(6);
 // Length of each type per unit Fruit size: round fruit are as long as they are wide.
 const FRUIT_LEN = [1, 1.05, 1.45, 3.2, 4.5, 1];
-let fAsym = 0, fSeeds = 5, fCup = 0.5, cupEnd = 0.3, fSpines = 0, fSpineN = 24, fWander = 0;
+let fAsym = 0, fSeeds = 5, fCup = 0.5, cupEnd = 0.3, fSpines = 0, fSpineN = 24, fWander = 0, fCut = 0, fKernels = 1;
 // The gloss highlight's radius, plus a margin for its wandering edge (0 = none); see inHighlight.
 let hlR = 0, fLength = 1;
-// The fruit being drawn: base, direction and length (see fruitAt).
-let fbx = 0, fby = 0, fc = 1, fsn = 0, flen = 1, fwid = 1, fmir = 1;
+// The fruit or flower part being drawn: base, direction, length, width, curve (see fruitAt).
+let fbx = 0, fby = 0, fa = 0, flen = 1, fwid = 1, fbend = 0, fmir = 1;
+
+// A type's own extras (spines, a cut, a cup, veins, a crown; a flower type as a whole) at the
+// type's weight w: gone by the time it falls to ½ and back only once it rises past ½. So in a
+// morph they shrink away first, the shared body changes, then the next type's grow in, rather
+// than a burr turning into a berry with its spines still out.
+function extra(w) { return smooth(0.5, 1, w); }
 
 function roundW(u) { return Math.sqrt(Math.max(0, u * (1 - u))); }
 function nutW(u) { return 0.34 * Math.pow(Math.sin(Math.PI * Math.pow(clamp(u, 0, 1), 0.8)), 0.55) * (1 - 0.15 * u); }
@@ -910,14 +957,11 @@ function fruitW(u, side) {
 // to its rim, where it stays open).
 function cupW(u) {
   const nu = lerp(-0.06, cupEnd, u);
-  return FW[2] * (nutW(Math.max(nu, 0.03)) * 1.1 + 0.03) * Math.sqrt(smooth(0, 0.3, u)) / (cupEnd + 0.06);
+  return extra(FW[2]) * (nutW(Math.max(nu, 0.03)) * 1.1 + 0.03) * Math.sqrt(smooth(0, 0.3, u)) / (cupEnd + 0.06);
 }
 
-/** Fruit coords (u along in lengths, w across in widths) → sprig coords, into EX/EY. */
-function fruitAt(u, w) {
-  const x = u * flen, y = w * fmir * fwid;
-  EX = fbx + x * fc - y * fsn; EY = fby + x * fsn + y * fc;
-}
+/** Part coords (u along in lengths, w across in widths) → sprig coords, into EX/EY. */
+function fruitAt(u, w) { arcAt(fbx, fby, fa, flen, fbend, u, w * fmir * fwid); }
 
 /**
  * Is fruit point (u, w) under the gloss highlight? Mirrors the shader: there the highlight sits
@@ -932,8 +976,9 @@ function inHighlight(u, w) {
 }
 
 /**
- * A pen line on the fruit, in fruit coords (u along, w across, in lengths), bowed sideways by
- * `bow`, half-width p0 → p1; broken where it crosses the highlight, which leaves paper bare.
+ * A pen line on a fruit or flower part, in its coords (u along in lengths, w across in widths),
+ * bowed sideways by `bow`, half-width p0 → p1; broken where it crosses a fruit's highlight,
+ * which leaves paper bare.
  */
 function fruitLine(u0, w0, u1, w1, bow, p0, p1, steps) {
   const du = u1 - u0, dw = w1 - w0;
@@ -960,68 +1005,122 @@ function penLine(x0, y0, x1, y1, bow, w0, w1, steps) {
 }
 
 /**
- * A fruit or cluster stalk from (x, y) along (ca, sa), `l` long, half-width w0 → w1 (× k),
- * bowed a little to one side by the stem's Wander (its ends stay put).
+ * A stalk from (x, y) at angle a, `l` long, curving by `bend`, half-width w0 → w1 (× k), bowed a
+ * little to one side by the stem's Wander (its ends stay put).
  */
-function stalkLine(x, y, ca, sa, l, w0, w1, k, seed) {
-  const bow = fWander * 0.15 * rnd2(seed, 77);
+function stalkLine(x, y, a, l, w0, w1, k, seed, bend, steps) {
   let m = 0;
-  for (let i = 0; i <= 6; i++) {
-    const f = i / 6, d = l * f, wob = (G.wobble * 0.3 * noise1(f * 3 + seed) + bow * Math.sin(Math.PI * f)) * l;
-    PX[m] = x + ca * d - sa * wob; PY[m] = y + sa * d + ca * wob; PW[m] = lerp(w0, w1, f) * k; m++;
+  for (let i = 0; i <= steps; i++) {
+    const f = i / steps;
+    stalkAt(x, y, a, l, bend, seed, f);
+    PX[m] = EX; PY[m] = EY; PW[m] = lerp(w0, w1, f) * k; m++;
   }
   emitStroke(sStroke, m, KIND_STEM, false);
 }
+/** The point f (0 … 1) along that stalk, wobble and bow included, into EX/EY. */
+function stalkAt(x, y, a, l, bend, seed, f) {
+  const bow = fWander * 0.15 * rnd2(seed, 77);
+  arcAt(x, y, a, l, bend, f, (G.wobble * 0.3 * noise1(f * 3 + seed) + bow * Math.sin(Math.PI * f)) * l);
+}
 
 function spineW(u) { return 0.14 * (1 - u); }
+// A nut in a cut burr with others (sweet chestnut, beech): a sector of the cavity, its round
+// outer edge at u = 1, `wedgeN` (a whole number, at least 2) of them filling the circle. (The
+// eased, fractional count gave tan(π / 1.5) and widths off the screen mid-morph.)
+let wedgeN = 2;
+function wedgeW(u) { return Math.min(u * Math.tan(Math.PI / wedgeN) * 0.9, Math.sqrt(Math.max(0, 1 - u * u)) * 0.98); }
 
 /**
  * One fruit from (bx, by) along angle a, `size` its width (leaf units), with its extras; `mir`
- * 1 mirrors it (the left key of a pair).
+ * 1 mirrors it (the left key of a pair), `bend` curves keys and pods.
  */
-function emitFruit(bx, by, a, size, seed, mir) {
+function emitFruit(bx, by, a, size, seed, mir, bend) {
   let lenK = 0;
   for (let t = 0; t < 6; t++) lenK += FW[t] * FRUIT_LEN[t];
   // Widths are in units of the natural length, so Fruit length stretches without widening.
   const wid = size * lenK, len = wid * fLength, c = Math.cos(a), sn = Math.sin(a), ow = G.outlineW;
-  fbx = bx; fby = by; fc = c; fsn = sn; flen = len; fwid = wid; fmir = mir ? -1 : 1;
+  // Only keys and pods curve; round fruit, and the acorn's cup, stay straight.
+  fbx = bx; fby = by; fa = a; flen = len; fwid = wid; fbend = bend * (FW[3] + FW[4]); fmir = mir ? -1 : 1;
+  // Small fruit (the berries in a head) get fewer segments.
+  const M = clamp(Math.round(size * 240), 12, 28);
   // Burr: spines all round (under the body, which covers their bases), except where the
-  // stalk comes in.
-  const spines = fSpines * FW[5];
+  // stalk comes in. Flat and matte, each with its whole outline: shaded as cones, every spine
+  // was a stripe of light and dark, and the burr read as a tangle.
+  const spines = fSpines * extra(FW[5]);
+  fruitAt(0.5, 0); const cx = EX, cy = EY;
   if (spines > 0.002) {
-    fruitAt(0.5, 0); const cx = EX, cy = EY;
+    flatFill = true;
     for (let k = 0; k < fSpineN; k++) {
       const th = (k + 0.5 * rnd(seed, 40 + k)) / fSpineN * TAU;
       if (Math.abs(Math.cos(th / 2)) < 0.2) continue; // th near π points back at the stalk
       const r = wid * 0.4, l = wid * spines * 0.5 * (0.7 + 0.6 * rnd(seed, 90 + k));
-      emitShape(cx + Math.cos(a + th) * r, cy + Math.sin(a + th) * r, a + th, l + wid * 0.1, l + wid * 0.1, 2, spineW, KIND_FRUIT, 0);
+      emitShape(cx + Math.cos(a + th) * r, cy + Math.sin(a + th) * r, a + th, l + wid * 0.1, l + wid * 0.1, 2, spineW, KIND_HUSK, 0, 0, 0);
+    }
+    flatFill = false;
+  }
+  // A husk is matte (no gloss): mostly-burr fruit are drawn as husk.
+  emitShape(bx, by, a, len, wid, M, fruitW, FW[5] > 0.5 ? KIND_HUSK : KIND_FRUIT, mir, fbend, 0);
+  // Burr, cut open: sliced flat through the middle, so the cut face of the husk shows (flat, in
+  // the flesh colour) round a cavity holding the nuts, whole and shiny. Grows from the centre
+  // as Cut open eases in.
+  const cut = fCut * extra(FW[5]);
+  if (cut > 0.01) {
+    const rf = wid * 0.5 * cut, rc = rf * 0.68, rk = rc * 0.94;
+    flatFill = true;
+    emitShape(cx - Math.cos(a) * rf, cy - Math.sin(a) * rf, a, 2 * rf, 2 * rf, M, roundW, KIND_FLESH, 0, 0, 0);
+    flatFill = false;
+    let m = 0;
+    for (let i = 0; i < 32; i++) {
+      const t = i / 32 * TAU;
+      PX[m] = cx + Math.cos(t) * rc; PY[m] = cy + Math.sin(t) * rc; PW[m] = ow * 0.8; m++;
+    }
+    emitStroke(sFill, m, KIND_OUTLINE, true);
+    const n = Math.max(1, Math.round(fKernels)), rot = a + rnd(seed, 7) * TAU;
+    if (n === 1) {
+      // A conker: round, with its pale scar (the hilum) away from the highlight.
+      const hx = cx - Math.cos(rot) * rk, hy = cy - Math.sin(rot) * rk;
+      emitShape(hx, hy, rot, 2 * rk, 2 * rk, M, roundW, KIND_SEED, 0, 0, 0);
+      const hr = rk * 0.42, ha = rot + Math.PI * 0.8;
+      const sx = cx + Math.cos(ha) * rk * 0.45, sy = cy + Math.sin(ha) * rk * 0.45;
+      flatFill = true;
+      emitShape(sx - Math.cos(ha) * hr, sy - Math.sin(ha) * hr, ha, 2 * hr, 2 * hr, 12, roundW, KIND_SCAR, 0, 0, 0);
+      flatFill = false;
+    } else {
+      // Nuts packed like segments of an orange, a hair apart.
+      wedgeN = n;
+      for (let k = 0; k < n; k++) {
+        const ph = rot + k * TAU / n, gap = rk * 0.04;
+        emitShape(cx + Math.cos(ph) * gap, cy + Math.sin(ph) * gap, ph, rk - gap, rk, M, wedgeW, KIND_SEED, 0, 0, 0);
+      }
     }
   }
-  emitShape(bx, by, a, len, wid, 28, fruitW, KIND_FRUIT, mir);
   // Berry: the dried flower's crown at the far end.
-  if (FW[0] > 0.02) {
+  const crown = extra(FW[0]);
+  if (crown > 0.02) {
     for (let k = 0; k < 5; k++) {
-      const th = k * TAU / 5 + rnd(seed, k);
-      fruitLine(0.97, 0, 0.97 + Math.cos(th) * 0.07, Math.sin(th) * 0.07, 0, ow * 2 * FW[0], ow * FW[0], 1);
+      const th = k * TAU / 5 + rnd(seed, k), l = 0.07 * crown;
+      fruitLine(0.97, 0, 0.97 + Math.cos(th) * l, Math.sin(th) * l, 0, ow * 2 * crown, ow * crown, 1);
     }
   }
   // Drupe: the seam down one side.
-  if (FW[1] > 0.02) {
-    fruitLine(0.08, 0.05, 0.95, 0.04, -0.22, ow * 0.8 * FW[1], ow * 0.8 * FW[1], 16);
+  const seam = extra(FW[1]);
+  if (seam > 0.02) {
+    fruitLine(0.08, 0.05, 0.95, 0.04, -0.22, ow * 0.8 * seam, ow * 0.8 * seam, 16);
   }
   // Key: veins fanning from the seed into the wing.
-  if (FW[3] > 0.02) {
+  const veins = extra(FW[3]);
+  if (veins > 0.02) {
     for (let k = 0; k < 5; k++) {
       const ua = 0.42 + k * 0.13, f = k / 4 - 0.5;
-      fruitLine(0.16, 0, lerp(0.93, ua, fAsym), lerp(f * 0.12, 0.85 * keyW(ua, 0), fAsym), lerp(f * 0.04, 0.08, fAsym), ow * 0.7 * FW[3], ow * 0.4 * FW[3], 8);
+      fruitLine(0.16, 0, lerp(0.93, ua, fAsym), lerp(f * 0.12, 0.85 * keyW(ua, 0), fAsym), lerp(f * 0.04, 0.08, fAsym), ow * 0.7 * veins, ow * 0.4 * veins, 8);
     }
   }
   // Nut: its cup, over the base.
-  if (FW[2] * fCup > 0.01) {
+  if (extra(FW[2]) * fCup > 0.01) {
     cupEnd = 0.08 + 0.5 * fCup;
     const back = 0.06 * len, cl = (cupEnd + 0.06) * len, cw = (cupEnd + 0.06) * wid;
     const cbx = bx - c * back, cby = by - sn * back;
-    emitShape(cbx, cby, a, cl, cw, 12, cupW, KIND_BUD, 0);
+    emitShape(cbx, cby, a, cl, cw, 12, cupW, KIND_BUD, 0, 0, 0);
     // Its scales: rows of little arcs.
     for (let r = 0; r < 4; r++) {
       const u = 0.3 + r * 0.17, hw = cupW(u) * 0.8;
@@ -1029,57 +1128,322 @@ function emitFruit(bx, by, a, size, seed, mir) {
         const w = (k + 0.5 * (r % 2)) / 2.5 * hw;
         if (Math.abs(w) > hw) continue;
         const ex = cbx + u * cl * c - w * cw * sn, ey = cby + u * cl * sn + w * cw * c, d = hw * cw * 0.18;
-        penLine(ex - sn * d, ey + c * d, ex + sn * d, ey - c * d, 0.5, ow * 0.7 * FW[2], ow * 0.7 * FW[2], 3);
+        penLine(ex - sn * d, ey + c * d, ex + sn * d, ey - c * d, 0.5, ow * 0.7 * extra(FW[2]), ow * 0.7 * extra(FW[2]), 3);
       }
     }
   }
 }
 
+// ---------------------------------------------------------------- flowers
+// Weights of Open, Cup, Pea, Catkin (the Flowers select after None). The types don't share an
+// outline the way fruit do, so in a morph one shrinks away, then the next grows in (extra).
+const FLW = new Float32Array(4);
+let flPetals = 5, flNotch = 0, flStamens = 0.5, flFlare = 0.5, flLength = 1;
+
+// An open flower's petal: a narrow claw at the centre, widening to a round end. Petal notch
+// blunts the end so emitShape can cut its notch.
+function petalW(u) { return 0.5 * Math.pow(Math.sin(Math.PI * Math.pow(u, 0.6) * (1 - 0.18 * flNotch)), 0.55); }
+// A cup flower's petal (magnolia): broad and pointed.
+function cupPetalW(u) { return 0.42 * Math.pow(Math.sin(Math.PI * Math.pow(u, 0.75)), 0.7); }
+// A pea flower's keel and wings: a boat, deeper on its lower side.
+function keelW(u, side) { return (side === 0 ? 0.3 : 0.18) * Math.pow(Math.sin(Math.PI * Math.pow(u, 0.7)), 0.6); }
+// Its calyx: a little green cup, open at the end.
+function calyxW(u) { return 0.15 + 0.2 * u; }
+// A catkin: a long cylinder with rounded ends.
+function catkinW(u) { return 0.5 * Math.pow(Math.sin(Math.PI * Math.pow(u, 0.85)), 0.22); }
+// A bract (lime): a long pale strap along the cluster's stalk.
+function bractW(u) { return 0.5 * Math.pow(Math.sin(Math.PI * Math.pow(u, 0.9)), 0.6); }
+
 /**
- * Fruit clusters in the axils (of the lowest At nodes nodes) and at the tip: each a stalk
- * (Cluster stalk) ending in a fan of fruit on their own stalks. Presence scales the whole
- * cluster, so fruit grow out of the stem as nodes and counts ease in. Stalks go to sStroke,
- * fruit to sFill.
+ * One flower at (bx, by), facing along angle a, `size` across (leaf units): each type at its
+ * weight's size. `mir` mirrors it, `bend` curls a catkin.
  */
-function emitFruits(P, B, nN, fracN, stemN, stemW, ss) {
-  const wF = B.fruit, there = 1 - wF[0];
-  if (there < 0.001 || stemW < 0.001) return;
-  for (let t = 0; t < 6; t++) FW[t] = wF[t + 1] / there;
-  fAsym = P.fruitAsym.value; fSeeds = P.fruitSeeds.value; fCup = P.fruitCup.value;
-  fSpines = P.fruitSpines.value; fSpineN = Math.round(P.fruitSpineCount.value); fWander = P.stemWander.value;
-  fLength = P.fruitLength.value;
-  // The highlight (shader: radius 0.3 × Gloss, edge wandering ± half the Halo jitter), widened a
-  // little so lines stop clear of it.
-  const gloss = P.fruitGloss.value * (P.fruitHighlightOpacity.value > 0 ? 1 : 0);
-  hlR = gloss > 0 ? 0.3 * gloss + 0.5 * P.washGapJitter.value + 0.04 : 0;
-  const v = G.variety, cF = Math.max(1, P.fruitCount.value), cN = Math.ceil(cF - 1e-6), fracC = cF - (cN - 1);
-  const hang = P.fruitHang.value * DEG, spread = P.fruitSpread.value * DEG;
-  const size = P.fruitSize.value * there * stemW, stalk = P.fruitStalk.value, ped = P.fruitPeduncle.value;
-  const sw = P.stemWidth.value * (1 - P.stemTaper.value) * 0.6;
-  // Clusters: one per node that bears fruit (the side away from its leaf), then the tip.
-  for (let i = 0; i <= nN; i++) {
-    const tip = i === nN;
-    const pres = tip ? P.fruitTip.value : clamp(P.fruitNodes.value - i, 0, 1) * (i === nN - 1 ? fracN : 1);
-    if (pres < 0.002) continue;
-    const si = tip ? stemN - 1 : NODE_I[i], side = tip ? 1 : i % 2 ? 1 : -1;
-    const dir = SPH[si] + side * hang, cd = Math.cos(dir), sd = Math.sin(dir);
-    const pl = ped * pres * (1 + v * 0.3 * rnd2(ss + 7001 + i * 17, 9));
-    if (pl > 1e-4) stalkLine(SX[si], SY[si], cd, sd, pl, sw, sw * 0.8, Math.sqrt(pres), ss + i);
-    const nx = SX[si] + cd * pl, ny = SY[si] + sd * pl;
-    for (let q = 0; q < cN; q++) {
-      const fs = ss + 7001 + i * 17 + q * 5;
-      const p = pres * (q === cN - 1 ? fracC : 1);
-      const f = (q - (cF - 1) / 2) / Math.max(1, cF - 1);
-      const ang = dir + side * spread * f + v * 0.15 * rnd2(fs, 1);
-      const sl = stalk * p * (1 + v * 0.3 * rnd2(fs, 2));
-      const ca = Math.cos(ang), sa = Math.sin(ang);
-      if (sl > 1e-4) stalkLine(nx, ny, ca, sa, sl, pl > 1e-4 ? sw * 0.8 : sw, sw * 0.6, Math.sqrt(p), fs);
-      curSeed = rnd(fs, 3);
-      // Fruit fanned clockwise are mirrored, so a pair of keys spread their wings outward.
-      emitFruit(nx + ca * sl, ny + sa * sl, ang, size * p * (1 + v * 0.12 * rnd2(fs, 4)), fs, side * f < -1e-3 ? 1 : 0);
+function emitFlower(bx, by, a, size, seed, mir, bend) {
+  const ow = G.outlineW, sg = mir ? -1 : 1;
+  // Open: petals round the centre, face on; stamens; the disc.
+  if (extra(FLW[0]) > 0.02) {
+    const s = size * extra(FLW[0]), n = Math.max(3, Math.round(flPetals)), rot = a + rnd(seed, 1) * TAU;
+    const M = clamp(Math.round(6 + s * 60), 6, 20);
+    for (let k = 0; k < n; k++) emitShape(bx, by, rot + k * TAU / n, s * 0.5 * flLength, s * 0.5, M, petalW, KIND_FLOWER, 0, 0, 0.18 * flNotch);
+    if (flStamens > 0.01) {
+      const ns = s > 0.06 ? 16 : 8, l = s * 0.32 * flStamens;
+      for (let k = 0; k < ns; k++) {
+        const th = rot + (k + 0.5 * rnd(seed, 10 + k)) / ns * TAU, ll = l * (0.7 + 0.5 * rnd(seed, 30 + k));
+        const ex = bx + Math.cos(th) * ll, ey = by + Math.sin(th) * ll;
+        penLine(bx, by, ex, ey, 0, ow * 0.7, ow * 0.5, 1);
+        penLine(ex, ey, ex + Math.cos(th) * s * 0.03, ey + Math.sin(th) * s * 0.03, 0, s * 0.012, s * 0.012, 1); // anther
+      }
+    }
+    const r = s * 0.09;
+    emitShape(bx - Math.cos(rot) * r, by - Math.sin(rot) * r, rot, 2 * r, 2 * r, 8, roundW, KIND_CENTRE, 0, 0, 0);
+  }
+  // Cup (magnolia), side on: two petals flaring out behind, one in front.
+  if (extra(FLW[1]) > 0.02) {
+    const s = size * extra(FLW[1]), L = s * flLength, W = s * 0.55, fl = flFlare * 0.5;
+    const M = clamp(Math.round(8 + s * 40), 8, 20);
+    emitShape(bx, by, a + fl, L, W, M, cupPetalW, KIND_FLOWER, 0, fl * 0.6, 0);
+    emitShape(bx, by, a - fl, L, W, M, cupPetalW, KIND_FLOWER, 0, -fl * 0.6, 0);
+    emitShape(bx, by, a, L * 0.97, W * 0.85, M, cupPetalW, KIND_FLOWER, 0, 0, 0);
+  }
+  // Pea (laburnum, robinia), side on: the standard flung back, the keel and wings, the calyx.
+  if (extra(FLW[2]) > 0.02) {
+    const s = size * extra(FLW[2]), M = clamp(Math.round(6 + s * 50), 6, 16);
+    emitShape(bx, by, a + sg * 1.1, s * 0.75, s * 0.8, M, roundW, KIND_FLOWER, 0, 0, 0);
+    emitShape(bx, by, a, s * flLength, s * 0.9, M, keelW, KIND_FLOWER, mir, sg * 0.5, 0);
+    emitShape(bx, by, a, s * 0.28, s * 0.5, 4, calyxW, KIND_FILL, 0, 0, 0);
+  }
+  // Catkin: a long, curling cylinder of overlapping scales.
+  if (extra(FLW[3]) > 0.02) {
+    const wid = size * extra(FLW[3]), len = wid * 5 * flLength;
+    emitShape(bx, by, a, len, wid, 24, catkinW, KIND_FLOWER, 0, bend, 0);
+    fbx = bx; fby = by; fa = a; flen = len; fwid = wid; fbend = bend; fmir = 1;
+    const nr = clamp(Math.round(len / wid * 1.6), 4, 24);
+    for (let r = 0; r < nr; r++) {
+      const u = 0.06 + 0.88 * (r + 0.5) / nr;
+      for (let k = -1; k <= 1; k++) {
+        const w = k * 0.32 + (r % 2) * 0.16;
+        if (Math.abs(w) > 0.42) continue;
+        fruitLine(u, w - 0.12, u, w + 0.12, -0.08, ow * 0.7, ow * 0.7, 3);
+      }
     }
   }
 }
+
+// ---------------------------------------------------------------- clusters
+// Fruit and flowers share one cluster engine, each with its own params under its own prefix.
+// Flowers count their nodes from the tip down (they're on the new growth), fruit from the base up.
+const FRUIT_KEYS = {
+  type: 'fruit', nodes: 'fruitNodes', tip: 'fruitTip', form: 'fruitForm', axis: 'fruitAxis', rays: 'fruitRays', taper: 'fruitTaper',
+  count: 'fruitCount', size: 'fruitSize', length: 'fruitLength', ped: 'fruitPeduncle', bract: 'fruitBract', stalk: 'fruitStalk',
+  hang: 'fruitHang', spread: 'fruitSpread', curve: 'fruitCurve',
+};
+const FLOWER_KEYS = {
+  type: 'flower', nodes: 'flowerNodes', tip: 'flowerTip', form: 'flowerForm', axis: 'flowerAxis', rays: 'flowerRays', taper: 'flowerTaper',
+  count: 'flowerCount', size: 'flowerSize', length: 'flowerLength', ped: 'flowerPeduncle', bract: 'flowerBract', stalk: 'flowerStalk',
+  hang: 'flowerHang', spread: 'flowerSpread', curve: 'flowerCurve',
+};
+
+/**
+ * Clusters of fruit or flowers in the axils (the At nodes nodes) and at the tip. Each is a
+ * stalk (Cluster stalk, with an optional bract) ending in a cluster whose form is a blend of
+ * Fan (every item from one point), Raceme (items in turn along a curving axis, smaller toward
+ * its tip) and Corymb (rays fanning out to a flat top, each ending in its own little fan); the
+ * weights move each item continuously, so forms morph. Presence scales whole clusters and the
+ * newest item, so they grow out of the stem as counts ease in. Stalks go to sStroke, items to
+ * sFill; a full sFill stops adding items rather than cutting them in half.
+ */
+function emitClusters(K, flower, P, B, stemW, ss) {
+  const wT = B[K.type], there = 1 - wT[0];
+  if (there < 0.001 || stemW < 0.001) return;
+  if (flower) {
+    for (let t = 0; t < 4; t++) FLW[t] = wT[t + 1] / there;
+    flPetals = P.flowerPetals.value; flNotch = P.flowerNotch.value; flStamens = P.flowerStamens.value;
+    flFlare = P.flowerFlare.value; flLength = P.flowerLength.value;
+    hlR = 0;
+  } else {
+    for (let t = 0; t < 6; t++) FW[t] = wT[t + 1] / there;
+    fAsym = P.fruitAsym.value; fSeeds = P.fruitSeeds.value; fCup = P.fruitCup.value;
+    fSpines = P.fruitSpines.value; fSpineN = Math.round(P.fruitSpineCount.value);
+    fLength = P.fruitLength.value; fCut = P.fruitCut.value; fKernels = P.fruitKernels.value;
+    // The highlight (shader: radius 0.3 × Gloss, edge wandering ± half the Halo jitter), widened
+    // a little so lines stop clear of it.
+    const gloss = P.fruitGloss.value * (P.fruitHighlightOpacity.value > 0 ? 1 : 0);
+    // (A burr's husk is matte, so its lines needn't stop for a highlight.)
+    hlR = gloss > 0 ? (0.3 * gloss + 0.5 * P.washGapJitter.value + 0.04) * (FW[5] > 0.5 ? 0 : 1) : 0;
+  }
+  fWander = P.stemWander.value;
+  const wF = B[K.form]; // Fan, Raceme, Corymb
+  const v = G.variety, cF = Math.max(1, P[K.count].value), cN = Math.ceil(cF - 1e-6), fracC = cF - (cN - 1);
+  const spread = P[K.spread].value * DEG, curve = P[K.curve].value;
+  const size = P[K.size].value * there * stemW, stalk = P[K.stalk].value, ped = P[K.ped].value, bract = P[K.bract].value;
+  const axis = P[K.axis].value, taper = P[K.taper].value;
+  const rays = Math.max(1, P[K.rays].value);
+  const sw = P.stemWidth.value * (1 - P.stemTaper.value) * 0.6;
+  const seed0 = ss + (flower ? 9001 : 7001);
+  // This bearer's clusters from the list (clusterSpecs), each turned by spreadOut.
+  for (let c = 0; c < nCl; c++) {
+    if (CL_FLOWER[c] !== (flower ? 1 : 0)) continue;
+    const ni = CL_NI[c], si = CL_SI[c], side = CL_SIDE[c], pres = CL_PRES[c];
+    const dir = CL_DIR[c] + SP_TURN[nSpLeaf + c];
+    const pl = ped * pres * (1 + v * 0.3 * rnd2(seed0 + ni * 17, 9));
+    if (bract > 0.002 && pl > 1e-4) {
+      // Under the stalk, which runs down its middle.
+      shapeBuf = sStroke;
+      emitShape(SX[si], SY[si], dir, pl * 1.1, pl * bract * 0.3, 10, bractW, KIND_BRACT, 0, 0, 0);
+      shapeBuf = sFill;
+    }
+    if (pl > 1e-4) stalkLine(SX[si], SY[si], dir, pl, sw, sw * 0.8, Math.sqrt(pres), ss + ni + (flower ? 500 : 0), 0, 6);
+    arcAt(SX[si], SY[si], dir, pl, 0, 1, 0);
+    const nx = EX, ny = EY;
+    // The raceme's axis, as long as its form's weight makes it (the corymb's rays are drawn
+    // with their items, below).
+    const axL = axis * pres, axR = axL * wF[1], bendA = curve * side * wF[1], axSeed = seed0 + ni * 17 + 3;
+    if (axR > 1e-4) stalkLine(nx, ny, dir, axR, sw * 0.8, sw * 0.5, Math.sqrt(pres), axSeed, bendA, 24);
+    let lastRc = -1;
+    for (let q = 0; q < cN; q++) {
+      if (sFill.n > sFill.cap - 6000 || geo.count + sFill.n + sStroke.n > MAX_VERTS - 6000) break;
+      const fs = seed0 + ni * 17 + q * 5;
+      const p = pres * (q === cN - 1 ? fracC : 1);
+      // Fan: from the stalk's end, spread across Spread.
+      const f = (q - (cF - 1) / 2) / Math.max(1, cF - 1);
+      const aFan = dir + side * spread * f;
+      // Raceme: in turn along the axis, alternating sides, smaller toward its tip.
+      // (On the drawn axis, wobble and all, so they sit on it.)
+      const t = (q + 0.5) / cF, alt = q % 2 ? 1 : -1;
+      if (axR > 1e-4) stalkAt(nx, ny, dir, axR, bendA, axSeed, t); else { EX = nx; EY = ny; }
+      const rx = EX, ry = EY, aRac = dir + bendA * t + alt * spread * 0.5;
+      // Corymb: on the rays (continuously between them as counts ease), each ray's items fanned.
+      const x = (q + 0.5) / cF * rays - 0.5, xf = Math.floor(x);
+      const rc = clamp(xf + smooth(0.3, 0.7, x - xf), 0, rays - 1);
+      const ph = dir + side * (rays > 1 ? spread * (rc / (rays - 1) - 0.5) : 0);
+      const L = axL / Math.max(0.5, Math.cos(ph - dir)) * wF[2];
+      const aCor = ph + side * (x - rc) * (rays > 1 ? spread / (rays - 1) : spread * 0.5);
+      const bx = rx + Math.cos(ph) * L, by = ry + Math.sin(ph) * L;
+      // Each ray is drawn once, by the first item on it (items between rays, mid-morph, draw
+      // their own), so every item's stalk starts on a ray.
+      if (wF[2] > 0.002 && L > 1e-4 && Math.abs(rc - lastRc) > 1e-6) {
+        stalkLine(rx, ry, ph, L, sw * 0.7, sw * 0.5, Math.sqrt(pres), seed0 + ni * 17 + 50 + Math.round(rc * 97), 0, 6);
+        lastRc = rc;
+      }
+      const ang = (wF[0] * aFan + wF[1] * aRac + wF[2] * aCor) + v * 0.15 * rnd2(fs, 1);
+      const sz = 1 - taper * t * wF[1];
+      // A corymb's stalks vary in length, so its items stack into a head rather than a line.
+      const sl = stalk * sz * p * (1 + v * 0.3 * rnd2(fs, 2)) * (1 + wF[2] * 0.45 * rnd2(fs, 6));
+      const ca = Math.cos(ang), sa = Math.sin(ang);
+      // Each item's stalk starts as wide as what it grows from: the cluster stalk, or the thinner
+      // axis or ray.
+      const w0 = lerp(pl > 1e-4 ? sw * 0.8 : sw, sw * 0.45, wF[1] + wF[2]);
+      if (sl > 1e-4) stalkLine(bx, by, ang, sl, w0, Math.min(w0, sw * 0.6), Math.sqrt(p), fs, 0, 6);
+      curSeed = rnd(fs, 3);
+      // Items turned clockwise from their axis are mirrored, so a pair of keys spread their
+      // wings outward, and pea flowers and catkins curl away from each other.
+      const off = wF[0] * side * f + wF[1] * alt * 0.5 + wF[2] * side * ((q + 0.5) / cF - 0.5);
+      const mir = off < -1e-3 ? 1 : 0, bendI = curve * side * (mir ? -1 : 1);
+      const isz = size * sz * p * (1 + v * 0.12 * rnd2(fs, 4));
+      if (flower) emitFlower(bx + ca * sl, by + sa * sl, ang, isz, fs, mir, bendI);
+      else emitFruit(bx + ca * sl, by + sa * sl, ang, isz, fs, mir, bendI);
+    }
+    // The cluster as its own run (stalks, then items), so it can be layered among the leaves.
+    geo.clStart[c] = geo.count;
+    appendBuf(sStroke);
+    geo.clStalk[c] = geo.count - geo.clStart[c];
+    appendBuf(sFill);
+    sStroke.n = sFill.n = 0;
+    geo.clCount[c] = geo.count - geo.clStart[c];
+    geo.clNode[c] = ni;
+  }
+}
+
+// ---------------------------------------------------------------- spreading out
+// The sprig's leaves and clusters, each seen as a capsule along its own direction from its
+// node, turn away from those they overlap, about their nodes, a little each pass. The turn is
+// a smooth function of the shape (continuous overlaps, a soft cap), so it moves continuously
+// through morphs rather than jumping when one ends. Items under others are fine, as in a
+// botanical drawing; spreading only makes more of each one show.
+
+const MAX_SP = MAX_PLACE + MAX_CL;
+// Points sampled along each capsule (see spreadOut).
+const SPREAD_K = 5;
+// Cluster list (clusterSpecs): bearer, node index, stem sample, side, presence, direction.
+const CL_FLOWER = new Uint8Array(MAX_CL), CL_NI = new Int32Array(MAX_CL), CL_SI = new Int32Array(MAX_CL);
+const CL_SIDE = new Float32Array(MAX_CL), CL_PRES = new Float32Array(MAX_CL), CL_DIR = new Float32Array(MAX_CL);
+let nCl = 0;
+// Queued leaf placements (placed after spreading).
+const PL_LV = new Int32Array(MAX_PLACE), PL_SI = new Int32Array(MAX_PLACE), PL_NODE = new Int32Array(MAX_PLACE);
+const PL_REL = new Float32Array(MAX_PLACE), PL_SIZE = new Float32Array(MAX_PLACE), PL_PRES = new Float32Array(MAX_PLACE);
+// Capsules (leaves first, then clusters): node, direction, extent along it (r0 … r1), radius,
+// weight (presence); the near and far points; each item's turn so far, and its capped turn.
+const SP_NX = new Float32Array(MAX_SP), SP_NY = new Float32Array(MAX_SP), SP_ANG = new Float32Array(MAX_SP);
+const SP_R0 = new Float32Array(MAX_SP), SP_R1 = new Float32Array(MAX_SP), SP_RAD = new Float32Array(MAX_SP);
+const SP_W = new Float32Array(MAX_SP), SP_PX = new Float32Array(MAX_SP), SP_PY = new Float32Array(MAX_SP);
+const SP_QX = new Float32Array(MAX_SP), SP_QY = new Float32Array(MAX_SP);
+const SP_RAW = new Float32Array(MAX_SP), SP_TURN = new Float32Array(MAX_SP);
+let nSpLeaf = 0;
+// Each leaf variant's reach along its axis from where it attaches, and its half-width.
+const VLEN = new Float32Array(MAX_VARIANTS), VWID = new Float32Array(MAX_VARIANTS);
+
+/** Measure each leaf variant (in leaf coords, from its attach point along its direction). */
+function measureVariants() {
+  for (let v = 0; v < geo.nLeaf; v++) {
+    const ax = geo.leafAttach[v * 3], ay = geo.leafAttach[v * 3 + 1], th = geo.leafAttach[v * 3 + 2];
+    const c = Math.cos(th), sn = Math.sin(th);
+    let L = 0, W = 0;
+    for (let i = geo.leafStart[v]; i < geo.leafStart[v] + geo.leafCount[v]; i++) {
+      const dx = geo.verts[i * STRIDE] - ax, dy = geo.verts[i * STRIDE + 1] - ay;
+      L = Math.max(L, dx * c + dy * sn); W = Math.max(W, Math.abs(-dx * sn + dy * c));
+    }
+    VLEN[v] = L; VWID[v] = W;
+  }
+}
+
+/**
+ * Add this bearer's clusters to the list: one per node that bears them (the side away from
+ * its leaf), then the tip, each with a capsule roughly covering it for spreadOut.
+ */
+function clusterSpecs(K, flower, P, B, nN, fracN, stemN, stemW) {
+  const wT = B[K.type], there = 1 - wT[0];
+  if (there < 0.001 || stemW < 0.001) return;
+  const wF = B[K.form], hang = P[K.hang].value * DEG, spread = P[K.spread].value * DEG;
+  const ped = P[K.ped].value, axis = P[K.axis].value, stalk = P[K.stalk].value;
+  const size = P[K.size].value * there * stemW;
+  // A rough length for one item: catkins are long, fruit a little longer than wide.
+  const itemLen = size * P[K.length].value * (flower ? 1 + 4 * wT[4] / there : 1.5);
+  for (let i = 0; i <= nN && nCl < MAX_CL; i++) {
+    const tip = i === nN, ni = tip ? nN : flower ? nN - 1 - i : i;
+    const pres = tip ? P[K.tip].value : clamp(P[K.nodes].value - i, 0, 1) * (ni === nN - 1 ? fracN : 1);
+    if (pres < 0.002) continue;
+    const si = tip ? stemN - 1 : NODE_I[ni], side = tip ? 1 : ni % 2 ? 1 : -1;
+    const c = nCl++, k = nSpLeaf + c;
+    CL_FLOWER[c] = flower ? 1 : 0; CL_NI[c] = ni; CL_SI[c] = si; CL_SIDE[c] = side; CL_PRES[c] = pres;
+    CL_DIR[c] = SPH[si] + side * hang;
+    SP_NX[k] = SX[si]; SP_NY[k] = SY[si]; SP_ANG[k] = CL_DIR[c];
+    SP_R0[k] = ped * pres * 0.5;
+    SP_R1[k] = (ped + axis * (wF[1] + wF[2])) * pres + stalk + itemLen;
+    SP_RAD[k] = itemLen * 0.5 + (stalk + axis * wF[2] * pres) * Math.sin(Math.min(spread, Math.PI) / 2);
+    SP_W[k] = pres;
+  }
+}
+
+/** Turn the n capsules apart, into SP_TURN: at most ±0.6 rad × amount each. */
+function spreadOut(n, amount) {
+  for (let i = 0; i < n; i++) { SP_RAW[i] = 0; SP_TURN[i] = 0; }
+  if (amount <= 0 || n < 2) return;
+  const maxTurn = 0.6 * amount;
+  for (let pass = 0; pass < 4; pass++) {
+    for (let i = 0; i < n; i++) {
+      const a = SP_ANG[i] + SP_TURN[i], c = Math.cos(a), sn = Math.sin(a);
+      SP_PX[i] = SP_NX[i] + c * SP_R0[i]; SP_PY[i] = SP_NY[i] + sn * SP_R0[i];
+      SP_QX[i] = SP_NX[i] + c * SP_R1[i]; SP_QY[i] = SP_NY[i] + sn * SP_R1[i];
+    }
+    for (let i = 0; i < n; i++) {
+      if (SP_W[i] < 0.002) continue;
+      let torque = 0;
+      const a = SP_ANG[i] + SP_TURN[i], ca = Math.cos(a), sa = Math.sin(a);
+      for (let j = 0; j < n; j++) {
+        if (j === i || SP_W[j] < 0.002) continue;
+        const rr = SP_RAD[i] + SP_RAD[j];
+        // A smooth sum over points along both capsules: each pair closer than the two radii
+        // turns i away from the side of its axis that j's point is on (the sine of its angle
+        // off the axis, seen from i's node). Every term is continuous, so the turn is too; a
+        // single closest pair jumped when two spots were nearly as close.
+        for (let k = 0; k < SPREAD_K; k++) {
+          const fi = k / (SPREAD_K - 1), xi = lerp(SP_PX[i], SP_QX[i], fi), yi = lerp(SP_PY[i], SP_QY[i], fi);
+          for (let l = 0; l < SPREAD_K; l++) {
+            const fj = l / (SPREAD_K - 1), xj = lerp(SP_PX[j], SP_QX[j], fj), yj = lerp(SP_PY[j], SP_QY[j], fj);
+            const d = Math.hypot(xi - xj, yi - yj);
+            if (d >= rr) continue;
+            const vx = xj - SP_NX[i], vy = yj - SP_NY[i], vl = Math.hypot(vx, vy);
+            if (vl < 1e-6) continue;
+            torque -= SP_W[j] * (rr - d) / rr * (ca * vy - sa * vx) / vl / SPREAD_K;
+          }
+        }
+      }
+      SP_RAW[i] += 0.5 * torque;
+    }
+    for (let i = 0; i < n; i++) SP_TURN[i] = maxTurn * Math.tanh(SP_RAW[i] / maxTurn);
+  }
+}
+
 
 /**
  * The sprig, always built (no stem = a stem of zero length bearing only its terminal leaf).
@@ -1173,15 +1537,8 @@ function buildSprigVariant(j, P, B, seed) {
   sOutline.n = 0;
   geo.budCount[j] = geo.count - geo.budStart[j];
 
-  // Fruit, over the leaves: stalks, then each fruit whole.
-  sFill.n = sStroke.n = 0;
-  emitFruits(P, B, nN, fracN, stemN, stemW, ss);
-  geo.fruitStart[j] = geo.count;
-  appendBuf(sStroke); appendBuf(sFill);
-  sFill.n = sStroke.n = 0;
-  geo.fruitCount[j] = geo.count - geo.fruitStart[j];
-
-  // Leaf placements, base to tip; each arrangement's leaves weighted by its blend.
+  // Leaf placements, base to tip; each arrangement's leaves weighted by its blend. Queued, so
+  // they can be spread out (with the clusters) before they're placed.
   const po = j * MAX_PLACE * 8;
   let np = 0;
   const nLeaf = Math.max(1, geo.nLeaf);
@@ -1218,15 +1575,50 @@ function buildSprigVariant(j, P, B, seed) {
         }
         const size = (1 - grad * fi) * (1 + v * 0.12 * rnd2(ss, 70 + key));
         // The same node and position keep the same leaf shape across arrangements.
-        np = place(po, np, (i * 3 + q * 5) % nLeaf, NODE_I[i], rel, size, pres);
+        np = queuePlace(np, (i * 3 + q * 5) % nLeaf, NODE_I[i], i, rel, size, pres);
       }
     }
   }
   // The terminal leaf: all there is with no stem; otherwise weighted by Terminal = Leaf.
   const tipPres = wA[0] + stemW * wT[0];
-  if (tipPres > 0.001 && np < MAX_PLACE) np = place(po, np, 0, stemN - 1, 0, lerp(1, (1 - grad) * 0.9, stemW), tipPres);
+  if (tipPres > 0.001 && np < MAX_PLACE) np = queuePlace(np, 0, stemN - 1, nN, 0, lerp(1, (1 - grad) * 0.9, stemW), tipPres);
+
+  // Spread the leaves and clusters apart, then place them.
+  nSpLeaf = np; nCl = 0;
+  for (let p = 0; p < np; p++) {
+    const lv = PL_LV[p], si = PL_SI[p], sz = Math.max(0.05, PL_SIZE[p]);
+    SP_NX[p] = SX[si]; SP_NY[p] = SY[si]; SP_ANG[p] = SPH[si] + PL_REL[p];
+    SP_R0[p] = VLEN[lv] * sz * 0.35; SP_R1[p] = VLEN[lv] * sz * 0.85; SP_RAD[p] = VWID[lv] * sz * 0.75;
+    SP_W[p] = PL_PRES[p];
+  }
+  clusterSpecs(FRUIT_KEYS, false, P, B, nN, fracN, stemN, stemW);
+  clusterSpecs(FLOWER_KEYS, true, P, B, nN, fracN, stemN, stemW);
+  spreadOut(np + nCl, P.spreadOut.value * stemW);
+  for (let p = 0; p < np; p++) {
+    // A leaf can turn toward the stem, but not across it.
+    const rel = PL_REL[p], r = rel + SP_TURN[p], lim = Math.min(Math.abs(rel), 0.1);
+    const relT = rel > 1e-3 ? Math.max(r, lim) : rel < -1e-3 ? Math.min(r, -lim) : r;
+    place(po, p, PL_LV[p], PL_SI[p], relT, PL_SIZE[p], PL_PRES[p]);
+    geo.placeNode[p] = PL_NODE[p];
+  }
   geo.sprigNPlace[j] = np;
+  geo.sprigNodes = nN;
+
+  // Fruit and flowers: each cluster its own run, layered among the leaves by the renderer.
+  sFill.n = sStroke.n = 0;
+  geo.fruitStart[j] = geo.count;
+  emitClusters(FRUIT_KEYS, false, P, B, stemW, ss);
+  emitClusters(FLOWER_KEYS, true, P, B, stemW, ss);
+  geo.nCl = nCl;
+  geo.fruitCount[j] = geo.count - geo.fruitStart[j];
 }
+
+/** Queue one leaf placement (see buildSprigVariant); returns the new count. */
+function queuePlace(np, lv, si, node, rel, size, pres) {
+  PL_LV[np] = lv; PL_SI[np] = si; PL_NODE[np] = node; PL_REL[np] = rel; PL_SIZE[np] = size; PL_PRES[np] = pres;
+  return np + 1;
+}
+
 
 /** Add one leaf placement at stem sample si; returns the new count. */
 function place(po, np, lv, si, rel, size, pres) {
@@ -1279,5 +1671,6 @@ export function buildShapes(P, B, variety) {
     vertCap = MAX_VERTS;
   }
   resDiv = 1;
+  measureVariants();
   buildSprigVariant(0, P, B, seed);
 }

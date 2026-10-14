@@ -1,11 +1,11 @@
 ---
 name: leaf-species
-description: Add, edit or rename a species preset in the Leaf glimmer (src/sketches/leaf/params.js `presets`) — a tree's leaf, stem, fruit and colours. Use whenever the user asks for a new tree or plant in Leaf, wants a species to look more like itself, or names, renames or reorders presets. Covers horticultural naming conventions, the comment and colour rules, and how to check the result by eye.
+description: Add, edit or rename a species preset in the Leaf glimmer (src/sketches/leaf/params.js `presets`) — a tree's leaf, stem, fruit, flowers and colours. Use whenever the user asks for a new tree or plant in Leaf, wants a species to look more like itself, or names, renames or reorders presets. Covers horticultural naming conventions, the comment and colour rules, and how to check the result by eye.
 ---
 
 # Leaf species presets
 
-Read `src/sketches/leaf/NOTES.md` (Species presets, Fruit) and `TODO.md` (trees the engine can't draw yet, and why) first. If the tree needs something the engine has no control for, it belongs in `TODO.md`, not in a half-right preset: Hawthorn, Tulip tree and others were cut because they didn't read as themselves.
+Read `src/sketches/leaf/NOTES.md` (Species presets, Fruit and flowers) and `TODO.md` (trees the engine can't draw yet, and why) first. If the tree needs something the engine has no control for, it belongs in `TODO.md`, not in a half-right preset: Hawthorn, Tulip tree and others were cut because they didn't read as themselves.
 
 ## Naming: horticultural conventions
 
@@ -15,7 +15,7 @@ Preset names are what a tree guide's index would print.
 - **Invert a qualified name with a comma**, the index form, so relatives sit together in the menu: English oak → `Oak, English`; Field maple → `Maple, Field`; Silver birch → `Birch, Silver`; Crab apple → `Apple, Crab`. Capitalise both parts.
 - **Invert by the name, not by botany.** Horse chestnut (*Aesculus*) and Sweet chestnut (*Castanea*) aren't related, but both are `Chestnut, …`, as an index lists them.
 - **Leave one-word names alone**: Holly, Sycamore, Robinia, Eucalyptus. Sycamore is botanically a maple, but nobody calls it one.
-- **Don't invent qualifiers**, unless a second preset would share the name. Adding a second cherry turns `Cherry` into `Cherry, Wild` (plus the new `Cherry, Bird`).
+- **Don't invent qualifiers**, unless a second preset would share the name. Adding a second cherry turned `Cherry` into `Cherry, Wild` beside the new `Cherry, Japanese`.
 - **Cultivars** go in single quotes after the species name: `Maple, Japanese 'Bloodgood'`. Hybrids keep the × in the comment (*Tilia × europaea*).
 - **Order:** `presets` is in alphabetical order by name, because that is the menu order. Insert new presets in place.
 - **Quoting:** keys with spaces or commas are quoted: `'Oak, English': species({`.
@@ -34,9 +34,10 @@ Preset names are what a tree guide's index would print.
   // or two of plain description. Leaf colour on paper colour.
   'Oak, English': species({
     compound: …, outline: …,                     // the Leaf, Lobes, Margin, Veins, Stalk, Stem
-    …                                            // and Fruit groups, as the others lay them out
+    …                                            // Fruit and Flowers groups, as others lay them out
     paper: '#…', leafWash: '#…', leafShade: '#…',
-    stemWash: '#…', budColour: '#…', budShade: '#…', fruitColour: '#…', fruitShade: '#…',
+    stemWash: '#…', budColour: '#…', budShade: '#…',
+    fruitColour: '#…', fruitShade: '#…', flowerColour: '#…', flowerShade: '#…', flowerCentre: '#…',
   }),
 ```
 
@@ -45,12 +46,13 @@ Preset names are what a tree guide's index would print.
 - **Colours:**
   - Use summer colours unless autumn is the point.
   - The paper is a very pale pastel from roughly the far side of the hue wheel from the leaf, or from a strong stem colour.
-  - Set fruit colours only when there's fruit. The acorn cup uses the bud colours.
+  - Set fruit and flower colours only when there's fruit or flowers. The acorn cup uses the bud colours; a bract has its own `bractColour`.
 - **Nodes:** 3–10, never 2 (it looks unfinished).
-- **Fruit** (see NOTES Fruit):
-  - Put fruit where it reads, in open space off the leaves; clusters at a dense tip get lost.
-  - Use Cluster stalk for things that hang together (a pair of maple keys).
-  - Use Fruit length for elongated fruit (holm oak acorns).
+- **Fruit and flowers** (see NOTES Fruit and flowers):
+  - A preset may show both seasons at once, as a botanical plate does (Elder: flowers at the tip, berries lower down). Keep them apart: flowers count their nodes from the tip down, fruit from the base up.
+  - Put them where they read, in open space off the leaves; small clusters at a dense tip get lost. Hang and Cluster stalk move them out.
+  - Pick the Cluster form the tree has: Fan for pairs and umbels (cherries, maple keys on a Cluster stalk), Raceme for chains and candles (laburnum, horse chestnut, plane balls with Fruit stalk 0), Corymb for flat or domed heads (elder, rowan, whitebeam).
+  - Use Fruit length or Flower length for elongated fruit, petals and catkins; Curve for drooping chains and catkins.
   - Leave Gloss off for dry fruit.
 
 ## Check it
