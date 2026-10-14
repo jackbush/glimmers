@@ -28,7 +28,9 @@ import { MAX_SLOTS, SF, blendLayouts, pinnaN, pinnaSeg, rachisLen, slots } from 
 export const STRIDE = 9;
 export const MAX_VERTS = 420000;
 export const MAX_VARIANTS = 16;
-export const MAX_PLACE = 56;
+export const MAX_PLACE = 320;
+// Nodes on a sprig (the Nodes param's max, with room to spare).
+const MAX_NODES = 128;
 // Fruit and flower clusters on a sprig: two bearers × (10 nodes + the tip), with room to spare.
 const MAX_CL = 24;
 
@@ -79,6 +81,11 @@ export const geo = {
   // The node each placement grows from (the tip is node sprigNodes), and how many nodes.
   placeNode: new Int32Array(MAX_PLACE),
   sprigNodes: 0,
+  // Woody pegs under the leaves (back layer), and each node's sheaths (drawn after its leaves).
+  pegStart: 0,
+  pegCount: 0,
+  sheathStart: new Int32Array(MAX_NODES + 1),
+  sheathCount: new Int32Array(MAX_NODES + 1),
   // Per placement: leaf variant, mat2 column-major (a, b, c, d), tx, ty, presence (0–1).
   sprigPlace: new Float32Array(MAX_VARIANTS * MAX_PLACE * 8),
   sprigNPlace: new Int32Array(MAX_VARIANTS),
@@ -676,8 +683,9 @@ function leafLine(x0, y0, x1, y1, w0, w1, kind, ls, oEnd = 1, wing = 0) {
 }
 
 // Resolution divisor for a leaf that came out over its share of the vertex buffer (see
-// buildShapes).
-let resDiv = 1;
+// buildShapes), and for leaves on a long shoot, which are small on screen: 1 up to 15 nodes,
+// then 2, 4, 8 from 16, 32, 64 (whole steps, so outlines don't shimmer as counts ease).
+let resDiv = 1, nodeDiv = 1;
 
 function buildLeafVariant(v, seed) {
   const vs = seed * 977 + v * 131 + 17;
@@ -701,7 +709,7 @@ function buildLeafVariant(v, seed) {
   const bucket = Math.pow(2, Math.ceil(Math.log2(Math.max(1, active))));
   const veinsPer = 2 * 22 * (1 + 12 * 0.3); // veinlets are ~3 segments each
   N = clamp(Math.floor(budget / (bucket * 6 * (4.2 + veinsPer * 0.1))), 10, NMAX);
-  N = Math.max(4, Math.floor(N / resDiv));
+  N = Math.max(4, Math.floor(N / resDiv / nodeDiv));
   N -= N % 2;
   VS = clamp(Math.round(N / 8), 3, 40);
   curSeed = rnd(vs, 5);
@@ -814,12 +822,12 @@ function buildLeafVariant(v, seed) {
 
 // ---------------------------------------------------------------- sprigs
 
-const STEM_MAX = 400;
+const STEM_MAX = 800;
 const SX = new Float32Array(STEM_MAX), SY = new Float32Array(STEM_MAX), SPH = new Float32Array(STEM_MAX), SS = new Float32Array(STEM_MAX);
 // Sample kinds: 0 along the stem, 1 a node's leaf direction (the kink's bisector; not drawn),
 // 2 the stem leaving a node (drawn, so the kink is exact).
 const SKIND = new Uint8Array(STEM_MAX);
-const NODE_S = new Float32Array(16), NODE_I = new Int32Array(16);
+const NODE_S = new Float32Array(MAX_NODES), NODE_I = new Int32Array(MAX_NODES);
 
 // Bud outlines: half-width along the bud (u 0 base … 1 tip), for each type.
 function budWidth(type, u) {
@@ -1213,12 +1221,12 @@ function emitFlower(bx, by, a, size, seed, mir, bend) {
 // Fruit and flowers share one cluster engine, each with its own params under its own prefix.
 // Flowers count their nodes from the tip down (they're on the new growth), fruit from the base up.
 const FRUIT_KEYS = {
-  type: 'fruit', nodes: 'fruitNodes', tip: 'fruitTip', form: 'fruitForm', axis: 'fruitAxis', rays: 'fruitRays', taper: 'fruitTaper',
+  type: 'fruit', nodes: 'fruitNodes', every: 'fruitEvery', tip: 'fruitTip', form: 'fruitForm', axis: 'fruitAxis', rays: 'fruitRays', taper: 'fruitTaper',
   count: 'fruitCount', size: 'fruitSize', length: 'fruitLength', ped: 'fruitPeduncle', bract: 'fruitBract', stalk: 'fruitStalk',
   hang: 'fruitHang', spread: 'fruitSpread', curve: 'fruitCurve',
 };
 const FLOWER_KEYS = {
-  type: 'flower', nodes: 'flowerNodes', tip: 'flowerTip', form: 'flowerForm', axis: 'flowerAxis', rays: 'flowerRays', taper: 'flowerTaper',
+  type: 'flower', nodes: 'flowerNodes', every: 'flowerEvery', tip: 'flowerTip', form: 'flowerForm', axis: 'flowerAxis', rays: 'flowerRays', taper: 'flowerTaper',
   count: 'flowerCount', size: 'flowerSize', length: 'flowerLength', ped: 'flowerPeduncle', bract: 'flowerBract', stalk: 'flowerStalk',
   hang: 'flowerHang', spread: 'flowerSpread', curve: 'flowerCurve',
 };
@@ -1388,8 +1396,11 @@ function clusterSpecs(K, flower, P, B, nN, fracN, stemN, stemW) {
   const size = P[K.size].value * there * stemW;
   // A rough length for one item: catkins are long, fruit a little longer than wide.
   const itemLen = size * P[K.length].value * (flower ? 1 + 4 * wT[4] / there : 1.5);
+  // Every: only every nth node bears (spaced along a long needled shoot).
+  const every = Math.max(1, Math.round(P[K.every].value));
   for (let i = 0; i <= nN && nCl < MAX_CL; i++) {
-    const tip = i === nN, ni = tip ? nN : flower ? nN - 1 - i : i;
+    const tip = i === nN, ni = tip ? nN : flower ? nN - 1 - i * every : i * every;
+    if (!tip && (ni < 0 || ni >= nN)) continue;
     const pres = tip ? P[K.tip].value : clamp(P[K.nodes].value - i, 0, 1) * (ni === nN - 1 ? fracN : 1);
     if (pres < 0.002) continue;
     const si = tip ? stemN - 1 : NODE_I[ni], side = tip ? 1 : ni % 2 ? 1 : -1;
@@ -1419,9 +1430,13 @@ function spreadOut(n, amount) {
       if (SP_W[i] < 0.002) continue;
       let torque = 0;
       const a = SP_ANG[i] + SP_TURN[i], ca = Math.cos(a), sa = Math.sin(a);
+      const mxi = (SP_PX[i] + SP_QX[i]) / 2, myi = (SP_PY[i] + SP_QY[i]) / 2, hi = (SP_R1[i] - SP_R0[i]) / 2;
       for (let j = 0; j < n; j++) {
         if (j === i || SP_W[j] < 0.002) continue;
         const rr = SP_RAD[i] + SP_RAD[j];
+        // Far apart (midpoints further than both half-lengths and radii): nothing to do.
+        const mx = (SP_PX[j] + SP_QX[j]) / 2 - mxi, my = (SP_PY[j] + SP_QY[j]) / 2 - myi, reach = hi + (SP_R1[j] - SP_R0[j]) / 2 + rr;
+        if (mx * mx + my * my > reach * reach) continue;
         // A smooth sum over points along both capsules: each pair closer than the two radii
         // turns i away from the side of its axis that j's point is on (the sine of its angle
         // off the axis, seen from i's node). Every term is continuous, so the turn is too; a
@@ -1544,26 +1559,34 @@ function buildSprigVariant(j, P, B, seed) {
   const nLeaf = Math.max(1, geo.nLeaf);
   const div = P.divergence.value * DEG, dec = Number(P.decussate.value);
   const perF = Math.max(1, P.whorlCount.value), perN = Math.ceil(perF - 1e-6), fracW = perF - (perN - 1);
+  // Alternate leaves in bundles (pine's pairs): Per node of them, fanned across Bundle spread.
+  const bunF = Math.max(1, P.perNode.value), bunN = Math.ceil(bunF - 1e-6), fracB = bunF - (bunN - 1), bunSpread = P.bundleSpread.value * DEG;
   const ins0 = P.insertion.value * DEG, ins1 = P.tipInsertion.value * DEG, grad = P.sizeGradient.value;
+  const fore = P.foreshorten.value, baseShrink = P.baseShrink.value;
   for (let i = 0; i < nN; i++) {
     const fi = nodesF > 1 ? Math.min(1, i / (nodesF - 1)) : 0;
     const nodeGrow = i === nN - 1 ? fracN : 1;
     for (let a = 1; a <= 3; a++) {
       const wa = wA[a] * stemW;
       if (wa < 0.001) continue;
-      const per = a === 1 ? 1 : a === 2 ? 2 : perN;
+      const per = a === 1 ? bunN : a === 2 ? 2 : perN;
       for (let q = 0; q < per && np < MAX_PLACE; q++) {
         const key = i * 8 + q;
         const beta = lerp(ins0, ins1, fi) + v * 0.12 * rnd2(ss, 40 + key);
         // Pressed flat, as on a herbarium sheet: every leaf keeps its true shape and lies to
         // one side of the stem at an angle `rel` from it (+ = the stem's left).
-        let rel, pres = wa * nodeGrow;
+        let rel, pres = wa * nodeGrow, fsh = 1;
         if (a === 1) {
           // Alternate: pressed, the sides simply alternate; leaves that faced front or back in
-          // life (by their turn around the stem) press nearer it. Taking the side from parity,
-          // not the turn, stops leaves swinging across the stem as divergence eases.
-          const c = Math.cos(i * div);
-          rel = (i % 2 ? -1 : 1) * beta * (0.5 + 0.5 * Math.abs(c));
+          // life (by their turn around the stem) press nearer it, and with Foreshorten look
+          // shorter, as they point toward or away from you. Taking the side from parity, not
+          // the turn, stops leaves swinging across the stem as divergence eases.
+          const c = Math.cos(i * div), sd = i % 2 ? -1 : 1;
+          rel = sd * beta * (0.5 + 0.5 * Math.abs(c));
+          fsh = lerp(1, 0.35 + 0.65 * Math.abs(c), fore);
+          // A bundle fans about that direction, on the same side; its newest leaf grows in.
+          rel += sd * bunSpread * ((q - (bunF - 1) / 2) / Math.max(1, bunF - 1));
+          if (q === bunN - 1) pres *= fracB;
         } else if (a === 2) {
           // Opposite: a pair, one each side. Decussate pairs alternate wide and narrow.
           rel = (q === 0 ? 1 : -1) * beta * (i % 2 ? lerp(1, 0.55, dec) : 1);
@@ -1573,7 +1596,8 @@ function buildSprigVariant(j, P, B, seed) {
           rel = beta * (2 * q / Math.max(1, perF - 1) - 1) * (i % 2 ? 0.75 : 1);
           if (q === perN - 1) pres *= fracW;
         }
-        const size = (1 - grad * fi) * (1 + v * 0.12 * rnd2(ss, 70 + key));
+        // Smaller toward the tip (Size gradient) and, with Base shrink, toward the base too.
+        const size = (1 - grad * fi) * (1 - baseShrink * (1 - smooth(0, 0.6, fi))) * fsh * (1 + v * 0.12 * rnd2(ss, 70 + key));
         // The same node and position keep the same leaf shape across arrangements.
         np = queuePlace(np, (i * 3 + q * 5) % nLeaf, NODE_I[i], i, rel, size, pres);
       }
@@ -1600,7 +1624,9 @@ function buildSprigVariant(j, P, B, seed) {
     const relT = rel > 1e-3 ? Math.max(r, lim) : rel < -1e-3 ? Math.min(r, -lim) : r;
     place(po, p, PL_LV[p], PL_SI[p], relT, PL_SIZE[p], PL_PRES[p]);
     geo.placeNode[p] = PL_NODE[p];
+    PL_REL[p] = relT;
   }
+  emitNodeParts(P, np, nN, stemW, ss);
   geo.sprigNPlace[j] = np;
   geo.sprigNodes = nN;
 
@@ -1612,6 +1638,41 @@ function buildSprigVariant(j, P, B, seed) {
   geo.nCl = nCl;
   geo.fruitCount[j] = geo.count - geo.fruitStart[j];
 }
+
+/**
+ * Pegs (spruce: a short woody stub under each leaf, in the back layer with the stem) and sheaths
+ * (pine: a papery sleeve round the base of each bundle, drawn over it), each from its leaf's node
+ * along its direction, scaled with the leaf.
+ */
+function emitNodeParts(P, np, nN, stemW, ss) {
+  const pegs = P.pegs.value * stemW, sheath = P.sheath.value * stemW;
+  const pw = P.stemWidth.value * (1 - P.stemTaper.value) * 0.7;
+  sStroke.n = sFill.n = 0;
+  geo.pegStart = geo.count;
+  for (let p = 0; p < np && pegs > 0.002; p++) {
+    const si = PL_SI[p], sz = PL_SIZE[p] * PL_PRES[p];
+    if (PL_NODE[p] >= nN || sz < 1e-3) continue;
+    stalkLine(SX[si], SY[si], SPH[si] + PL_REL[p], pegs * 0.1 * sz, pw, pw * 0.8, 1, ss + 300 + p, 0, 2);
+  }
+  appendBuf(sStroke); sStroke.n = 0;
+  geo.pegCount = geo.count - geo.pegStart;
+  // One sheath per bundle: at the first leaf of each node, pointing along the bundle's middle.
+  let p = 0;
+  for (let n = 0; n <= nN; n++) {
+    geo.sheathStart[n] = geo.count;
+    let a = 0, sz = 0, k = 0;
+    const p0 = p;
+    for (; p < np && PL_NODE[p] === n; p++) { a += PL_REL[p]; sz += PL_SIZE[p] * PL_PRES[p]; k++; }
+    if (sheath > 0.002 && k > 0 && n < nN) {
+      const si = PL_SI[p0], L = sheath * 0.16 * sz / k;
+      emitShape(SX[si], SY[si], SPH[si] + a / k, L, L, 6, sheathW, KIND_BUD, 0, 0, 0);
+      appendBuf(sFill); sFill.n = 0;
+    }
+    geo.sheathCount[n] = geo.count - geo.sheathStart[n];
+  }
+}
+// A sheath: a narrow papery sleeve, open at its end.
+function sheathW(u) { return 0.12 + 0.06 * u; }
 
 /** Queue one leaf placement (see buildSprigVariant); returns the new count. */
 function queuePlace(np, lv, si, node, rel, size, pres) {
@@ -1648,6 +1709,7 @@ export function buildShapes(P, B, variety) {
   resolveKnobs(P, B, variety);
   // No stem at all: one leaf. Any stem: a few variants so the sprig's leaves differ.
   const nv = B.arrangement[0] < 0.999 ? 6 : 1;
+  nodeDiv = nv > 1 ? clamp(Math.pow(2, Math.floor(Math.log2(Math.max(1, P.nodes.value / 8)))), 1, 8) : 1;
   const seed = P.seed.value;
   geo.count = 0;
   geo.nSeg = 0;

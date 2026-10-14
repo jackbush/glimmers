@@ -47,7 +47,8 @@ Preset names are what a tree guide's index would print.
   - Use summer colours unless autumn is the point.
   - The paper is a very pale pastel from roughly the far side of the hue wheel from the leaf, or from a strong stem colour.
   - Set fruit and flower colours only when there's fruit or flowers. The acorn cup uses the bud colours; a bract has its own `bractColour`.
-- **Nodes:** 3–10, never 2 (it looks unfinished).
+- **Nodes:** 3–15 for a broadleaf, never 2 (it looks unfinished). Up to 15 keeps leaves at full resolution; from 16 they step down (fine for needles, not for big toothed leaves).
+- **Conifers** (see NOTES Long shoots): Outline Needle, no side veins (Vein weight 0), a short internode, dozens of nodes. Two ranks: Alternate, Divergence 180; spirals: 137.5 with Foreshorten; bundles: Per node, Bundle fan, Sheath; spruce's Pegs; Base shrink for small-at-both-ends shoots. Decide which side is up: stomatal bands are on the underside of most flat needles, so a shoot seen from above (yew) shows none. Spread out 0, since they're meant to be dense, and Every to space fruit along the shoot.
 - **Fruit and flowers** (see NOTES Fruit and flowers):
   - A preset may show both seasons at once, as a botanical plate does (Elder: flowers at the tip, berries lower down). Keep them apart: flowers count their nodes from the tip down, fruit from the base up.
   - Put them where they read, in open space off the leaves; small clusters at a dense tip get lost. Hang and Cluster stalk move them out.

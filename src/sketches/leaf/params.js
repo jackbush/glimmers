@@ -62,6 +62,8 @@ const schema = [
       { key: 'veinlets', label: 'Veinlets', value: 6, min: 0, max: 12, step: 1, uniform: false, desc: 'Fine cross-veins between neighbouring secondary veins (pinnate venation).' },
       { key: 'veinWeight', label: 'Vein weight', value: 0.0065, min: 0, max: 0.02, step: 0.0005, uniform: false, desc: 'Half-width of secondary veins at their base, as a fraction of leaf length.' },
       { key: 'midribWeight', label: 'Midrib weight', value: 0.013, min: 0, max: 0.03, step: 0.0005, uniform: false, desc: 'Half-width of the midrib, rachis and stalk at the base.' },
+      { key: 'stomata', label: 'Stomatal bands', value: 0, min: 0, max: 1, step: 0.01, desc: 'Pale stripes of breathing pores along each leaf: two either side of the midrib (yew, fir, redwood), or one down the middle (juniper) (0 = none).' },
+      { key: 'stomataBands', label: 'Bands', value: 2, min: 1, max: 2, step: 1, desc: 'One band down the middle, or two either side of the midrib.', when: { key: 'stomata', not: [0] } },
     ],
   },
   {
@@ -77,15 +79,20 @@ const schema = [
     group: 'Stem',
     params: [
       { key: 'arrangement', label: 'Arrangement', type: 'select', options: ['No stem', 'Alternate', 'Opposite', 'Whorled'], value: 'Alternate', uniform: false, desc: 'Loose leaves, or sprigs: leaves one per node, in pairs, or in rings. A sprig moves as one piece.' },
-      { key: 'divergence', label: 'Divergence °', value: 180, min: 90, max: 180, step: 0.5, uniform: false, desc: 'Turn between successive alternate leaves around the stem. Pressed flat: 180 = a clean left-right zigzag; other angles give an irregular rhythm, with some leaves pressed nearer the stem.', when: { key: 'arrangement', is: ['Alternate'] } },
+      { key: 'divergence', label: 'Divergence °', value: 180, min: 90, max: 180, step: 0.5, uniform: false, desc: 'Turn between successive alternate leaves around the stem. Pressed flat: 180 = a clean left-right zigzag, two ranks (yew, fir); other angles spiral round the shoot (137.5 for pine, spruce), with some leaves pressed nearer the stem.', when: { key: 'arrangement', is: ['Alternate'] } },
+      { key: 'foreshorten', label: 'Foreshorten', value: 0, min: 0, max: 1, step: 0.01, uniform: false, desc: 'In a spiral, leaves that pointed toward or away from you look shorter (spruce, pine).', when: { key: 'arrangement', is: ['Alternate'] } },
+      { key: 'perNode', label: 'Per node', value: 1, min: 1, max: 5, step: 1, uniform: false, desc: 'Alternate leaves in bundles from one point (2 for Scots pine, 5 for Weymouth pine).', when: { key: 'arrangement', is: ['Alternate'] } },
+      { key: 'bundleSpread', label: 'Bundle fan °', value: 12, min: 0, max: 60, step: 1, uniform: false, desc: 'How far a bundle\'s leaves fan apart.', when: { key: 'perNode', not: [1] } },
+      { key: 'sheath', label: 'Sheath', value: 0, min: 0, max: 1, step: 0.01, uniform: false, desc: 'A papery sleeve round the base of each bundle (pine), in bud colours (0 = none).', when: { key: 'perNode', not: [1] } },
       { key: 'decussate', label: 'Decussate', type: 'bool', value: false, uniform: false, desc: 'Opposite pairs turn 90° at each node; pressed flat, pairs alternate wide and narrow.', when: { key: 'arrangement', is: ['Opposite'] } },
       { key: 'whorlCount', label: 'Whorl count', value: 3, min: 3, max: 5, step: 1, uniform: false, desc: 'Leaves in each whorl.', when: { key: 'arrangement', is: ['Whorled'] } },
-      { key: 'nodes', label: 'Nodes', value: 5, min: 2, max: 10, step: 1, uniform: false, desc: 'Nodes (leaf positions) on each sprig.', when: { key: 'arrangement', not: ['No stem'] } },
-      { key: 'internode', label: 'Internode', value: 0.45, min: 0.1, max: 1.5, step: 0.01, uniform: false, desc: 'Stem length between nodes, relative to leaf length.', when: { key: 'arrangement', not: ['No stem'] } },
+      { key: 'nodes', label: 'Nodes', value: 5, min: 2, max: 120, step: 1, uniform: false, desc: 'Nodes (leaf positions) on each sprig: a few for most broadleaves, dozens for a needled shoot.', when: { key: 'arrangement', not: ['No stem'] } },
+      { key: 'internode', label: 'Internode', value: 0.45, min: 0.02, max: 1.5, step: 0.01, uniform: false, desc: 'Stem length between nodes, relative to leaf length.', when: { key: 'arrangement', not: ['No stem'] } },
       { key: 'internodeTaper', label: 'Internode taper', value: 0.35, min: 0, max: 0.9, step: 0.01, uniform: false, desc: 'How much the gaps between nodes shorten toward the tip.', when: { key: 'arrangement', not: ['No stem'] } },
       { key: 'bareStem', label: 'Bare stem', value: 0.3, min: 0, max: 1.5, step: 0.01, uniform: false, desc: 'Leafless stem below the first node, relative to leaf length.', when: { key: 'arrangement', not: ['No stem'] } },
       { key: 'insertion', label: 'Insertion °', value: 55, min: 5, max: 100, step: 1, uniform: false, desc: 'Angle between the stem and the lowest leaves.', when: { key: 'arrangement', not: ['No stem'] } },
       { key: 'tipInsertion', label: 'Tip insertion °', value: 30, min: 5, max: 100, step: 1, uniform: false, desc: 'Angle between the stem and the leaves at the tip.', when: { key: 'arrangement', not: ['No stem'] } },
+      { key: 'baseShrink', label: 'Base shrink', value: 0, min: 0, max: 0.9, step: 0.01, uniform: false, desc: 'How much smaller leaves are toward the base of the shoot, so they\'re small at both ends (coast redwood).', when: { key: 'arrangement', not: ['No stem'] } },
       { key: 'sizeGradient', label: 'Size gradient', value: 0.4, min: -0.5, max: 0.9, step: 0.01, uniform: false, desc: 'How much leaves shrink toward the tip (negative = grow).', when: { key: 'arrangement', not: ['No stem'] } },
       { key: 'stemWidth', label: 'Stem width', value: 0.014, min: 0.002, max: 0.05, step: 0.001, uniform: false, desc: 'Half-width of the stem at its base, relative to leaf length.', when: { key: 'arrangement', not: ['No stem'] } },
       { key: 'stemTaper', label: 'Stem taper', value: 0.44, min: 0, max: 1, step: 0.01, uniform: false, desc: 'How much the stem thins toward the tip.', when: { key: 'arrangement', not: ['No stem'] } },
@@ -94,6 +101,7 @@ const schema = [
       { key: 'zigzag', label: 'Zigzag °', value: 25.5, min: 0, max: 40, step: 0.5, uniform: false, desc: 'Kink at each node, away from its leaf (hornbeam, elm).', when: { key: 'arrangement', not: ['No stem'] } },
       { key: 'stemWander', label: 'Wander', value: 0.4, min: 0, max: 1, step: 0.01, uniform: false, desc: 'Slow wiggles in the stem\'s direction, as a hand draws a twig (it bows fruit stalks too); 0 = smooth curves.', when: { key: 'arrangement', not: ['No stem'] } },
       { key: 'spreadOut', label: 'Spread out', value: 0.6, min: 0, max: 1, step: 0.01, uniform: false, desc: 'How far leaves, fruit and flowers turn away from those they overlap, so more of each shows (0 = where they grow).', when: { key: 'arrangement', not: ['No stem'] } },
+      { key: 'pegs', label: 'Pegs', value: 0, min: 0, max: 1, step: 0.01, uniform: false, desc: 'A short woody peg under each leaf, left on the twig when it falls (spruce) (0 = none).', when: { key: 'arrangement', not: ['No stem'] } },
       { key: 'terminal', label: 'Terminal', type: 'select', options: ['Leaf', 'Bud', 'Bare'], value: 'Bud', uniform: false, desc: 'What ends the sprig: a leaf, a bud, or a bare shoot tapering to a point (robinia).', when: { key: 'arrangement', not: ['No stem'] } },
       { key: 'budType', label: 'Bud', type: 'select', options: ['Pointed', 'Plump', 'Scaled', 'Cluster'], value: 'Pointed', uniform: false, desc: 'Shape of the terminal bud: long and pointed (beech), plump (lime), scaled (horse chestnut), or a cluster (oak).', when: { key: 'terminal', is: ['Bud'] } },
       { key: 'budSize', label: 'Bud size', value: 0.055, min: 0.02, max: 0.4, step: 0.005, uniform: false, desc: 'Length of the terminal bud, as a fraction of leaf length.', when: { key: 'terminal', is: ['Bud'] } },
@@ -109,6 +117,7 @@ const schema = [
     params: [
       { key: 'fruit', label: 'Fruit', type: 'select', options: ['None', 'Berry', 'Drupe', 'Nut', 'Key', 'Pod', 'Burr'], value: 'None', uniform: false, desc: 'Fruit on the sprig: a berry (holly), a drupe (cherry, walnut, crab apple), a nut in its cup (acorn, hazel), a winged key (sycamore, ash), a pod (laburnum), or a spiny burr (conker, sweet chestnut, plane ball).' },
       { key: 'fruitNodes', label: 'At nodes', value: 2, min: 0, max: 10, step: 1, uniform: false, desc: 'How many nodes, from the base up, have a cluster in the axil.', when: { key: 'fruit', not: ['None'] } },
+      { key: 'fruitEvery', label: 'Every', value: 1, min: 1, max: 12, step: 1, uniform: false, desc: 'Bear on every nth node only (from the base up), so clusters spread along a long shoot (yew, juniper).', when: { key: 'fruit', not: ['None'] } },
       { key: 'fruitTip', label: 'At tip', type: 'bool', value: false, uniform: false, desc: 'A cluster at the end of the sprig.', when: { key: 'fruit', not: ['None'] } },
       { key: 'fruitForm', label: 'Cluster', type: 'select', options: ['Fan', 'Raceme', 'Corymb'], value: 'Fan', uniform: false, desc: 'How each cluster is built: a fan from one point, a raceme of fruit in turn along an axis (chains, candles), or a corymb of rays branching to a flat top (elder, rowan).', when: { key: 'fruit', not: ['None'] } },
       { key: 'fruitAxis', label: 'Axis length', value: 0.5, min: 0, max: 2, step: 0.01, uniform: false, desc: 'Length of the raceme\'s axis, or of the corymb\'s rays, relative to leaf length.', when: { key: 'fruitForm', not: ['Fan'] } },
@@ -140,6 +149,7 @@ const schema = [
     params: [
       { key: 'flower', label: 'Flowers', type: 'select', options: ['None', 'Open', 'Cup', 'Pea', 'Catkin'], value: 'None', uniform: false, desc: 'Flowers on the sprig: open, seen face on (cherry, elder, rowan, lime, horse chestnut), a cup seen from the side (magnolia), a pea flower (laburnum, robinia), or a catkin (hazel, birch, alder, willow).' },
       { key: 'flowerNodes', label: 'At nodes', value: 0, min: 0, max: 10, step: 1, uniform: false, desc: 'How many nodes, from the tip down, have a cluster in the axil (flowers come on the new growth).', when: { key: 'flower', not: ['None'] } },
+      { key: 'flowerEvery', label: 'Every', value: 1, min: 1, max: 12, step: 1, uniform: false, desc: 'Bear on every nth node only (from the tip down), so clusters spread along a long shoot (yew, juniper).', when: { key: 'flower', not: ['None'] } },
       { key: 'flowerTip', label: 'At tip', type: 'bool', value: true, uniform: false, desc: 'A cluster at the end of the sprig.', when: { key: 'flower', not: ['None'] } },
       { key: 'flowerForm', label: 'Cluster', type: 'select', options: ['Fan', 'Raceme', 'Corymb'], value: 'Fan', uniform: false, desc: 'How each cluster is built: a fan from one point, a raceme of flowers in turn along an axis (chains, candles), or a corymb of rays branching to a flat top (elder, rowan).', when: { key: 'flower', not: ['None'] } },
       { key: 'flowerAxis', label: 'Axis length', value: 0.5, min: 0, max: 2, step: 0.01, uniform: false, desc: 'Length of the raceme\'s axis, or of the corymb\'s rays, relative to leaf length.', when: { key: 'flowerForm', not: ['Fan'] } },
@@ -195,6 +205,7 @@ const schema = [
       { key: 'budShade', label: 'Bud shade', type: 'color', value: '#030101', desc: 'The bud\'s shaded half.', when: { key: 'watercolour', is: [true] } },
       { key: 'fruitColour', label: 'Fruit', type: 'color', value: '#b8282a', desc: 'The fruit\'s wash.', when: { key: 'watercolour', is: [true] } },
       { key: 'fruitShade', label: 'Fruit shade', type: 'color', value: '#4a0a0c', desc: 'The fruit\'s shaded half.', when: { key: 'watercolour', is: [true] } },
+      { key: 'stomataColour', label: 'Stomatal bands', type: 'color', value: '#e6ece6', desc: 'The pale wax of the stomatal bands.', when: { key: 'watercolour', is: [true] } },
       { key: 'seedColour', label: 'Nut', type: 'color', value: '#7a3618', desc: 'The nuts in a cut burr.', when: { key: 'watercolour', is: [true] } },
       { key: 'seedShade', label: 'Nut shade', type: 'color', value: '#2a0e06', desc: 'The nuts\' shaded half.', when: { key: 'watercolour', is: [true] } },
       { key: 'seedScar', label: 'Nut scar', type: 'color', value: '#c9ad80', desc: 'The pale scar (hilum) on a single nut, where it was joined to the husk.', when: { key: 'watercolour', is: [true] } },
@@ -370,7 +381,7 @@ export const presets = {
     venation: 'Pinnate', veinCount: 8, veinAngle: 45, veinCurve: 0.2, veinlets: 1,
     veinWeight: 0.002, midribWeight: 0.012,
     petioleLength: 0.02, petioleFlat: 0, petioleWing: 0, stipules: 0,
-    arrangement: 'Opposite', decussate: false, nodes: 8, internode: 1.1, internodeTaper: 0.2, bareStem: 0.3,
+    arrangement: 'Opposite', decussate: false, nodes: 14, internode: 0.55, internodeTaper: 0.2, bareStem: 0.3,
     insertion: 70, tipInsertion: 55, sizeGradient: 0.1, stemWidth: 0.007, stemTaper: 0.45,
     stemCurve: 0.15, stemDroop: 0, zigzag: 0, stemTexture: 0.1, stemShading: 0.3, stemFade: 0.2,
     terminal: 'Bud', budType: 'Pointed', budStem: 0.02, budSize: 0.03, leafVariety: 0.15,
@@ -550,12 +561,30 @@ export const presets = {
     venation: 'Pinnate', veinCount: 18, veinAngle: 70, veinCurve: 0, veinlets: 1,
     veinWeight: 0.003, midribWeight: 0.012,
     petioleLength: 0.2, petioleFlat: 0, petioleWing: 0, stipules: 0,
-    arrangement: 'Alternate', nodes: 8, divergence: 144, internode: 0.4, internodeTaper: 0.3, bareStem: 0.3,
+    arrangement: 'Alternate', nodes: 12, divergence: 144, internode: 0.4, internodeTaper: 0.3, bareStem: 0.3,
     insertion: 25, tipInsertion: 15, sizeGradient: 0.2, stemWidth: 0.008, stemTaper: 0.45,
     stemCurve: 0.3, stemDroop: 0.8, zigzag: 5, stemTexture: 0.1, stemShading: 0.3, stemFade: 0.2,
     terminal: 'Bud', budType: 'Pointed', budStem: 0.03, budSize: 0.03, leafVariety: 0.25,
     paper: '#fbefe6', leafWash: '#8aa5a0', leafShade: '#3f5f60',
     stemWash: '#a0704a', budColour: '#8a9a8a', budShade: '#3a4a40',
+  }),
+  // Silver fir (Abies alba): flat needles notched at the tip, glossy dark green with two vivid
+  // white bands beneath, parting along the top of a grey shoot and spreading in two flat ranks;
+  // small, rounded, resin-free buds. Dark green on pale orchid paper.
+  'Fir, Silver': species({
+    compound: 'Simple',
+    outline: 'Needle', width: 2.3, base: 'Rounded', apex: 'Notched', bend: 0.3, sCurve: 0.05,
+    lobing: 'Unlobed',
+    margin: 'Entire',
+    venation: 'Pinnate', veinCount: 2, veinAngle: 30, veinCurve: 0.3, veinlets: 0,
+    veinWeight: 0, midribWeight: 0.016, stomata: 0.8, stomataBands: 2,
+    petioleLength: 0.05, petioleFlat: 0, petioleWing: 0, stipules: 0,
+    arrangement: 'Alternate', nodes: 50, divergence: 180, internode: 0.14, internodeTaper: 0.3, bareStem: 0.35,
+    insertion: 70, tipInsertion: 45, sizeGradient: 0.25, stemWidth: 0.04, stemTaper: 0.45,
+    stemCurve: 0.1, stemDroop: 0, zigzag: 0, stemTexture: 0.45, stemShading: 0.4, stemFade: 0.2,
+    spreadOut: 0, terminal: 'Bud', budType: 'Cluster', budStem: 0.03, budSize: 0.1, leafVariety: 0.3,
+    paper: '#f6eef8', leafWash: '#355a36', leafShade: '#142a18',
+    stemWash: '#8a8070', budColour: '#7a5a3a', budShade: '#2e1e10', stomataColour: '#f2f4ee',
   }),
   // Hazel (Corylus avellana): almost round, soft and hairy, heart-shaped at the base with a
   // short sudden point, doubly toothed; zigzag twig, plump green-brown bud, yellow lamb's-tail
@@ -602,6 +631,26 @@ export const presets = {
     paper: '#faeef0', leafWash: '#2f5a32', leafShade: '#122a18',
     stemWash: '#4a6a3a', budColour: '#4a6a3a', budShade: '#1a2a14', fruitColour: '#c4202a',
     fruitShade: '#5a0610',
+  }),
+  // Common juniper (Juniperus communis): short, rigid, very sharp needles in whorls of three,
+  // standing out from a slender shoot, each with one broad white band; blue-black berries with a
+  // grey bloom. Grey-green on pale peach paper.
+  Juniper: species({
+    compound: 'Simple',
+    outline: 'Needle', width: 1.5, base: 'Rounded', apex: 'Acuminate', bend: 0.05, sCurve: 0,
+    lobing: 'Unlobed',
+    margin: 'Entire',
+    venation: 'Pinnate', veinCount: 2, veinAngle: 30, veinCurve: 0.3, veinlets: 0,
+    veinWeight: 0, midribWeight: 0.012, stomata: 0.85, stomataBands: 1,
+    petioleLength: 0, petioleFlat: 0, petioleWing: 0, stipules: 0,
+    arrangement: 'Whorled', whorlCount: 3, nodes: 18, internode: 0.35, internodeTaper: 0.2, bareStem: 0.3,
+    insertion: 55, tipInsertion: 35, sizeGradient: 0.2, stemWidth: 0.03, stemTaper: 0.4,
+    stemCurve: 0.15, stemDroop: 0, zigzag: 0, stemTexture: 0.4, stemShading: 0.4, stemFade: 0.2,
+    spreadOut: 0, terminal: 'Bud', budType: 'Pointed', budStem: 0.03, budSize: 0.12, leafVariety: 0.2,
+    fruit: 'Berry', fruitNodes: 3, fruitEvery: 5, fruitCount: 1, fruitSize: 0.38, fruitStalk: 0.03, fruitHang: 60, fruitGloss: 0.15,
+    paper: '#faefe9', leafWash: '#6a8a72', leafShade: '#2a4430',
+    stemWash: '#7a5a40', budColour: '#7a6a4a', budShade: '#2e2818',
+    stomataColour: '#eef2ee', fruitColour: '#4a5a7a', fruitShade: '#1a2234',
   }),
   // Laburnum (Laburnum anagyroides): three smooth oval leaflets on a long stalk, crowded on
   // short spurs of a green-grey twig; a long hanging chain of yellow pea flowers, and dry pods
@@ -754,6 +803,25 @@ export const presets = {
     stemWash: '#6a6a5a', budColour: '#7a6a50', budShade: '#30281a', fruitColour: '#8a7a3a',
     fruitShade: '#3e3416',
   }),
+  // Scots pine (Pinus sylvestris): stiff, slightly twisted blue-green needles in pairs, each pair
+  // held in a short papery sheath, spiralling densely round an orange-brown shoot and pointing
+  // forward, thinning toward a ring of red-brown resinous buds. Blue-green on pale apricot paper.
+  'Pine, Scots': species({
+    compound: 'Simple',
+    outline: 'Needle', width: 1.3, base: 'Rounded', apex: 'Acute', bend: 0.12, sCurve: 0.2,
+    lobing: 'Unlobed',
+    margin: 'Entire',
+    venation: 'Pinnate', veinCount: 2, veinAngle: 30, veinCurve: 0.3, veinlets: 0,
+    veinWeight: 0, midribWeight: 0.012, stomata: 0.35, stomataBands: 1,
+    petioleLength: 0, petioleFlat: 0, petioleWing: 0, stipules: 0,
+    arrangement: 'Alternate', nodes: 40, divergence: 137.5, foreshorten: 0.5, perNode: 2, bundleSpread: 14, sheath: 0.7,
+    internode: 0.05, internodeTaper: 0.2, bareStem: 0.25,
+    insertion: 38, tipInsertion: 22, sizeGradient: 0.35, stemWidth: 0.03, stemTaper: 0.4,
+    stemCurve: 0.1, stemDroop: 0, zigzag: 0, stemTexture: 0.5, stemShading: 0.4, stemFade: 0.15,
+    spreadOut: 0, terminal: 'Bud', budType: 'Cluster', budStem: 0.03, budSize: 0.14, leafVariety: 0.3,
+    paper: '#faefe8', leafWash: '#7d9a8c', leafShade: '#2f4c48',
+    stemWash: '#9a6a3e', budColour: '#8a4a2a', budShade: '#3a1a0c', stomataColour: '#d8e2de',
+  }),
   // London plane (Platanus × hispanica): big, five sharp lobes and a few large teeth on a long
   // stalk, alternate (which tells it from a maple); pale olive twig, cone-shaped bud, bristly
   // seed balls strung along long hanging threads. Mid-green on pale violet paper.
@@ -775,6 +843,24 @@ export const presets = {
     paper: '#f4eef9', leafWash: '#6c9446', leafShade: '#2e5028',
     stemWash: '#8a7a5a', budColour: '#7a5a3a', budShade: '#2e1e10', fruitColour: '#8a6a40',
     fruitShade: '#3a2814',
+  }),
+  // Coast redwood (Sequoia sempervirens): flat, pointed needles in two flat ranks, small at the
+  // base of each shoot, longest in the middle and small again at its tip, with two white bands
+  // beneath, on a brown twig. Dark green on pale lavender paper.
+  'Redwood, Coast': species({
+    compound: 'Simple',
+    outline: 'Needle', width: 2.6, base: 'Rounded', apex: 'Acute', bend: 0.12, sCurve: 0.05,
+    lobing: 'Unlobed',
+    margin: 'Entire',
+    venation: 'Pinnate', veinCount: 2, veinAngle: 30, veinCurve: 0.3, veinlets: 0,
+    veinWeight: 0, midribWeight: 0.016, stomata: 0.6, stomataBands: 2,
+    petioleLength: 0.03, petioleFlat: 0, petioleWing: 0, stipules: 0,
+    arrangement: 'Alternate', nodes: 55, divergence: 180, internode: 0.1, internodeTaper: 0.2, bareStem: 0.3,
+    insertion: 75, tipInsertion: 55, baseShrink: 0.6, sizeGradient: 0.65, stemWidth: 0.04, stemTaper: 0.6,
+    stemCurve: 0.15, stemDroop: 0.05, zigzag: 0, stemTexture: 0.35, stemShading: 0.35, stemFade: 0.2,
+    spreadOut: 0, terminal: 'Bare', leafVariety: 0.25,
+    paper: '#f4eef9', leafWash: '#3f6440', leafShade: '#183018',
+    stemWash: '#7a5a40', budColour: '#7a5a3a', budShade: '#2e2010', stomataColour: '#e4ece2',
   }),
   // False acacia (Robinia pseudoacacia): up to fifteen small, smooth oval leaflets, dented at
   // the tip, with a pair of spines (stipules) at each node of a zigzag twig; the buds hide
@@ -823,6 +909,24 @@ export const presets = {
     paper: '#f2eff9', leafWash: '#6a9a4a', leafShade: '#2a502c',
     stemWash: '#6a5048', budColour: '#5a3a4a', budShade: '#24141e',
     fruitColour: '#e8501a', fruitShade: '#8a1a0a',
+  }),
+  // Norway spruce (Picea abies): stiff, sharp, four-sided needles standing all round an
+  // orange-brown shoot, each on a little woody peg that stays when it falls, those pointing at
+  // you looking short; conical red-brown buds. Dark green on rose paper.
+  'Spruce, Norway': species({
+    compound: 'Simple',
+    outline: 'Needle', width: 1.7, base: 'Rounded', apex: 'Acuminate', bend: 0.1, sCurve: 0.05,
+    lobing: 'Unlobed',
+    margin: 'Entire',
+    venation: 'Pinnate', veinCount: 2, veinAngle: 30, veinCurve: 0.3, veinlets: 0,
+    veinWeight: 0, midribWeight: 0.02,
+    petioleLength: 0, petioleFlat: 0, petioleWing: 0, stipules: 0,
+    arrangement: 'Alternate', nodes: 70, divergence: 137.5, foreshorten: 0.7, internode: 0.07, internodeTaper: 0.2, bareStem: 0.3,
+    insertion: 62, tipInsertion: 40, sizeGradient: 0.3, stemWidth: 0.045, stemTaper: 0.45, pegs: 0.8,
+    stemCurve: 0.15, stemDroop: 0, zigzag: 0, stemTexture: 0.4, stemShading: 0.4, stemFade: 0.2,
+    spreadOut: 0, terminal: 'Bud', budType: 'Pointed', budStem: 0.03, budSize: 0.15, leafVariety: 0.25,
+    paper: '#f8eef4', leafWash: '#3e6034', leafShade: '#18301a',
+    stemWash: '#a86a3a', budColour: '#9a5a32', budShade: '#3e2010',
   }),
   // Sycamore (Acer pseudoplatanus): five-lobed with coarse rounded teeth, on a long red stalk,
   // in opposite pairs that turn at each node; big green scaled bud, and a pair of winged keys
@@ -899,7 +1003,7 @@ export const presets = {
     venation: 'Pinnate', veinCount: 16, veinAngle: 40, veinCurve: 0.35, veinlets: 2,
     veinWeight: 0.003, midribWeight: 0.01,
     petioleLength: 0.06, petioleFlat: 0, petioleWing: 0, stipules: 0,
-    arrangement: 'Alternate', nodes: 10, divergence: 144, internode: 0.25, internodeTaper: 0.3, bareStem: 0.3,
+    arrangement: 'Alternate', nodes: 15, divergence: 144, internode: 0.22, internodeTaper: 0.3, bareStem: 0.3,
     insertion: 30, tipInsertion: 20, sizeGradient: 0.3, stemWidth: 0.007, stemTaper: 0.5,
     stemCurve: 0.3, stemDroop: 0.5, zigzag: 5, stemTexture: 0.2, stemShading: 0.3, stemFade: 0.2,
     terminal: 'Bud', budType: 'Pointed', budStem: 0.02, budSize: 0.04, leafVariety: 0.25,
@@ -908,5 +1012,26 @@ export const presets = {
     paper: '#faf0e8', leafWash: '#8ea07a', leafShade: '#47604a',
     stemWash: '#9a7a3a', budColour: '#8a6a3a', budShade: '#3a2a14',
     flowerColour: '#d8d070', flowerShade: '#8a8a3a',
+  }),
+  // Yew (Taxus baccata): flat, soft needles, dark and glossy, twisting at their bases to lie in
+  // two neat ranks either side of a green shoot (seen from above, so their pale bands are
+  // hidden); single seeds sit in fleshy red cups (arils) along it. Near-black green on blush paper.
+  Yew: species({
+    compound: 'Simple',
+    outline: 'Needle', width: 2.6, base: 'Rounded', apex: 'Acuminate', bend: 0.15, sCurve: 0.1,
+    lobing: 'Unlobed',
+    margin: 'Entire',
+    venation: 'Pinnate', veinCount: 2, veinAngle: 30, veinCurve: 0.3, veinlets: 0,
+    veinWeight: 0, midribWeight: 0.018, stomata: 0, stomataBands: 2,
+    petioleLength: 0.06, petioleFlat: 0, petioleWing: 0, stipules: 0,
+    arrangement: 'Alternate', nodes: 60, divergence: 180, internode: 0.12, internodeTaper: 0.3, bareStem: 0.4,
+    insertion: 78, tipInsertion: 45, sizeGradient: 0.3, stemWidth: 0.035, stemTaper: 0.5,
+    stemCurve: 0.25, stemDroop: 0.05, zigzag: 0, stemTexture: 0.2, stemShading: 0.35, stemFade: 0.2,
+    spreadOut: 0, terminal: 'Bare', leafVariety: 0.2,
+    fruit: 'Nut', fruitNodes: 4, fruitEvery: 9, fruitCount: 1, fruitSize: 0.3, fruitLength: 1.05, fruitStalk: 0.05,
+    fruitHang: 120, fruitCup: 1, fruitGloss: 0.5,
+    paper: '#f9eef0', leafWash: '#2e4a2c', leafShade: '#0f2412',
+    stemWash: '#5a7a3a', budColour: '#c8302a', budShade: '#6a0e0a',
+    stomataColour: '#c8d4a0', fruitColour: '#3a2a20', fruitShade: '#120a06',
   }),
 };

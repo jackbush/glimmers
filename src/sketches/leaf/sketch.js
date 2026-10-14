@@ -37,12 +37,13 @@ const GEOM_KEYS = [
   'teeth', 'toothDepth', 'veinCount', 'veinAngle', 'veinCurve', 'veinlets', 'veinWeight', 'midribWeight',
   'petioleLength', 'petioleFlat', 'petioleWing', 'stipules', 'outlineWeight', 'wobble',
   'arrangement', 'nodes', 'divergence', 'decussate', 'whorlCount', 'internode', 'internodeTaper', 'bareStem',
+  'foreshorten', 'perNode', 'bundleSpread', 'sheath', 'baseShrink', 'pegs',
   'insertion', 'tipInsertion', 'sizeGradient', 'stemWidth', 'stemTaper', 'stemCurve', 'stemDroop', 'zigzag', 'stemWander', 'spreadOut',
   'terminal', 'budType', 'budSize', 'budStem', 'leafVariety',
-  'fruit', 'fruitNodes', 'fruitTip', 'fruitCount', 'fruitSize', 'fruitLength', 'fruitPeduncle', 'fruitStalk', 'fruitHang', 'fruitSpread',
+  'fruit', 'fruitNodes', 'fruitEvery', 'fruitTip', 'fruitCount', 'fruitSize', 'fruitLength', 'fruitPeduncle', 'fruitStalk', 'fruitHang', 'fruitSpread',
   'fruitForm', 'fruitAxis', 'fruitRays', 'fruitTaper', 'fruitBract', 'fruitCurve',
   'fruitAsym', 'fruitSeeds', 'fruitCup', 'fruitSpines', 'fruitSpineCount', 'fruitCut', 'fruitKernels',
-  'flower', 'flowerNodes', 'flowerTip', 'flowerForm', 'flowerAxis', 'flowerRays', 'flowerTaper', 'flowerCount', 'flowerSize',
+  'flower', 'flowerNodes', 'flowerEvery', 'flowerTip', 'flowerForm', 'flowerAxis', 'flowerRays', 'flowerTaper', 'flowerCount', 'flowerSize',
   'flowerLength', 'flowerPeduncle', 'flowerBract', 'flowerStalk', 'flowerHang', 'flowerSpread', 'flowerCurve', 'flowerPetals',
   'flowerNotch', 'flowerStamens', 'flowerFlare',
   // Pen lines on fruit stop at the highlight, so these move geometry too.
@@ -499,6 +500,13 @@ export default function create({ canvas, P, model, degrade }) {
         if (s !== lastSig) { lastSig = s; dirty = true; }
       }
       if (dirty) rebuild();
+      // A preset morph glides the framing from the first box to the last, but the shape between
+      // can be bigger than both (forty nodes of oak leaves on the way to a pine): take in the
+      // current box too, so nothing leaves the screen. At the end the two boxes are the same.
+      if (morphing) {
+        viewBox[0] = Math.min(viewBox[0], box[0]); viewBox[1] = Math.min(viewBox[1], box[1]);
+        viewBox[2] = Math.max(viewBox[2], box[2]); viewBox[3] = Math.max(viewBox[3], box[3]);
+      }
       // Ease the framing toward the box.
       let framing = morphing;
       if (!morphing) {
@@ -564,6 +572,7 @@ export default function create({ canvas, P, model, degrade }) {
         drawLeaf(v, 1 + p, s0, s0 + geo.leafStalkSegs[v]);
       }
       for (let c = 0; c < geo.nCl; c++) drawRun(geo.clStart[c], geo.clStalk[c], 0, 1);
+      drawRun(geo.pegStart, geo.pegCount, 0, 1);
       // Then the rest in natural order, node by node from the tip, so whatever grows nearer the
       // base covers what's above it: at each node its fruit and flowers, then its leaves.
       let p = nPl - 1;
@@ -576,6 +585,8 @@ export default function create({ canvas, P, model, degrade }) {
           const v = geo.sprigPlace[p * 8], s0 = geo.leafSegStart[v];
           drawLeaf(v, 1 + p, s0 + geo.leafStalkSegs[v], s0 + geo.leafSegCount[v]);
         }
+        // A bundle's sheath, round its leaves' bases.
+        drawRun(geo.sheathStart[n], geo.sheathCount[n], 0, 1);
       }
       gl.disable(gl.BLEND);
       gl.bindVertexArray(null);

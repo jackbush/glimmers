@@ -178,13 +178,21 @@ void main() {
       alpha = max(inside, washIn);
     }
     col = mix(col, u_fruitHighlight, gloss);
+    // Stomatal bands: pale stripes along a leaf, two either side of the midrib or one down the
+    // middle, with a crisp edge like a reserved wash, fading in and out at the base and tip.
+    float band = 0.0;
+    if (v_kind == 0 && u_stomata > 0.0) {
+      float d = u_stomataBands > 1.5 ? abs(a - 0.5) : a, hw = u_stomataBands > 1.5 ? 0.13 : 0.3;
+      band = u_stomata * clamp((hw - d) / max(fwidth(d), 1e-4), 0.0, 1.0) * smoothstep(0.03, 0.12, v_bl.y) * (1.0 - smoothstep(0.85, 0.97, v_bl.y)) * inside;
+      col = mix(col, u_stomataColour, band);
+    }
     if (u_shading > 0.5) {
       // --- pen hatching: more lines where it's darker; cross-hatching in the darkest.
       float tone = u_hatching * clamp(shaded * 0.7 + smoothstep(0.55, 1.0, a) * 0.45 + field(v_lp * 2.0, 4.0) * 0.4, 0.0, 1.0);
       float th = radians(u_hatchAngle);
       float lines = hatch(v_pos, th, tone, 1.0);
       lines = max(lines, hatch(v_pos, th - 1.4, (tone - 0.5) * 2.0 * u_crossHatch, 2.0));
-      col = mix(col, u_hatchColour, lines * (1.0 - gloss) * u_hatchOpacity * inside);
+      col = mix(col, u_hatchColour, lines * (1.0 - gloss) * (1.0 - band) * u_hatchOpacity * inside);
     }
   } else {
     float ax = abs(v_acrossPx);
