@@ -138,7 +138,7 @@ export function buildPanel({ slug, store, onEdited, presets, onPreset }: PanelOp
     const det = el('details', 'group');
     det.open = true;
     det.appendChild(el('summary', null, group.group));
-    for (const p of group.params) det.appendChild(buildRow(p as Param));
+    for (const p of group.params) det.appendChild(buildRow(p));
     controls.appendChild(det);
   }
 

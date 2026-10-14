@@ -1,5 +1,5 @@
-// Mindflow — parameter schema. The pane is generated from this file, and every default
-// lives here. Fields: key, label, value, type ('range' | 'color' | 'bool'), min/max/step, desc.
+// Mindflow — every default. The pane is generated from this file (fields: ParamDef in
+// src/kit/types.ts).
 //
 // In 2015 the two Brain data values streamed live from a NeuroSky headset (its eSense
 // attention and meditation, both 0–100). Here they're sliders.

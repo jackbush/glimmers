@@ -2,7 +2,7 @@
 // Shared by bench.mjs and capture.mjs.
 
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -28,21 +28,36 @@ export function cli(valued, argv = process.argv.slice(2)) {
 }
 
 /**
- * Build the site (fast, and it means the page under test is never stale), then reuse a
- * server already answering at `url` (a running `astro preview` serves the fresh dist/), or
- * start `astro preview`. Returns the base URL and a stop function.
+ * Build the site (fast, and it means the page under test is never stale; skipped when the
+ * caller has just built, via GLIMMERS_BUILT=1), then reuse a server already answering at
+ * `url` if it serves this dist/ (a running `astro preview` does), or start `astro preview`.
+ * Anything else on that port, like `astro dev`, is an error: it would test other code.
+ * Returns the base URL and a stop function.
  */
 export async function ensureServer(url = 'http://127.0.0.1:4321/glimmers/') {
-  const built = spawnSync('npx', ['astro', 'build'], { cwd: ROOT, encoding: 'utf8' });
-  if (built.status !== 0) throw new Error('astro build failed:\n' + built.stdout + built.stderr);
-  try {
-    const r = await fetch(url);
-    if (r.ok) return { base: url, stop: () => {} };
-  } catch {}
+  if (!process.env.GLIMMERS_BUILT) {
+    const built = spawnSync('npx', ['astro', 'build'], { cwd: ROOT, encoding: 'utf8' });
+    if (built.status !== 0) throw new Error('astro build failed:\n' + built.stdout + built.stderr);
+  }
+  const index = readFileSync(join(ROOT, 'dist/index.html'), 'utf8');
+  /** 'ours' if `url` serves this dist/, 'other' if something else answers, 'none' if nothing does. */
+  const probe = async () => {
+    try {
+      const r = await fetch(url, { cache: 'no-store' });
+      return r.ok && (await r.text()) === index ? 'ours' : 'other';
+    } catch {
+      return 'none';
+    }
+  };
+  const found = await probe();
+  if (found === 'ours') return { base: url, stop: () => {} };
+  if (found === 'other') {
+    throw new Error(`${url} serves something other than this repo's fresh dist/ (an \`astro dev\` server?). Stop it, or point --url at an \`astro preview\` of this repo.`);
+  }
   const port = new URL(url).port || '4321';
   const proc = spawn('npx', ['astro', 'preview', '--port', port, '--host', '127.0.0.1'], { cwd: ROOT, stdio: 'ignore', detached: true });
   for (let i = 0; i < 100; i++) {
-    try { if ((await fetch(url)).ok) return { base: url, stop: () => { try { process.kill(-proc.pid); } catch {} } }; } catch {}
+    if ((await probe()) === 'ours') return { base: url, stop: () => { try { process.kill(-proc.pid); } catch {} } };
     await sleep(200);
   }
   throw new Error('preview server did not start at ' + url);
@@ -50,7 +65,7 @@ export async function ensureServer(url = 'http://127.0.0.1:4321/glimmers/') {
 
 /**
  * Launch headless Chrome with vsync off and connect to its first page.
- * @returns {{ send, evaluate, close }}
+ * @returns {Promise<{ send: (method: string, params?: object) => Promise<any>, evaluate: (expression: string) => Promise<any>, close: () => void }>}
  */
 export async function launch({ width = 1440, height = 900, dpr = 1, swiftshader = false } = {}) {
   const profile = mkdtempSync(join(tmpdir(), 'glimmers-chrome-'));
@@ -76,8 +91,18 @@ export async function launch({ width = 1440, height = 900, dpr = 1, swiftshader 
 
   let id = 0;
   const pending = new Map();
-  ws.addEventListener('message', (e) => { const m = JSON.parse(e.data); pending.get(m.id)?.(m); pending.delete(m.id); });
-  const send = (method, params = {}) => new Promise((r) => { pending.set(++id, r); ws.send(JSON.stringify({ id, method, params })); });
+  ws.addEventListener('message', (e) => {
+    const m = JSON.parse(e.data);
+    const p = pending.get(m.id);
+    if (!p) return;
+    pending.delete(m.id);
+    if (m.error) p.reject(new Error(`${p.method}: ${m.error.message}`));
+    else p.resolve(m);
+  });
+  const send = (method, params = {}) => new Promise((resolve, reject) => {
+    pending.set(++id, { method, resolve, reject });
+    ws.send(JSON.stringify({ id, method, params }));
+  });
   const evaluate = async (expression) => {
     const m = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
     if (m.result?.exceptionDetails) throw new Error(m.result.exceptionDetails.exception?.description || 'evaluate failed');

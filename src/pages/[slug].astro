@@ -34,12 +34,12 @@ const background = pageParam ? String(pageParam.value) : '#000';
 </SketchLayout>
 
 <script>
-  import { run } from '../kit/run';
+  import { run, type SketchModules } from '../kit/run';
 
   // One lazy chunk per sketch: a page only downloads its own code.
-  const MANIFESTS = import.meta.glob('../sketches/*/manifest.js');
-  const PARAMS = import.meta.glob('../sketches/*/params.js');
-  const SKETCHES = import.meta.glob('../sketches/*/sketch.js');
+  const MANIFESTS = import.meta.glob<{ default: SketchModules['manifest'] }>('../sketches/*/manifest.js');
+  const PARAMS = import.meta.glob<{ default: SketchModules['params']; presets?: SketchModules['presets'] }>('../sketches/*/params.js');
+  const SKETCHES = import.meta.glob<{ default: SketchModules['sketch'] }>('../sketches/*/sketch.js');
 
   const slug = document.body.dataset.slug!;
   const dir = `../sketches/${slug}/`;
@@ -47,6 +47,6 @@ const background = pageParam ? String(pageParam.value) : '#000';
     MANIFESTS[dir + 'manifest.js'](),
     PARAMS[dir + 'params.js'](),
     SKETCHES[dir + 'sketch.js'](),
-  ]) as [{ default: any }, { default: any; presets?: any }, { default: any }];
+  ]);
   run(slug, { manifest: manifest.default, params: params.default, presets: params.presets, sketch: sketch.default });
 </script>

@@ -1,5 +1,5 @@
-// Constellations — parameter schema. The pane is generated from this file, and every default
-// lives here. Fields: key, label, value, type ('range' | 'color' | 'bool'), min/max/step, desc.
+// Constellations — every default. The pane is generated from this file (fields: ParamDef in
+// src/kit/types.ts).
 // Sizes and distances are in CSS pixels.
 
 import { playback } from '../../kit/standard.js';

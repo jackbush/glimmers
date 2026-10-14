@@ -7,10 +7,12 @@
 import type { Group, Model, Param, ParamValue } from './types';
 
 export interface ParamStore extends Model {
-  groups: Group[];
+  groups: Group<Param>[];
+  /** Set a value. A preset morph still under way stops moving this param. */
   setValue(p: Param, v: unknown): void;
   isChanged(p: Param): boolean;
   changedCount(): number;
+  /** Every param back to its default, ending any preset morph. */
   resetAll(): void;
   /** Persist the current overrides (debounced). */
   scheduleSave(): void;
@@ -25,9 +27,9 @@ export interface ParamStore extends Model {
   tick(dt: number): 'moving' | 'done' | 'idle';
 }
 
-function hexToRgb(h: string, out: number[]): void {
+function hexToRgb(h: string, out: { [i: number]: number }, scale = 1): void {
   const n = parseInt(h.slice(1), 16);
-  out[0] = (n >> 16) & 255; out[1] = (n >> 8) & 255; out[2] = n & 255;
+  out[0] = ((n >> 16) & 255) * scale; out[1] = ((n >> 8) & 255) * scale; out[2] = (n & 255) * scale;
 }
 function rgbToHex(r: number, g: number, b: number): string {
   const c = (v: number) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0');
@@ -42,11 +44,7 @@ function decimalsOf(step: number | undefined): number {
 function roundTo(v: number, d: number): number { return Number(Number(v).toFixed(d)); }
 
 function writeDerived(p: Param): void {
-  if (p.type !== 'color') return;
-  const n = parseInt(String(p.value).slice(1), 16);
-  p.rgb[0] = ((n >> 16) & 255) / 255;
-  p.rgb[1] = ((n >> 8) & 255) / 255;
-  p.rgb[2] = (n & 255) / 255;
+  if (p.type === 'color') hexToRgb(String(p.value), p.rgb, 1 / 255);
 }
 
 function coerce(p: Param, v: unknown): ParamValue {
@@ -71,7 +69,7 @@ function signature(params: Param[]): string {
 export function createModel(schema: Group[], storageKey: string | null): ParamStore {
   const params: Param[] = [];
   const byKey: Record<string, Param> = Object.create(null);
-  const groups: Group[] = [];
+  const groups: Group<Param>[] = [];
   let version = 0;
 
   for (const g of schema) {
@@ -103,15 +101,20 @@ export function createModel(schema: Group[], storageKey: string | null): ParamSt
   let glides: Glide[] = [];
   let glideT = 0, glideLen = 0;
 
+  function assign(p: Param, v: unknown) {
+    p.value = coerce(p, v);
+    writeDerived(p);
+    version++;
+  }
+
   const store: ParamStore = {
     params,
     byKey,
     groups,
     get version() { return version; },
     setValue(p, v) {
-      p.value = coerce(p, v);
-      writeDerived(p);
-      version++;
+      if (glides.length) glides = glides.filter((g) => g.p !== p);
+      assign(p, v);
     },
     isChanged: (p) => p.value !== p.default,
     changedCount() {
@@ -120,7 +123,8 @@ export function createModel(schema: Group[], storageKey: string | null): ParamSt
       return n;
     },
     resetAll() {
-      for (const p of params) store.setValue(p, p.default);
+      glides = [];
+      for (const p of params) assign(p, p.default);
     },
     scheduleSave() {
       if (!storageKey) return;
@@ -140,7 +144,7 @@ export function createModel(schema: Group[], storageKey: string | null): ParamSt
         if (!p) continue;
         const to = coerce(p, values[key]);
         if (seconds <= 0 || p.type === 'select' || p.type === 'bool' || (p.type !== 'color' && !glideNumbers)) {
-          store.setValue(p, to);
+          assign(p, to);
           continue;
         }
         if (p.type === 'color') {
@@ -159,8 +163,8 @@ export function createModel(schema: Group[], storageKey: string | null): ParamSt
       for (const g of glides) {
         if (g.rgbFrom && g.rgbTo) {
           const a = g.rgbFrom, b = g.rgbTo;
-          store.setValue(g.p, rgbToHex(a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k));
-        } else store.setValue(g.p, g.from + (g.to - g.from) * k);
+          assign(g.p, rgbToHex(a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k));
+        } else assign(g.p, g.from + (g.to - g.from) * k);
       }
       if (glideT < glideLen) return 'moving';
       glides = [];
@@ -177,7 +181,7 @@ export function createModel(schema: Group[], storageKey: string | null): ParamSt
     try {
       const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
       if (saved && saved.sig === sig) {
-        for (const k in saved.values) if (byKey[k]) store.setValue(byKey[k], saved.values[k]);
+        for (const k in saved.values) if (byKey[k]) assign(byKey[k], saved.values[k]);
       }
     } catch { /* storage unavailable — run on defaults */ }
   }

@@ -64,7 +64,7 @@ export default function create({ canvas, P }) {
 
   return {
     resize(width, height, pxRatio) { w = width; h = height; px = pxRatio; },
-    frame(t, dt, rt) {
+    frame(t, dt, rt, rdt) {
       ctx.fillStyle = P.background.value;
       ctx.fillRect(0, 0, w, h);
       // draw here: no allocation per frame (see glimmers-elements)

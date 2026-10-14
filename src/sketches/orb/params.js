@@ -1,5 +1,5 @@
-// Orb — parameter schema. The pane is generated from this file, and every default
-// lives here. Fields: key, label, value, type ('range' | 'color' | 'bool'), min/max/step, desc.
+// Orb — every default. The pane is generated from this file (fields: ParamDef in
+// src/kit/types.ts).
 
 import { playback } from '../../kit/standard.js';
 

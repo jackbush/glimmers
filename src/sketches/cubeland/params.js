@@ -1,5 +1,5 @@
-// Cubeland — parameter schema. The pane is generated from this file, and every default
-// lives here. Fields: key, label, value, type ('range' | 'color' | 'bool'), min/max/step, desc.
+// Cubeland — every default. The pane is generated from this file (fields: ParamDef in
+// src/kit/types.ts).
 // Distances are in scene units (the camera sits 5 units back); speeds are per second.
 
 import { playback } from '../../kit/standard.js';

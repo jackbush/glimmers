@@ -15,16 +15,19 @@ import { join } from 'node:path';
 
 const root = new URL('..', import.meta.url).pathname;
 const tmp = mkdtempSync(join(tmpdir(), 'glimmers-site-'));
-const run = (cmd, args) => {
-  const r = spawnSync(cmd, args, { cwd: root, stdio: 'inherit' });
+const run = (cmd, args, env = process.env) => {
+  const r = spawnSync(cmd, args, { cwd: root, stdio: 'inherit', env });
   if (r.status !== 0) throw new Error(cmd + ' failed');
 };
+// Build once here; each capture then skips its own build.
 const capture = (out, size, extra = []) =>
-  run('node', ['scripts/capture.mjs', 'blackstar', '--still', out, '--size', size, '--dpr', '2', '--start', '3', ...extra]);
+  run('node', ['scripts/capture.mjs', 'blackstar', '--still', out, '--size', size, '--dpr', '2', '--start', '3', ...extra],
+    { ...process.env, GLIMMERS_BUILT: '1' });
 const resize = (src, out, w, h, quality = []) =>
   run('ffmpeg', ['-v', 'error', '-y', '-i', src, '-vf', `scale=${w}:${h}:flags=lanczos`, ...quality, join(root, 'public', out)]);
 
 try {
+  run('npx', ['astro', 'build']);
   capture(join(tmp, 'share.png'), '1200x630');
   resize(join(tmp, 'share.png'), 'share.jpg', 1200, 630, ['-q:v', '3']);
   capture(join(tmp, 'icon.png'), '256x256', ['--set', 'orbRadius=0.62', '--set', 'orbDrift=0']);

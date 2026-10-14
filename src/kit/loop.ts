@@ -1,8 +1,8 @@
 // The frame loop: timing, canvas sizing and adaptive quality. Allocation-free per frame.
 //
 // Scene time `t` runs at the Speed param and stops while `paused` (the play/pause button);
-// real time `rt` always runs (wrapped to keep float32 precision in shaders). The canvas is sized to its CSS box ×
-// min(devicePixelRatio, maxDpr) × renderScale × the adaptive scale.
+// real time `rt` always runs (wrapped to keep float32 precision in shaders). The canvas is
+// sized to its CSS box × min(devicePixelRatio, maxDpr) × renderScale × the adaptive scale.
 
 import type { Param, SketchInstance } from './types';
 
@@ -117,7 +117,7 @@ export function createLoop(canvas: HTMLCanvasElement, P: Record<string, Param>, 
     adapt(dt);
     if (loop.onTick) loop.onTick(dt);
     resizeIfNeeded(s);
-    s.frame(sceneTime, sdt, realTime);
+    s.frame(sceneTime, sdt, realTime, dt);
     frames++;
 
     fpsAccum += dt;

@@ -26,8 +26,8 @@ export default function create({ canvas, P }) {
   scene.background = background;
   const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
   camera.position.z = 5;
-  const ambient = new THREE.AmbientLight(0xffffff, 0.6);
-  const sun = new THREE.DirectionalLight(0xffffff, 1.8);
+  const ambient = new THREE.AmbientLight(0xffffff, P.ambient.value);
+  const sun = new THREE.DirectionalLight(0xffffff, P.sun.value);
   sun.position.set(5, 10, 7);
   scene.add(ambient, sun);
 
@@ -43,6 +43,7 @@ export default function create({ canvas, P }) {
   const pos = new Float32Array(CAPACITY * 3), rot = new Float32Array(CAPACITY * 3), size = new Float32Array(CAPACITY * 3);
   const spin = new Float32Array(CAPACITY * 3), fall = new Float32Array(CAPACITY), drift = new Float32Array(CAPACITY);
   const alive = new Uint8Array(CAPACITY);
+  let aliveCount = 0;
   let next = 0; // ring cursor: where the next cube goes
 
   const dummy = new THREE.Object3D();
@@ -52,11 +53,11 @@ export default function create({ canvas, P }) {
     const n = Math.min(P.count.value, CAPACITY);
     const s = P.maxSize.value, spread = P.spawnSpread.value;
     for (let i = 0; i < n; i++) {
-      // Prefer a free slot near the cursor; if there isn't one, reuse the oldest.
+      // Prefer a free slot near the cursor; if there isn't one, reuse the oldest (the cursor's).
       let k = next;
-      for (let tries = 0; tries < CAPACITY && alive[k]; tries++) k = (k + 1) % CAPACITY;
+      if (aliveCount < CAPACITY) while (alive[k]) k = (k + 1) % CAPACITY;
       next = (k + 1) % CAPACITY;
-      alive[k] = 1;
+      if (!alive[k]) { alive[k] = 1; aliveCount++; }
       pos[k * 3] = spread * (rand() - 0.5);
       pos[k * 3 + 1] = P.spawnHeight.value + spread * (rand() - 0.5);
       pos[k * 3 + 2] = spread * (rand() - 0.5);
@@ -100,6 +101,7 @@ export default function create({ canvas, P }) {
         pos[i + 1] -= fall[k] * dt;
         if (pos[i + 1] < FLOOR) {
           alive[k] = 0;
+          aliveCount--;
           mesh.setMatrixAt(k, zero);
           continue;
         }
@@ -116,12 +118,6 @@ export default function create({ canvas, P }) {
       ambient.intensity = P.ambient.value;
       sun.intensity = P.sun.value;
       renderer.render(scene, camera);
-    },
-    dispose() {
-      canvas.removeEventListener('click', drop);
-      mesh.geometry.dispose();
-      mesh.material.dispose();
-      renderer.dispose();
     },
   };
 }

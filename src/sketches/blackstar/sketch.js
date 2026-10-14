@@ -5,6 +5,7 @@
 // nothing, so there is no per-frame garbage for the collector to chase.
 
 import SHADER from './shader.js';
+import { FULLSCREEN_VERT, paramDecls, program, shaderParams, uploadParams } from '../../kit/gl.js';
 
 /** @type {import('../../kit/types').Sketch} */
 export default function create({ canvas, P, model, degrade }) {
@@ -14,7 +15,7 @@ export default function create({ canvas, P, model, degrade }) {
   });
   if (!gl) throw new Error('WebGL2 is not available in this browser.');
 
-  const uniformParams = model.params.filter((p) => p.uniform !== false);
+  const uniformParams = shaderParams(model.params);
   const ANG_N = SHADER.angularSize;
   const UNIT_ANGULAR = 0, UNIT_FIELDS0 = 1, UNIT_FIELDS1 = 2;
 
@@ -35,37 +36,16 @@ export default function create({ canvas, P, model, degrade }) {
   let angFbo = null, fldTex0 = null, fldTex1 = null, fldFbo = null, fldW = 0, fldH = 0;
   let pxRatio = 1;
 
-  function compile(type, src, name) {
-    const sh = gl.createShader(type);
-    gl.shaderSource(sh, src);
-    gl.compileShader(sh);
-    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS) && !gl.isContextLost()) {
-      const log = gl.getShaderInfoLog(sh);
-      gl.deleteShader(sh);
-      throw new Error('Shader "' + name + '" failed to compile:\n' + log);
-    }
-    return sh;
-  }
   function header() {
     const vecType = ['', 'float', 'vec2', 'vec3', 'vec4'];
     return '#version 300 es\nprecision highp float;\nprecision highp int;\n' +
       'uniform vec2 u_res;\nuniform vec2 u_screen;\nuniform float u_time;\nuniform float u_realTime;\n' +
-      uniformParams.map((p) => 'uniform ' + (p.type === 'color' ? 'vec3' : 'float') + ' u_' + p.key + ';').join('\n') + '\n' +
+      paramDecls(uniformParams) +
       frameList.map((f) => f.array ? 'uniform float ' + f.name + '[' + f.n + '];' : 'uniform ' + vecType[f.n] + ' ' + f.name + ';').join('\n') + '\n' +
       SHADER.common;
   }
   function buildPass(name, head) {
-    const vs = compile(gl.VERTEX_SHADER, SHADER.vert, 'vert');
-    const fs = compile(gl.FRAGMENT_SHADER, head + SHADER[name], name);
-    const prog = gl.createProgram();
-    gl.attachShader(prog, vs);
-    gl.attachShader(prog, fs);
-    gl.linkProgram(prog);
-    gl.deleteShader(vs);
-    gl.deleteShader(fs);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS) && !gl.isContextLost()) {
-      throw new Error('Program "' + name + '" failed to link:\n' + gl.getProgramInfoLog(prog));
-    }
+    const prog = program(gl, FULLSCREEN_VERT, head + SHADER[name], name);
     const loc = (n) => gl.getUniformLocation(prog, n);
     return {
       prog,
@@ -145,11 +125,7 @@ export default function create({ canvas, P, model, degrade }) {
     gl.uniform1f(pass.uTime, sceneTime);
     gl.uniform1f(pass.uRealTime, realTime);
     if (pass.version !== model.version) {
-      for (let i = 0; i < uniformParams.length; i++) {
-        const p = uniformParams[i], loc = pass.paramLocs[i];
-        if (p.type === 'color') gl.uniform3fv(loc, p.rgb);
-        else gl.uniform1f(loc, p.type === 'bool' ? (p.value ? 1 : 0) : p.value);
-      }
+      uploadParams(gl, pass.paramLocs, uniformParams);
       pass.version = model.version;
     }
     for (let i = 0; i < frameList.length; i++) {

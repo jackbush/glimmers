@@ -37,12 +37,6 @@ vec3 paperAt() {
 }
 `;
 
-export const vertFull = `
-void main() {
-  vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
-  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
-}`;
-
 export const background = paperFn + `
 out vec4 o;
 void main() { o = vec4(paperAt(), 1.0); }`;

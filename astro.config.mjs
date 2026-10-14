@@ -18,7 +18,7 @@ export default defineConfig({
   },
   vite: {
     build: {
-      // See albums: keeps media queries in the `max-width` form older Safari reads.
+      // Keeps media queries in the `max-width` form older Safari reads.
       cssTarget: ['chrome100', 'safari15', 'firefox100'],
       // Never inline video as a data: URI — it defeats range requests.
       assetsInlineLimit: (file) => (/\.(mp4|webm|mov)$/i.test(file) ? false : undefined),

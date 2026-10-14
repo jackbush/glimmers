@@ -1,4 +1,5 @@
-// Leaf — one leaf (or one sprig) centred on the screen, backlit on a light table. Raw WebGL2.
+// Leaf — one leaf (or one sprig) centred on the screen, a botanical study on warm paper. Raw
+// WebGL2.
 //
 // Each frame: ease the category morphs and every shape number toward the params → rebuild
 // the geometry while anything is still easing (shapes.js) → ease the
@@ -18,6 +19,7 @@
 import * as SH from './shaders.js';
 import { buildShapes, geo, STRIDE, MAX_VERTS, MAX_PLACE, SEG_FILL, SEG_VEIN } from './shapes.js';
 import { rng } from '../../kit/random.js';
+import { FULLSCREEN_VERT, paramDecls, program, shaderParams, uploadParams } from '../../kit/gl.js';
 
 const MAX_INST = MAX_PLACE + 1, IFLOATS = 6;
 const SELECTS = ['compound', 'outline', 'base', 'apex', 'lobing', 'margin', 'venation', 'arrangement', 'terminal', 'budType'];
@@ -47,7 +49,7 @@ export default function create({ canvas, P, model, degrade }) {
   });
   if (!gl) throw new Error('WebGL2 is not available in this browser.');
 
-  const uniformParams = model.params.filter((p) => p.uniform !== false && p.type !== 'select');
+  const uniformParams = shaderParams(model.params);
   const geomParams = GEOM_KEYS.map((k) => {
     if (!P[k]) throw new Error('leaf: unknown geometry param ' + k);
     return P[k];
@@ -64,8 +66,8 @@ export default function create({ canvas, P, model, degrade }) {
     // from: the weights when a preset morph started.
     return { p, w, from: new Float32Array(w.length), leaf: LEAF_KEYS.has(key) };
   });
-  function easeBlends(rdt) {
-    const k = P.morph.value > 0 ? 1 - Math.exp(-rdt * 4.6 / P.morph.value) : 1;
+  /** Move each select's weights a share `k` of the way to its value. Returns whether any moved. */
+  function easeBlends(k) {
     let moving = false;
     for (let b = 0; b < blendList.length; b++) {
       const { p, w } = blendList[b];
@@ -111,8 +113,8 @@ export default function create({ canvas, P, model, degrade }) {
   ease1('leafletPairs', P.leaflets, () => Math.floor(P.leaflets.value / 2), 1e-3);
   ease1('leafletTerm', P.leaflets, () => P.leaflets.value % 2, 1e-3);
   let easedInit = false;
-  function easeNumbers(rdt) {
-    const k = P.morph.value > 0 ? 1 - Math.exp(-rdt * 4.6 / P.morph.value) : 1;
+  /** Move each eased number a share `k` of the way to its target. Returns whether any moved. */
+  function easeNumbers(k) {
     let moving = false;
     for (let i = 0; i < eased.length; i++) {
       const e = eased[i];
@@ -160,7 +162,7 @@ export default function create({ canvas, P, model, degrade }) {
       w[p.options.indexOf(p.value)] = 1;
     }
     rebuild();
-    viewTo[0] = bx0; viewTo[1] = by0; viewTo[2] = bx1; viewTo[3] = by1;
+    viewTo.set(box);
     // Back to the start; the frame rebuilds from there.
     for (let i = 0; i < eased.length; i++) eased[i].value = eased[i].from;
     for (let b = 0; b < blendList.length; b++) blendList[b].w.set(blendList[b].from);
@@ -192,7 +194,7 @@ export default function create({ canvas, P, model, degrade }) {
 
   // ---- GL plumbing
   let ready = false;
-  let progBg = null, progLeaf = null, vaoLeaf = null, vaoFull = null, vbo = null, ibo = null;
+  let progBg = null, progLeaf = null, vaoFull = null;
   // Geometry uploads rotate through RING fixed-size buffers (each with its own VAO). The GPU
   // runs a few frames behind, so writing a buffer it may still be reading made the driver
   // copy or wait (up to half a second, once per morph); reallocating each time did too.
@@ -203,35 +205,14 @@ export default function create({ canvas, P, model, degrade }) {
   const fView = new Float32Array(2);
   let fPx = 1;
 
-  function compile(type, src, name) {
-    const sh = gl.createShader(type);
-    gl.shaderSource(sh, src);
-    gl.compileShader(sh);
-    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS) && !gl.isContextLost()) {
-      const log = gl.getShaderInfoLog(sh);
-      gl.deleteShader(sh);
-      throw new Error('Shader "' + name + '" failed to compile:\n' + log);
-    }
-    return sh;
-  }
   function header() {
     return '#version 300 es\nprecision highp float;\nprecision highp int;\nprecision highp sampler2D;\n' +
       'uniform vec2 f_view;\nuniform float f_px;\nuniform float u_style;\n' +
-      uniformParams.map((p) => 'uniform ' + (p.type === 'color' ? 'vec3' : 'float') + ' u_' + p.key + ';').join('\n') + '\n';
+      paramDecls(uniformParams);
   }
-  function program(vsBody, fsBody, name) {
-    const head = header();
-    const vs = compile(gl.VERTEX_SHADER, head + vsBody, name + ' vert');
-    const fs = compile(gl.FRAGMENT_SHADER, head + fsBody, name);
-    const prog = gl.createProgram();
-    gl.attachShader(prog, vs);
-    gl.attachShader(prog, fs);
-    gl.linkProgram(prog);
-    gl.deleteShader(vs);
-    gl.deleteShader(fs);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS) && !gl.isContextLost()) {
-      throw new Error('Program "' + name + '" failed to link:\n' + gl.getProgramInfoLog(prog));
-    }
+  /** A program whose fragment shader (and the vertex shader, if it wants them) gets header(). */
+  function makeProgram(vert, fragBody, name) {
+    const prog = program(gl, vert, header() + fragBody, name);
     const loc = (n) => gl.getUniformLocation(prog, n);
     gl.useProgram(prog);
     gl.uniform1i(loc('u_noise'), UNIT_NOISE);
@@ -243,11 +224,7 @@ export default function create({ canvas, P, model, degrade }) {
     gl.uniform1f(pr.fPx, fPx);
     if (pr.version !== model.version) {
       gl.uniform1f(pr.uStyle, P.style.options.indexOf(P.style.value));
-      for (let i = 0; i < uniformParams.length; i++) {
-        const p = uniformParams[i], l = pr.paramLocs[i];
-        if (p.type === 'color') gl.uniform3fv(l, p.rgb);
-        else gl.uniform1f(l, p.type === 'bool' ? (p.value ? 1 : 0) : p.value);
-      }
+      uploadParams(gl, pr.paramLocs, uniformParams);
       pr.version = model.version;
     }
   }
@@ -291,8 +268,8 @@ export default function create({ canvas, P, model, degrade }) {
 
   function buildAll() {
     buildNoise();
-    progBg = program(SH.vertFull, SH.background, 'background');
-    progLeaf = program(SH.leafVert, SH.leafFrag, 'leaf');
+    progBg = makeProgram(FULLSCREEN_VERT, SH.background, 'background');
+    progLeaf = makeProgram(header() + SH.leafVert, SH.leafFrag, 'leaf');
     vaoFull = gl.createVertexArray();
     const B = STRIDE * 4;
     for (let k = 0; k < RING; k++) {
@@ -316,7 +293,6 @@ export default function create({ canvas, P, model, degrade }) {
     }
     gl.bindVertexArray(null);
     cur = 0;
-    vaoLeaf = vaos[0]; vbo = vbos[0]; ibo = ibos[0];
     geoUploaded = false;
     bufGen.fill(-1);
     needsDraw = true;
@@ -326,20 +302,21 @@ export default function create({ canvas, P, model, degrade }) {
   canvas.addEventListener('webglcontextlost', (e) => {
     e.preventDefault();
     ready = false;
-    progBg = progLeaf = vaoLeaf = vaoFull = vbo = ibo = null;
+    progBg = progLeaf = vaoFull = null;
     for (let k = 0; k < RING; k++) vbos[k] = vaos[k] = ibos[k] = null;
     degrade(0.6);
   });
   canvas.addEventListener('webglcontextrestored', buildAll);
 
   // ---- the object: bounds (leaf units, unrotated) of whatever is drawn
-  let lastVersion = -1, lastSig = NaN, geoUploaded = false, lastRt = -1;
+  let lastVersion = -1, lastSig = NaN, geoUploaded = false;
   // Which geometry generation each buffer of the pair holds.
   let geoGen = 0;
   const bufGen = new Int32Array([-1, -1]);
   // The leaf is still, so it's only drawn when something changes (see frame()).
   let needsDraw = true, drawnVersion = -1;
-  let bx0 = 0, by0 = 0, bx1 = 1, by1 = 1;
+  // x0, y0, x1, y1 of the last rebuild.
+  const box = new Float64Array([0, 0, 1, 1]);
   // The framing eases toward the rebuilt box, so the view doesn't jump as the shape changes.
   const viewBox = new Float32Array(4);
   let viewInit = false;
@@ -360,7 +337,7 @@ export default function create({ canvas, P, model, degrade }) {
       leafBox[v * 4] = x0; leafBox[v * 4 + 1] = y0; leafBox[v * 4 + 2] = x1; leafBox[v * 4 + 3] = y1;
     }
     // The stem's vertices plus each placed leaf's box corners (at its presence).
-    bx0 = by0 = 1e9; bx1 = by1 = -1e9;
+    box[0] = box[1] = 1e9; box[2] = box[3] = -1e9;
     for (let i = geo.sprigStart[0]; i < geo.budStart[0] + geo.budCount[0]; i++) grow(geo.verts[i * STRIDE], geo.verts[i * STRIDE + 1]);
     for (let p = 0; p < geo.sprigNPlace[0]; p++) {
       placed(p, 0);
@@ -370,7 +347,7 @@ export default function create({ canvas, P, model, degrade }) {
         grow(pa * x + pc * y + px, pb * x + pd * y + py);
       }
     }
-    if (bx0 > bx1) { bx0 = by0 = 0; bx1 = by1 = 1; }
+    if (box[0] > box[2]) { box[0] = box[1] = 0; box[2] = box[3] = 1; }
   }
   // Placement p's transform (leaf coords → sprig coords), scaled about where the leaf
   // attaches by its presence (so it grows from the stem) and swayed by angle th about the
@@ -390,12 +367,12 @@ export default function create({ canvas, P, model, degrade }) {
     px = nx + c * dx - s * dy; py = ny + s * dx + c * dy;
   }
   function grow(x, y) {
-    if (x < bx0) bx0 = x; if (x > bx1) bx1 = x; if (y < by0) by0 = y; if (y > by1) by1 = y;
+    if (x < box[0]) box[0] = x; if (x > box[2]) box[2] = x; if (y < box[1]) box[1] = y; if (y > box[3]) box[3] = y;
   }
 
   // ---- instances: the sprig's stem first, then its leaves in stem order.
   const inst = new Float32Array(MAX_INST * IFLOATS);
-  let stemInst = 0, instTotal = 0;
+  let instTotal = 0;
   function putInst(slot, a, b, c, d, tx, ty) {
     const o = slot * IFLOATS;
     inst[o] = a; inst[o + 1] = b; inst[o + 2] = c; inst[o + 3] = d; inst[o + 4] = tx; inst[o + 5] = ty;
@@ -414,7 +391,6 @@ export default function create({ canvas, P, model, degrade }) {
     const m00 = sc * sn, m10 = -sc * cs, m01 = sc * cs, m11 = sc * sn;
     // The centre sits where it would unswayed, so the rocking is about the base, not the middle.
     const tx = cssW / 2 - sc * cy, ty = cssH / 2 + sc * cx;
-    stemInst = 1;
     putInst(0, m00, m10, m01, m11, tx, ty);
     // In stem order (instance 1 + p), so the draw order of leaves is fixed.
     instTotal = 1 + geo.sprigNPlace[0];
@@ -493,12 +469,11 @@ export default function create({ canvas, P, model, degrade }) {
     resize(_w, _h, px) { fPx = px; needsDraw = true; },
     // Started on the next frame, from whatever is on screen then (0 = jump straight there).
     morph(seconds) { morphPending = seconds; morphLen = 0; },
-    frame(t, dt, rt) {
+    frame(t, dt, _rt, rdt) {
       if (!ready) return;
-      let rdt = lastRt < 0 ? 1 / 60 : rt - lastRt;
-      if (rdt < 0 || rdt > 0.1) rdt = 1 / 60;
-      lastRt = rt;
       const cssW = canvas.width / fPx, cssH = canvas.height / fPx;
+      // How far everything that chases its target (outside a preset morph) moves this frame.
+      const chase = P.morph.value > 0 ? 1 - Math.exp(-rdt * 4.6 / P.morph.value) : 1;
 
       // Shapes: rebuild while a category or a shape number is still easing.
       if (morphPending >= 0) {
@@ -508,8 +483,8 @@ export default function create({ canvas, P, model, degrade }) {
       const morphing = morphLen > 0 && stepMorph(rdt);
       let dirty = morphing;
       if (!morphing) {
-        if (easeBlends(rdt)) dirty = true;
-        if (easeNumbers(rdt)) dirty = true;
+        if (easeBlends(chase)) dirty = true;
+        if (easeNumbers(chase)) dirty = true;
       }
       if (model.version !== lastVersion) {
         lastVersion = model.version;
@@ -520,14 +495,12 @@ export default function create({ canvas, P, model, degrade }) {
       // Ease the framing toward the box.
       let framing = morphing;
       if (!morphing) {
-        const k = !viewInit ? 1 : P.morph.value > 0 ? 1 - Math.exp(-rdt * 4.6 / P.morph.value) : 1;
-        const tb0 = bx0, tb1 = by0, tb2 = bx1, tb3 = by1;
-        const eps = 1e-5 * Math.max(bx1 - bx0, by1 - by0, 1e-3);
+        const k = viewInit ? chase : 1;
+        const eps = 1e-5 * Math.max(box[2] - box[0], box[3] - box[1], 1e-3);
         for (let i = 0; i < 4; i++) {
-          const target = i === 0 ? tb0 : i === 1 ? tb1 : i === 2 ? tb2 : tb3;
-          const d = target - viewBox[i];
+          const d = box[i] - viewBox[i];
           if (d === 0) continue;
-          viewBox[i] = Math.abs(d) < eps ? target : viewBox[i] + d * k;
+          viewBox[i] = Math.abs(d) < eps ? box[i] : viewBox[i] + d * k;
           framing = true;
         }
         viewInit = true;
@@ -542,16 +515,15 @@ export default function create({ canvas, P, model, degrade }) {
       // Move on to the next buffer in the ring. New geometry goes in it; otherwise copy the
       // current geometry across if it holds an older generation.
       cur = (cur + 1) % RING;
-      vaoLeaf = vaos[cur]; vbo = vbos[cur]; ibo = ibos[cur];
       if (!geoUploaded || bufGen[cur] !== geoGen) {
         if (!geoUploaded) geoGen++;
-        gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+        gl.bindBuffer(gl.ARRAY_BUFFER, vbos[cur]);
         gl.bufferSubData(gl.ARRAY_BUFFER, 0, geo.verts, 0, Math.max(1, geo.count * STRIDE));
         bufGen[cur] = geoGen;
         geoUploaded = true;
       }
       buildInstances(cssW, cssH, t);
-      gl.bindBuffer(gl.ARRAY_BUFFER, ibo);
+      gl.bindBuffer(gl.ARRAY_BUFFER, ibos[cur]);
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, inst, 0, instTotal * IFLOATS);
 
       fView[0] = cssW; fView[1] = cssH;
@@ -565,23 +537,21 @@ export default function create({ canvas, P, model, degrade }) {
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
       use(progLeaf);
-      gl.bindVertexArray(vaoLeaf);
-      gl.bindBuffer(gl.ARRAY_BUFFER, ibo);
+      gl.bindVertexArray(vaos[cur]);
+      gl.bindBuffer(gl.ARRAY_BUFFER, ibos[cur]);
       gl.uniform1f(progLeaf.uStemBase, 1);
-      if (stemInst) drawRun(geo.sprigStart[0], geo.sprigCount[0], 0, 1);
+      drawRun(geo.sprigStart[0], geo.sprigCount[0], 0, 1);
       gl.uniform1f(progLeaf.uStemBase, 0);
       gl.uniform1f(progLeaf.uPass, 0);
       stencilRef = 0;
       gl.stencilMask(0xff);
       gl.clear(gl.STENCIL_BUFFER_BIT);
-      if (stemInst) {
-        // Sprig leaves one at a time, tip first, so leaves nearer the base cover those above.
-        // The bud is the end of the stem: drawn first, under every leaf.
-        drawRun(geo.budStart[0], geo.budCount[0], 0, 1);
-        for (let p = geo.sprigNPlace[0] - 1; p >= 0; p--) {
-          if (geo.sprigPlace[p * 8 + 7] * leafGrow < 0.002) continue; // not grown in yet
-          drawLeaf(geo.sprigPlace[p * 8], 1 + p);
-        }
+      // Sprig leaves one at a time, tip first, so leaves nearer the base cover those above.
+      // The bud is the end of the stem: drawn first, under every leaf.
+      drawRun(geo.budStart[0], geo.budCount[0], 0, 1);
+      for (let p = geo.sprigNPlace[0] - 1; p >= 0; p--) {
+        if (geo.sprigPlace[p * 8 + 7] * leafGrow < 0.002) continue; // not grown in yet
+        drawLeaf(geo.sprigPlace[p * 8], 1 + p);
       }
       gl.disable(gl.BLEND);
       gl.bindVertexArray(null);

@@ -10,6 +10,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { STANDARD_KEYS } from '../src/kit/standard.js';
+import { manifestSchema } from '../src/kit/manifest-schema.js';
 
 const root = new URL('../src/sketches/', import.meta.url).pathname;
 const only = process.argv.slice(2);
@@ -28,8 +29,8 @@ for (const slug of slugs) {
   const schema = existsSync(join(dir, 'params.js')) ? await load('params.js') : null;
   if (!existsSync(join(dir, 'sketch.js'))) errors.push('missing sketch.js');
   if (!schema) errors.push('missing params.js');
-  if (!manifest?.name) errors.push('manifest.js: missing name');
-  if (!Number.isInteger(manifest?.year)) errors.push('manifest.js: missing year (the year the sketch was first made)');
+  const parsed = manifestSchema.safeParse(manifest);
+  if (!parsed.success) for (const i of parsed.error.issues) errors.push(`manifest.js: ${i.path.join('.') || '(root)'}: ${i.message}`);
 
   const params = [];
   const keys = new Set();

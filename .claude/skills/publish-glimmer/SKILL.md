@@ -49,7 +49,7 @@ Read `sketch.js`, every helper it imports from its folder, and (for WebGL) the s
 - **Canvas 2D:** per-frame `getImageData`/`putImageData`, `shadowBlur`, `ctx.filter`, `save`/`restore` or `fillStyle` changes inside per-element inner loops, one path/stroke per element where batching would work.
 - **Complexity:** nested loops over the same set (O(n²)): give n at the param's default and at its **max**, and the pair count at the max.
 - **Frame-rate dependence:** motion that steps per frame instead of using `dt`/`t`.
-- **three.js:** geometries, materials or textures created per frame or never disposed; many meshes where an `InstancedMesh` would do; `setPixelRatio(devicePixelRatio)` (the kit already sizes the canvas).
+- **three.js:** geometries, materials or textures created per frame (or replaced without disposing the old ones); many meshes where an `InstancedMesh` would do; `setPixelRatio(devicePixelRatio)` (the kit already sizes the canvas).
 - **WebGL shaders:** a rough count of noise calls (`snoise`, `fbm*`) and hash chains per pixel in each pass, against the budget in the sketch's `NOTES.md`; textures sampled inside branches; loops without constant bounds.
 - **DOM writes** from the loop.
 

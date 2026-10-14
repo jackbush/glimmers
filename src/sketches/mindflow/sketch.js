@@ -1,36 +1,17 @@
 // Mindflow — two circles in a Venn diagram, driven by brain data (WebGL2).
 //
-// From the 2015 Mindflow app, which streamed attention and meditation (0–100) from a
-// NeuroSky headset. Attention pulls the circles together: each sits (1 − attention/100) ×
-// separation × diameter from the centre, so at 100 they overlap completely. Meditation calms
-// the outline: every tick each circle is drawn three times, once true and twice stretched by
-// a random amount up to (1 − meditation/100) × jitter × diameter, so a restless mind gives a
-// frenetic, many-lined edge.
-//
-// Trails: nothing is cleared; each tick fades the picture toward the background, then paints
-// the six ellipses over it (fill, then stroke, in order, like p5). Ticks run at a fixed rate
-// on scene time, so trail density doesn't depend on the screen's refresh rate.
-//
-// Why WebGL: the original faded an 8-bit canvas, where a low-alpha fade stalls once the
-// remaining difference rounds to zero. At fade 0.04 every pixel sticks ~12 levels short,
-// which left grey ghosts behind the strokes and over-saturated the fill over time. Here the
-// picture accumulates in a half-float texture, and the fade has a tiny minimum step, so
-// it always reaches the background. It also makes resizing
-// easy: the old texture is copied into the new size (same height-relative scale, same
-// centre) instead of being wiped.
+// Attention pulls the circles together; meditation calms their outline (each tick draws each
+// circle three times, once true and twice randomly stretched). Nothing is cleared: each tick
+// fades the picture toward the background in a half-float texture, then paints the six
+// ellipses over it. NOTES.md has the mapping from the 2015 original and why this is WebGL.
 //
 // Passes: `tick` (prev texture → next texture: fade + ellipses), `show` (texture → screen),
 // `copy` (old texture → resized texture). All are a fullscreen triangle.
 
 import { rng } from '../../kit/random.js';
+import { FULLSCREEN_VERT, program } from '../../kit/gl.js';
 
 const MAX_TICKS = 8; // per frame, so a long stall doesn't trigger a burst of drawing
-
-const VERT = `#version 300 es
-void main() {
-  vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);
-  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
-}`;
 
 const TICK = `#version 300 es
 precision highp float;
@@ -105,22 +86,26 @@ export default function create({ canvas, P }) {
   /** @type {(WebGLFramebuffer | null)[]} */ let fbo = [null, null];
   let cur = 0;
 
-  function program(src, uniforms) {
-    const make = (type, s) => {
-      const sh = /** @type {WebGLShader} */ (gl.createShader(type));
-      gl.shaderSource(sh, s);
-      gl.compileShader(sh);
-      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS) && !gl.isContextLost()) throw new Error('Mindflow shader:\n' + gl.getShaderInfoLog(sh));
-      return sh;
-    };
-    const prog = /** @type {WebGLProgram} */ (gl.createProgram());
-    gl.attachShader(prog, make(gl.VERTEX_SHADER, VERT));
-    gl.attachShader(prog, make(gl.FRAGMENT_SHADER, src));
-    gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS) && !gl.isContextLost()) throw new Error('Mindflow link:\n' + gl.getProgramInfoLog(prog));
-    const pass = { prog };
-    for (const u of uniforms) pass[u] = gl.getUniformLocation(prog, u);
-    return pass;
+  function makePass(src, name, uniforms) {
+    const prog = program(gl, FULLSCREEN_VERT, src, name);
+    const p = { prog };
+    for (const u of uniforms) p[u] = gl.getUniformLocation(prog, u);
+    return p;
+  }
+
+  /** Whether an RGBA16F texture can be rendered to here (the extension alone doesn't promise it). */
+  function halfFloatRenders() {
+    if (!gl.getExtension('EXT_color_buffer_float') && !gl.getExtension('EXT_color_buffer_half_float')) return false;
+    const t = gl.createTexture(), f = gl.createFramebuffer();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, 1, 1, 0, gl.RGBA, gl.HALF_FLOAT, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+    const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.deleteFramebuffer(f);
+    gl.deleteTexture(t);
+    return ok;
   }
 
   function target(width, height) {
@@ -141,10 +126,10 @@ export default function create({ canvas, P }) {
   function build() {
     // Half-float targets where renderable (nearly everywhere); 8-bit otherwise, which brings
     // the residue back but still works.
-    halfFloat = !!gl.getExtension('EXT_color_buffer_float') || !!gl.getExtension('EXT_color_buffer_half_float');
-    tickPass = program(TICK, ['u_prev', 'u_bg', 'u_fade', 'u_minStep', 'u_fill', 'u_stroke', 'u_width', 'u_ellipse', 'u_height']);
-    showPass = program(SHOW, ['u_tex']);
-    copyPass = program(COPY, ['u_tex', 'u_size', 'u_oldSize', 'u_bg']);
+    halfFloat = halfFloatRenders();
+    tickPass = makePass(TICK, 'tick', ['u_prev', 'u_bg', 'u_fade', 'u_minStep', 'u_fill', 'u_stroke', 'u_width', 'u_ellipse', 'u_height']);
+    showPass = makePass(SHOW, 'show', ['u_tex']);
+    copyPass = makePass(COPY, 'copy', ['u_tex', 'u_size', 'u_oldSize', 'u_bg']);
     gl.bindVertexArray(gl.createVertexArray());
     tex = [null, null];
     fbo = [null, null];
@@ -231,10 +216,10 @@ export default function create({ canvas, P }) {
 
   return {
     resize(width, height, pxRatio) {
-      if (!ready) return;
-      resizeTargets(width, height);
+      // While the context is lost, just remember the size: the restore builds targets at it.
+      if (ready) resizeTargets(width, height);
       w = width; h = height; px = pxRatio;
-      show();
+      if (ready) show();
     },
     frame(_t, dt) {
       if (!ready || !w) return;

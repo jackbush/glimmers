@@ -1,21 +1,7 @@
-// Blackstar — parameter schema.
-//
-// This file is the single source of truth for every tunable value in the piece.
-// The sidebar is generated from it, and every param (unless `uniform: false`)
-// is auto-declared in the shader as `uniform float u_<key>` (or `vec3` for colors).
-//
-// Params marked `uniform: false` are read on the CPU — by the kit (the standard Playback
-// params, see src/kit/standard.js) or by perFrame() in shader.js (values that are the same
-// for every pixel).
-//
-// Param fields:
-//   key      unique camelCase id — also the uniform name suffix and the key in copied state
-//   label    sidebar label
-//   value    default value
-//   type     'range' (default) | 'color' (hex string) | 'bool'
-//   min/max/step   slider bounds (range only)
-//   desc     tooltip text
-//   uniform  false → CPU-only param, not declared in the shader
+// Blackstar — every default. The pane is generated from this file (fields: ParamDef in
+// src/kit/types.ts). Each param is also `uniform float u_<key>` (`vec3` for colours) in every
+// pass, unless it has `uniform: false`: then only the CPU reads it (perFrame() in shader.js,
+// or the kit for the standard Playback params).
 
 import { playback } from '../../kit/standard.js';
 

@@ -12,12 +12,12 @@ description: Add, edit, or remove visual elements and parameters in a glimmers s
 | File | Role |
 |---|---|
 | `src/sketches/<slug>/params.js` | **The only place defaults live.** Groups → params; the settings pane is generated from it. Starts with `playback()` from `src/kit/standard.js` (Speed, pixel-ratio cap; `quality: true` adds render scale and target fps, and turns adaptive quality on). |
-| `src/sketches/<slug>/sketch.js` | `export default function create({ canvas, P, model, degrade })` → `{ resize(w, h, pxRatio), frame(t, dt, rt), dispose? }`. All drawing lives here (plus any helper files in the folder). |
-| `src/sketches/<slug>/manifest.js` | `name`, `year`, optional `pageColour` (a colour param key that drives the page background), optional `capture` settings for the cover. |
+| `src/sketches/<slug>/sketch.js` | `export default function create({ canvas, P, model, degrade })` → `{ resize(w, h, pxRatio), frame(t, dt, rt, rdt), morph? }`. All drawing lives here (plus any helper files in the folder). WebGL sketches compile and upload params with `src/kit/gl.js`. |
+| `src/sketches/<slug>/manifest.js` | `name`, `year`, optional `pageColour` (a colour param key that drives the page background), optional `capture` settings for the cover. The schema is `src/kit/manifest-schema.js`; defaults are in `src/kit/manifest.js`. |
 | `src/kit/` | Shared engine: param model and saved settings, pane, buttons and keys, frame loop, adaptive quality. **No design logic.** Change it only for behaviour every sketch should get. |
 
 - `P.<key>.value` is the live value; colour params also have `P.<key>.rgb` (a Float32Array of 0–1 floats, updated in place). `model.version` increments on every edit, so cache anything derived from params and rebuild it only when the version moves.
-- `frame(t, dt, rt)`: `t`/`dt` are scene time and its step, with Speed and the play/pause button applied (dt is 0 while paused). `rt` is real time, which always runs (film grain, twinkle). Motion must be driven by `dt` or `t`, never by frame count.
+- `frame(t, dt, rt, rdt)`: `t`/`dt` are scene time and its step, with Speed and the play/pause button applied (dt is 0 while paused). `rt`/`rdt` are real time and its step, which always run (film grain, twinkle, preset morphs). Motion must be driven by `dt` or `t`, never by frame count.
 - The kit sizes the canvas in device pixels (`resize` gets `pxRatio` = canvas px per CSS px). Sizes the user thinks of in pixels should be CSS px × `pxRatio`.
 
 ## Adding a parameter
@@ -60,7 +60,7 @@ A sketch can `export const presets = { Name: { key: value, … } }` from `params
 
 - **`frame()` and everything it calls must allocate nothing.** No object/array literals, closures, string building (including colour strings like `` `rgba(${…})` ``), `for…of`, spread, `map`/`forEach` in the loop. Preallocate typed arrays; rebuild derived values only when `model.version` changes.
 - Canvas 2D: batch strokes and fills into as few paths as possible; avoid `shadowBlur`, `filter`, `getImageData`, and `save`/`restore` in inner loops.
-- three.js: never create geometries, materials or `Color`/`Vector3` objects per frame; prefer `InstancedMesh` for many similar objects; dispose in `dispose()`.
+- three.js: never create geometries, materials or `Color`/`Vector3` objects per frame; prefer `InstancedMesh` for many similar objects. (The kit never tears a sketch down: leaving the page does.)
 - Loops over pairs are O(n²): keep the param's max where the worst case still holds 60fps.
 - No DOM writes from the loop (the kit throttles its own fps readout).
 - After a visual change, run `node scripts/bench.mjs <slug> --fixed --size 2560x1440 --dpr 2` and compare with the sketch's NOTES. Add a row if the number moved.

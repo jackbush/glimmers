@@ -35,9 +35,10 @@ export default function create({ canvas, P }) {
   const phase = new Float32Array(MAX_STARS), rate = new Float32Array(MAX_STARS); // twinkle
   const kind = new Uint8Array(MAX_STARS); // 0 blue-white, 1 white, 2 warm, 3 orange
   const x = new Float32Array(MAX_STARS), y = new Float32Array(MAX_STARS);
-  // Pairs to join, per opacity bucket: star indices packed as a * MAX_STARS + b.
-  const pairs = new Uint32Array(BUCKETS * (MAX_STARS * (MAX_STARS - 1)) / 2 / 4);
-  const perBucket = Math.floor(pairs.length / BUCKETS);
+  // Pairs to join, per opacity bucket: star indices packed as a * MAX_STARS + b. A bucket
+  // holds up to a quarter of all possible pairs.
+  const perBucket = (MAX_STARS * (MAX_STARS - 1)) / 2 / 4;
+  const pairs = new Uint32Array(BUCKETS * perBucket);
   const fill = new Uint32Array(BUCKETS);
   const glowCache = new Array(361).fill(''), coreCache = new Array(361).fill('');
   const kinds = ['blueWhite', 'white', 'warm', 'orange'];
@@ -118,11 +119,12 @@ export default function create({ canvas, P }) {
       // Stars, with a soft halo on the bigger ones.
       const minS = P.minSize.value, span = P.maxSize.value - minS, bias = P.sizeBias.value;
       const tw = P.twinkle.value, twSpeed = P.twinkleSpeed.value, glowFrom = P.glowSize.value;
+      let fillKind = -1; // setting fillStyle parses the colour, so only when it changes
       for (let i = 0; i < n; i++) {
         const diameter = minS + span * Math.pow(size[i], bias);
         const twinkle = (1 - tw) + tw * Math.sin(rt * rate[i] * twSpeed + phase[i]);
         const d = diameter * (0.85 + 0.15 * twinkle);
-        ctx.fillStyle = P[kinds[kind[i]]].value;
+        if (kind[i] !== fillKind) { fillKind = kind[i]; ctx.fillStyle = P[kinds[fillKind]].value; }
         if (diameter >= glowFrom) {
           ctx.globalAlpha = 18 / 255;
           ctx.beginPath(); ctx.arc(x[i], y[i], d * 2, 0, TAU); ctx.fill();

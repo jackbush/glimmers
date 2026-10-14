@@ -1,15 +1,13 @@
-// Leaf — parameter schema.
-//
-// One leaf (or one sprig) centred on the screen, drawn as if backlit on a light table.
-// Shape groups, then Finish (the drawing style). Params without
-// `uniform: false` are auto-declared in the shader as `u_<key>` (`vec3` for colours).
+// Leaf — every default. The pane is generated from this file (fields: ParamDef in
+// src/kit/types.ts). Shape groups, then Finish (the drawing style). Params without
+// `uniform: false` are auto-declared in the shaders as `u_<key>` (`vec3` for colours).
 
 import { playback } from '../../kit/standard.js';
 
 const pb = playback({}, {
   quality: true,
   extra: [
-    { key: 'seed', label: 'Seed', value: 7, min: 0, max: 100, step: 1, uniform: false, desc: 'A different take on the same leaf: small irregularities in outline, veins and capillaries.' },
+    { key: 'seed', label: 'Seed', value: 7, min: 0, max: 100, step: 1, uniform: false, desc: 'A different take on the same leaf: small irregularities in outline and veins.' },
   ],
 });
 // Sway goes at the bottom of Playback.

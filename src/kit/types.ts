@@ -1,6 +1,9 @@
 // Shared types for the kit and the sketches. Sketches are plain JS; these are for
 // JSDoc (`@type {import('../../kit/types').Sketch}`) and the kit's own TypeScript.
 
+import type { z } from 'astro/zod';
+import type { manifestSchema } from './manifest-schema.js';
+
 export type ParamType = 'range' | 'color' | 'bool' | 'select';
 export type ParamValue = number | string | boolean;
 
@@ -26,9 +29,10 @@ export interface ParamDef {
  */
 export type Presets = Record<string, Record<string, ParamValue>>;
 
-export interface Group {
+/** A group of params as written in params.js (`ParamDef`), or as the kit holds them live (`Param`). */
+export interface Group<T extends ParamDef = ParamDef> {
   group: string;
-  params: ParamDef[];
+  params: T[];
 }
 
 /** A live param: its def plus the current value, the code default and derived values. */
@@ -62,49 +66,19 @@ export interface SketchInstance {
   resize(width: number, height: number, pxRatio: number): void;
   /**
    * Draw one frame. `t` and `dt` are scene time and its step (Speed and the play/pause button
-   * applied: dt is 0 while paused); `rt` is real seconds, which always runs. Must not allocate.
+   * applied: dt is 0 while paused); `rt` is real seconds, which always runs, and `rdt` its
+   * step (for things that move while paused, like a preset morph). Must not allocate.
    */
-  frame(t: number, dt: number, rt: number): void;
+  frame(t: number, dt: number, rt: number, rdt: number): void;
   /**
    * Optional: the sketch morphs presets itself. A preset's numbers and selects then land at
    * once (colours still glide), and this is called to morph from what's on screen to them over
    * `seconds`, so it can work out where everything ends up first and move there on one curve.
    */
   morph?(seconds: number): void;
-  dispose?(): void;
 }
 
 export type Sketch = (ctx: SketchContext) => SketchInstance;
 
-export interface Manifest {
-  /** Shown as "Name (Year)" in the index caption and the tab title. */
-  name: string;
-  /** The year the sketch was first made. */
-  year: number;
-  /** Seconds a preset takes to morph in (default 1.5). */
-  presetSeconds?: number;
-  /**
-   * Cycle through the presets when the page opens: a random one at once, then on in menu order,
-   * each held for `hold` seconds, then morphing to the next over presetSeconds, round and round. Opening
-   * the settings pane stops it (a morph under way finishes); it starts again next visit. Off
-   * for capture mode and for prefers-reduced-motion. Nothing it applies is saved.
-   */
-  autoplay?: { hold?: number };
-  /** Key of a colour param that drives the page background and theme-color. */
-  pageColour?: string;
-  /** Defaults for scripts/capture.mjs, so re-captures match. */
-  capture?: {
-    seconds?: number;
-    start?: number;
-    fps?: number;
-    crf?: number;
-    pingpong?: boolean;
-    /** Params to sweep during the clip: from → to and back, eased, over the whole clip. */
-    animate?: Record<string, [number, number]>;
-    /**
-     * Morph through presets instead: hold each for `hold` seconds, then morph to the next
-     * over the kit's preset morph time; the last morphs back to the first, so it loops.
-     */
-    presets?: { sequence: string[]; hold?: number };
-  };
-}
+/** A sketch's manifest.js: see manifest-schema.js. */
+export type Manifest = z.input<typeof manifestSchema>;

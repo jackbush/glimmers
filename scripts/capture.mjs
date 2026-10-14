@@ -11,8 +11,9 @@
 // on how fast the machine is. By default the clip plays forwards then backwards, so it loops
 // without a jump.
 //
-// --seconds, --start, --fps, --crf, ping-pong and param sweeps (`animate`) default to the sketch's `capture` settings in its
-// manifest.js, so a re-capture comes out the same; pass them to experiment.
+// --seconds, --start, --fps, --crf, ping-pong and param sweeps (`animate`) default to the
+// sketch's `capture` settings in its manifest.js, so a re-capture comes out the same; pass
+// them to experiment.
 // --size is the CSS size of the frame (the index shows covers at 16:10, up to 840px wide);
 // --dpr 2 renders it at retina resolution. --start skips into the animation first.
 // --still writes a single PNG frame (at --start) instead of a cover: share images, icons.
@@ -24,6 +25,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { cli, ensureServer, launch, sleep } from './lib/chrome.mjs';
+import { MANIFEST_DEFAULTS } from '../src/kit/manifest.js';
 
 const { args, opt, has } = cli(['--seconds', '--start', '--fps', '--size', '--dpr', '--crf', '--url', '--still', '--set']);
 const still = opt('--still', null);
@@ -47,11 +49,12 @@ if (spawnSync('ffmpeg', ['-version']).status !== 0) {
 
 // Defaults, then the sketch's own `capture` settings in manifest.js, then the command line.
 const { default: manifest } = await import(join(dir, 'manifest.js'));
-const preset = { seconds: 6, start: 0, fps: 30, crf: 26, pingpong: true, animate: {}, ...(manifest.capture || {}) };
+const { presetHold, ...captureDefaults } = MANIFEST_DEFAULTS.capture;
+const preset = { ...captureDefaults, animate: {}, ...(manifest.capture || {}) };
 // A preset sequence (manifest capture.presets): hold each, morph to the next, loop.
 const seq = preset.presets?.sequence || [];
-const hold = preset.presets?.hold ?? 1.5;
-const morph = manifest.presetSeconds ?? 1.5;
+const hold = preset.presets?.hold ?? presetHold;
+const morph = manifest.presetSeconds ?? MANIFEST_DEFAULTS.presetSeconds;
 const period = hold + morph;
 if (seq.length) preset.pingpong = false;
 const seconds = Number(opt('--seconds', seq.length ? seq.length * period : preset.seconds));
@@ -146,7 +149,8 @@ run(['-i', join(work, 'raw', '00000.png'), '-q:v', '3', poster]);
 const shareSrc = join(root, '.capture', slug + '-share.png');
 const share = join(dir, 'share.jpg');
 const self = spawnSync('node', [new URL(import.meta.url).pathname, slug, '--still', shareSrc, '--size', '1200x630', '--dpr', '2',
-  '--start', String(start), ...overrides.flatMap(([k, v]) => ['--set', `${k}=${v}`])], { stdio: ['ignore', 'ignore', 'inherit'] });
+  '--start', String(start), ...overrides.flatMap(([k, v]) => ['--set', `${k}=${v}`])],
+  { stdio: ['ignore', 'ignore', 'inherit'], env: { ...process.env, GLIMMERS_BUILT: '1' } }); // built already
 if (self.status !== 0) throw new Error('share image capture failed');
 run(['-i', shareSrc, '-vf', 'scale=1200:630:flags=lanczos', '-q:v', '3', share]);
 rmSync(shareSrc, { force: true });

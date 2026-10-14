@@ -8,7 +8,8 @@
 // Coordinates: a leaf's blade runs from its base (0, 0) to its tip at about (1, 0); the
 // petiole hangs back to (−petioleLength, 0). Compound leaves are normalised to about the same
 // overall length. Every select param is a blend of option weights (see sketch.js), so each
-// option below is a set of continuous numbers that can be mixed with the others.
+// option is a set of continuous numbers that can be mixed with the others (knobs.js).
+// Compound leaflet positions come from layouts.js.
 //
 // Vertex layout (STRIDE floats): x, y, nx, ny, hw, across, along, kind, seed.
 //   fills:   across = −1…1 across the blade (0 on the midrib), along = 0…1; hw = the length of
@@ -18,62 +19,19 @@
 //            so lines can keep a minimum width in screen px. across = ±1, along = arc length.
 //   kind:    KIND_* below.
 
+import { DEG, TAU, clamp, lerp, noise1, rnd, rnd2, smooth } from './util.js';
+import { G, J, jitter, resolveKnobs } from './knobs.js';
+import { MAX_SLOTS, SF, blendLayouts, pinnaN, pinnaSeg, rachisLen, slots } from './layouts.js';
+
 export const STRIDE = 9;
 export const MAX_VERTS = 420000;
 export const MAX_VARIANTS = 16;
-export const MAX_CIRC = 32;
-export const MAX_SPRIG_CIRC = 360;
 export const MAX_PLACE = 56;
 
 export const KIND_FILL = 0, KIND_OUTLINE = 1, KIND_VEIN = 2, KIND_RIB = 3, KIND_STEM = 6, KIND_BUD = 7;
 // Kind written by spokeVtx: leaf fill, or a bud (filled the same way, in bud colours).
 let fillKind = KIND_FILL;
 
-const TAU = Math.PI * 2;
-const DEG = Math.PI / 180;
-
-// ---------------------------------------------------------------- option tables
-// Each select option is a row of continuous numbers. sketch.js eases a weight per option,
-// and the shape uses the weighted sum, so switching category morphs.
-
-// Outline: [widest point (0 base … 1 tip), half-width per unit length, roundness exponent, cordate lobes]
-const OUTLINE = {
-  Linear: [0.5, 0.07, 0.35, 0],
-  Lanceolate: [0.32, 0.15, 1.0, 0],
-  Elliptic: [0.5, 0.27, 0.85, 0],
-  Ovate: [0.36, 0.33, 0.85, 0],
-  Obovate: [0.66, 0.3, 0.85, 0],
-  Cordate: [0.3, 0.42, 0.8, 0.55],
-  Orbicular: [0.5, 0.47, 0.6, 0.12],
-  Deltoid: [0.1, 0.48, 0.9, 0],
-  Needle: [0.5, 0.022, 0.25, 0],
-};
-// Base: [base exponent (1 = wedge, small = blunt), cordate lobes, asymmetry]
-const BASE = {
-  Cuneate: [1.25, 0, 0],
-  Rounded: [0.55, 0, 0],
-  Cordate: [0.5, 0.55, 0],
-  Truncate: [0.35, 0, 0],
-  Asymmetric: [0.6, 0.12, 1],
-};
-// Apex: [apex exponent, drawn-out tip, notch]
-const APEX = {
-  Acute: [1.0, 0, 0],
-  Acuminate: [1.15, 1, 0],
-  Obtuse: [0.62, 0, 0],
-  Rounded: [0.4, 0, 0],
-  Notched: [0.38, 0, 1],
-};
-// Lobing: [pinnate amount, palmate amount]
-const LOBING = { Unlobed: [0, 0], 'Pinnately lobed': [1, 0], 'Palmately lobed': [0, 1] };
-
-/** Turn a name-keyed table into rows in the param's option order (throws if one is missing). */
-function rows(table, options, name) {
-  return options.map((o) => {
-    if (!table[o]) throw new Error('shapes.js: no ' + name + ' entry for "' + o + '"');
-    return table[o];
-  });
-}
 
 // ---------------------------------------------------------------- output
 
@@ -90,65 +48,19 @@ export const geo = {
   leafSegCount: new Int32Array(MAX_VARIANTS),
   verts: new Float32Array(MAX_VERTS * STRIDE),
   count: 0,
-  overflow: false,
   nLeaf: 0,
   leafStart: new Int32Array(MAX_VARIANTS),
   leafCount: new Int32Array(MAX_VARIANTS),
-  leafCirc: new Float32Array(MAX_VARIANTS * MAX_CIRC * 3),
-  leafNCirc: new Int32Array(MAX_VARIANTS),
-  leafPivot: new Float32Array(MAX_VARIANTS * 2),
-  leafArea: new Float32Array(MAX_VARIANTS),
-  leafBound: new Float32Array(MAX_VARIANTS),
-  leafGyr: new Float32Array(MAX_VARIANTS),
-  /** Inked area (fills), in leaf units² — what Fill measures. */
-  leafInk: new Float32Array(MAX_VARIANTS),
-  /** Room a leaf takes when counting how many fit: its ink, or most of its hull if compound. */
-  leafFoot: new Float32Array(MAX_VARIANTS),
-  /** Area-weighted mean circle radius: how much the gap inflates the footprint. */
-  leafRad: new Float32Array(MAX_VARIANTS),
   leafAttach: new Float32Array(MAX_VARIANTS * 3),
-  nSprig: 0,
   sprigStart: new Int32Array(MAX_VARIANTS),
   sprigCount: new Int32Array(MAX_VARIANTS),
   // The terminal bud, drawn after the leaves (it sits beyond them).
   budStart: new Int32Array(MAX_VARIANTS),
   budCount: new Int32Array(MAX_VARIANTS),
-  sprigCirc: new Float32Array(MAX_VARIANTS * MAX_SPRIG_CIRC * 3),
-  sprigNCirc: new Int32Array(MAX_VARIANTS),
-  sprigPivot: new Float32Array(MAX_VARIANTS * 2),
-  sprigArea: new Float32Array(MAX_VARIANTS),
-  sprigBound: new Float32Array(MAX_VARIANTS),
-  sprigGyr: new Float32Array(MAX_VARIANTS),
-  sprigInk: new Float32Array(MAX_VARIANTS),
-  sprigFoot: new Float32Array(MAX_VARIANTS),
-  sprigRad: new Float32Array(MAX_VARIANTS),
-  // Per placement: leaf variant, mat2 column-major (a, b, c, d), tx, ty, leaf index.
+  // Per placement: leaf variant, mat2 column-major (a, b, c, d), tx, ty, presence (0–1).
   sprigPlace: new Float32Array(MAX_VARIANTS * MAX_PLACE * 8),
   sprigNPlace: new Int32Array(MAX_VARIANTS),
 };
-
-// ---------------------------------------------------------------- small helpers
-
-function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
-function lerp(a, b, t) { return a + (b - a) * t; }
-function smooth(a, b, x) { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); }
-function hash1(n) {
-  n |= 0;
-  n = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
-  n = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
-  n ^= n >>> 16;
-  return (n >>> 0) / 4294967296;
-}
-/** Deterministic 0–1 random for (stream, index). */
-function rnd(a, b) { return hash1(Math.imul(a | 0, 0x27d4eb2d) ^ Math.imul((b | 0) + 0x3c6ef372, 0x165667b1)); }
-/** Same, −1…1. */
-function rnd2(a, b) { return rnd(a, b) * 2 - 1; }
-function noise1(x) {
-  const i = Math.floor(x), f = x - i;
-  const g0 = hash1(i) * 2 - 1, g1 = hash1(i + 1) * 2 - 1;
-  const u = f * f * f * (f * (f * 6 - 15) + 10);
-  return 2 * (g0 * f * (1 - u) + g1 * (f - 1) * u);
-}
 
 // ---------------------------------------------------------------- vertex buffers
 // Staging buffers keep a leaf's layers in draw order: fills, then strokes. They are copied
@@ -242,216 +154,6 @@ function toFinal(x, y) {
   }
   bendAt(leafBend, px, py);
   TX = BX; TY = BY;
-}
-
-// ---------------------------------------------------------------- resolved shape knobs
-
-const G = {
-  pw: 0.4, W: 0.3, expMul: 1, cord: 0, baseE: 1, asym: 0, apexE: 1, acum: 0, notch: 0,
-  pin: 0, palm: 0, lobeDepth: 0, lobes: 5, lobeSharp: 0.5,
-  mw: new Float32Array(7), teeth: 20, toothDepth: 0.02,
-  vw: new Float32Array(4), veinCount: 8, veinAngle: 0.8, veinCurve: 0.3, veinWeight: 0.004, midribWeight: 0.008,
-  cw: new Float32Array(5), leaflets: 7, lPairs: 3, lTerm: 1, leafletAngle: 1,
-  bend: 0, sCurve: 0, petLen: 0.15, petFlat: 0, wing: 0, stipules: 0,
-  veinlets: 0, outlineW: 0.005, wobble: 0.004, variety: 0.3,
-};
-// Per-variant jittered copy of the knobs that vary.
-const J = { W: 0, lobeDepth: 0, toothDepth: 0, bend: 0, sCurve: 0, veinCount: 8, leafletAngle: 1, petLen: 0, pw: 0.4, veinAngle: 0.8 };
-
-// Option rows, resolved against the params' option lists on first use.
-let tOutline = null, tBase = null, tApex = null, tLobing = null;
-
-function resolveKnobs(P, B, variety) {
-  if (!tOutline) {
-    tOutline = rows(OUTLINE, P.outline.options, 'outline');
-    tBase = rows(BASE, P.base.options, 'base');
-    tApex = rows(APEX, P.apex.options, 'apex');
-    tLobing = rows(LOBING, P.lobing.options, 'lobing');
-  }
-  let pw = 0, W = 0, em = 0, cord = 0;
-  for (let i = 0; i < tOutline.length; i++) {
-    const w = B.outline[i], r = tOutline[i];
-    pw += w * r[0]; W += w * r[1]; em += w * r[2]; cord += w * r[3];
-  }
-  let be = 0, asym = 0, ae = 0, acum = 0, notch = 0;
-  for (let i = 0; i < tBase.length; i++) { const w = B.base[i], r = tBase[i]; be += w * r[0]; cord += w * r[1]; asym += w * r[2]; }
-  for (let i = 0; i < tApex.length; i++) { const w = B.apex[i], r = tApex[i]; ae += w * r[0]; acum += w * r[1]; notch += w * r[2]; }
-  let pin = 0, palm = 0;
-  for (let i = 0; i < tLobing.length; i++) { pin += B.lobing[i] * tLobing[i][0]; palm += B.lobing[i] * tLobing[i][1]; }
-  G.pw = pw; G.W = W * P.width.value; G.expMul = em; G.cord = Math.min(cord, 0.9);
-  G.baseE = be; G.asym = asym; G.apexE = ae; G.acum = acum; G.notch = notch;
-  G.pin = pin; G.palm = palm; G.lobeDepth = P.lobeDepth.value; G.lobes = P.lobes.value; G.lobeSharp = P.lobeSharpness.value;
-  for (let i = 0; i < 7; i++) G.mw[i] = B.margin[i];
-  G.teeth = P.teeth.value; G.toothDepth = P.toothDepth.value;
-  for (let i = 0; i < 4; i++) G.vw[i] = B.venation[i];
-  G.veinCount = P.veinCount.value; G.veinAngle = P.veinAngle.value * DEG; G.veinCurve = P.veinCurve.value;
-  G.veinWeight = P.veinWeight.value; G.midribWeight = P.midribWeight.value;
-  for (let i = 0; i < 5; i++) G.cw[i] = B.compound[i];
-  // Leaflets as pairs and a terminal (0–1), eased separately by sketch.js: easing the raw count
-  // passed through every count on the way, and odd and even counts lay out differently, so
-  // leaflets slid up and back and the terminal grew and shrank once per count.
-  const nL = P.leaflets.value;
-  G.lPairs = P.leafletPairs ? P.leafletPairs.value : Math.floor(nL / 2);
-  G.lTerm = P.leafletTerm ? P.leafletTerm.value : nL % 2;
-  G.leaflets = 2 * G.lPairs + G.lTerm; G.leafletAngle = P.leafletAngle.value * DEG;
-  G.bend = P.bend.value; G.sCurve = P.sCurve.value;
-  G.petLen = P.petioleLength.value; G.petFlat = P.petioleFlat.value; G.wing = P.petioleWing.value; G.stipules = P.stipules.value;
-  G.veinlets = P.veinlets.value;
-  G.outlineW = P.outlineWeight.value; G.wobble = P.wobble.value; G.variety = variety;
-}
-
-function jitter(vs) {
-  const v = G.variety;
-  J.W = G.W * (1 + v * 0.3 * rnd2(vs, 1));
-  J.pw = clamp(G.pw + v * 0.06 * rnd2(vs, 2), 0.04, 0.96);
-  J.lobeDepth = clamp(G.lobeDepth * (1 + v * 0.35 * rnd2(vs, 3)), 0, 1);
-  J.toothDepth = G.toothDepth * (1 + v * 0.4 * rnd2(vs, 4));
-  J.bend = G.bend + v * 0.7 * rnd2(vs, 5);
-  J.sCurve = G.sCurve + v * 0.6 * rnd2(vs, 6);
-  // Fractional: the last vein fades in as the count rises, so counts morph smoothly.
-  J.veinCount = Math.max(2, G.veinCount + v * 2.2 * rnd2(vs, 7));
-  J.leafletAngle = G.leafletAngle + v * 0.25 * rnd2(vs, 8);
-  J.petLen = G.petLen * (1 + v * 0.3 * rnd2(vs, 9));
-  J.veinAngle = clamp(G.veinAngle + v * 0.15 * rnd2(vs, 10), 0.2, 1.5);
-}
-
-// ---------------------------------------------------------------- compound layouts
-// Every layout fills the same slots, so a morph moves leaflets rather than swapping them:
-// slot 0 is the terminal leaflet, then pairs from the tip back (upper, lower). Bipinnate
-// puts each pinna's terminal leaflet in those slots and its side leaflets after them.
-// Slot fields: x, y, angle, scale, stalk length.
-
-const MAX_SLOTS = 80, SF = 5;
-// Bipinnate side leaflets start at a fixed slot (past the most pinnae), so they keep their
-// slots whatever the count.
-const PINNA_SIDE = 17;
-const LAYOUTS = [0, 1, 2, 3, 4].map(() => new Float32Array(MAX_SLOTS * SF));
-const slots = new Float32Array(MAX_SLOTS * SF);
-// Bipinnate pinna rachises: x0, y0, x1, y1 per pinna.
-const pinnaSeg = new Float32Array(17 * 4);
-let pinnaN = 0, rachisLen = 0;
-const RACHIS = new Float32Array(5);
-
-function setSlot(L, i, x, y, a, s, st) { const o = i * SF; L[o] = x; L[o + 1] = y; L[o + 2] = a; L[o + 3] = s; L[o + 4] = st; }
-
-function layoutSimple(L) { L.fill(0); setSlot(L, 0, 0, 0, 0, 1, 0); RACHIS[0] = 0; }
-
-/** Pinnate positions for n leaflets of length ll; returns the rachis length. */
-function pinnatePositions(L, n, ang, ll, first) {
-  const pairs = Math.floor(n / 2), term = n % 2;
-  const d = ll * 0.62;
-  const rl = pairs * d + (term ? 0 : 0);
-  setSlot(L, first, rl, 0, 0, term ? ll * 1.05 : 0, ll * 0.07);
-  for (let k = 0; k < pairs; k++) {
-    const x = rl - d * (k + (term ? 0.75 : 0));
-    const s = ll * (1 - 0.22 * k / Math.max(1, pairs - 1));
-    setSlot(L, first + 1 + 2 * k, x, 0, ang, s, ll * 0.035);
-    setSlot(L, first + 2 + 2 * k, x, 0, -ang, s, ll * 0.035);
-  }
-  return rl;
-}
-function layoutPinnate(L, n, ang) {
-  L.fill(0);
-  const pairs = Math.floor(n / 2);
-  const ll = 1 / (0.62 * pairs + 1.1);
-  const rl = pinnatePositions(L, n, ang, ll, 0);
-  // Normalise so the leaf (rachis + terminal) is about 1 long.
-  const tot = rl + ll;
-  for (let i = 0; i < MAX_SLOTS; i++) { const o = i * SF; L[o] /= tot; L[o + 3] /= tot; L[o + 4] /= tot; }
-  RACHIS[1] = rl / tot;
-}
-function layoutBipinnate(L, n, ang) {
-  L.fill(0);
-  const pairs = Math.floor(n / 2);
-  const lp = 1 / (0.62 * pairs + 1.1);
-  const rl = pinnatePositions(L, n, ang, lp, 0);
-  const tot = rl + lp;
-  pinnaN = Math.min(n, 15);
-  // Each pinna slot becomes a mini pinnate leaf: terminal leaflet plus two pairs.
-  for (let p = 0; p < pinnaN; p++) {
-    const o = p * SF;
-    const px = L[o], py = L[o + 1], pa = L[o + 2], ps = L[o + 3] || (p === 0 ? 0 : lp);
-    const len = ps > 0 ? ps : 0;
-    const c = Math.cos(pa), s = Math.sin(pa);
-    const tipD = len * 0.72, ll = len * 0.36;
-    pinnaSeg[p * 4] = px / tot; pinnaSeg[p * 4 + 1] = py / tot;
-    pinnaSeg[p * 4 + 2] = (px + c * tipD) / tot; pinnaSeg[p * 4 + 3] = (py + s * tipD) / tot;
-    setSlot(L, p, (px + c * tipD) / tot, (py + s * tipD) / tot, pa, len > 0 ? ll * 1.05 / tot : 0, ll * 0.06 / tot);
-    for (let q = 0; q < 2; q++) {
-      const dd = len * (0.2 + 0.28 * q);
-      const x = (px + c * dd) / tot, y = (py + s * dd) / tot;
-      const sc = len > 0 ? ll * (0.85 + 0.15 * q) / tot : 0;
-      setSlot(L, PINNA_SIDE + p * 4 + q * 2, x, y, pa + ang * 0.9, sc, 0);
-      setSlot(L, PINNA_SIDE + p * 4 + q * 2 + 1, x, y, pa - ang * 0.9, sc, 0);
-    }
-  }
-  RACHIS[2] = rl / tot;
-}
-function layoutPalmate(L, n) {
-  L.fill(0);
-  const pairs = Math.floor(n / 2), term = n % 2;
-  const step = Math.min(0.75, 4.7 / Math.max(n, 2));
-  const ll = 0.78;
-  if (term) setSlot(L, 0, 0, 0, 0, ll, 0.04);
-  for (let k = 0; k < pairs; k++) {
-    const a = step * (k + (term ? 1 : 0.5));
-    const s = ll * (1 - 0.42 * Math.pow((k + 1) / (pairs + 0.5), 1.4));
-    setSlot(L, 1 + 2 * k, 0, 0, a, s, 0.04);
-    setSlot(L, 2 + 2 * k, 0, 0, -a, s, 0.04);
-  }
-  RACHIS[3] = 0;
-}
-function layoutTrifoliate(L, ang) {
-  L.fill(0);
-  setSlot(L, 0, 0.14, 0, 0, 0.6, 0.07);
-  setSlot(L, 1, 0, 0, ang, 0.5, 0.03);
-  setSlot(L, 2, 0, 0, -ang, 0.5, 0.03);
-  RACHIS[4] = 0.14;
-}
-
-// Pairs and terminal are fractional while morphing: blend the four layouts around them (pairs
-// either side, with and without a terminal). Slots keep their identity across all four, so a
-// new pair grows out of the rachis base and the terminal grows at the tip, each moving once.
-const slotsAcc = new Float32Array(MAX_SLOTS * SF), pinnaAcc = new Float32Array(17 * 4), pinnaW = new Float32Array(17);
-function blendLayouts() {
-  const pF = Math.max(1, G.lPairs), p0 = Math.floor(pF), fp = pF - p0, tau = clamp(G.lTerm, 0, 1);
-  slotsAcc.fill(0); pinnaAcc.fill(0); pinnaW.fill(0);
-  let r = 0, pn = 0;
-  for (let c = 0; c < 4; c++) {
-    const w = (c & 1 ? fp : 1 - fp) * (c & 2 ? tau : 1 - tau);
-    if (w < 1e-6) continue;
-    blendLayoutsN(2 * (p0 + (c & 1)) + (c >> 1));
-    for (let i = 0; i < slots.length; i++) slotsAcc[i] += w * slots[i];
-    // A pinna only some layouts have keeps its full rachis; its leaflets' scale grows it in.
-    for (let p = 0; p < pinnaN; p++) {
-      pinnaW[p] += w;
-      for (let k = 0; k < 4; k++) pinnaAcc[p * 4 + k] += w * pinnaSeg[p * 4 + k];
-    }
-    r += w * rachisLen;
-    pn = Math.max(pn, pinnaN);
-  }
-  slots.set(slotsAcc);
-  for (let p = 0; p < pn; p++) for (let k = 0; k < 4; k++) pinnaSeg[p * 4 + k] = pinnaAcc[p * 4 + k] / pinnaW[p];
-  rachisLen = r;
-  pinnaN = pn;
-}
-function blendLayoutsN(n) {
-  const ang = J.leafletAngle;
-  const w = G.cw;
-  if (w[0] > 0) layoutSimple(LAYOUTS[0]);
-  if (w[1] > 0) layoutPinnate(LAYOUTS[1], n, ang);
-  pinnaN = 0;
-  if (w[2] > 0) layoutBipinnate(LAYOUTS[2], n, ang);
-  if (w[3] > 0) layoutPalmate(LAYOUTS[3], n);
-  if (w[4] > 0) layoutTrifoliate(LAYOUTS[4], ang);
-  slots.fill(0);
-  rachisLen = 0;
-  for (let t = 0; t < 5; t++) {
-    if (w[t] <= 0) continue;
-    const L = LAYOUTS[t];
-    for (let i = 0; i < MAX_SLOTS * SF; i++) slots[i] += w[t] * L[i];
-    rachisLen += w[t] * RACHIS[t];
-  }
 }
 
 // ---------------------------------------------------------------- blade outline
@@ -875,24 +577,17 @@ function emitBlade(ls) {
 
 const WAX = new Float32Array(13), WAY = new Float32Array(13);
 
-/**
- * Move the staged fills then lines into geo.verts and empty the stages, so each part
- * (stalks, then each leaflet) is drawn whole before the next covers it. Returns the
- * fills' area.
- */
 function pushSeg(start, count, mode) {
   if (count <= 0 || geo.nSeg >= MAX_SEG) return;
   const o = geo.nSeg * 3;
   geo.seg[o] = start; geo.seg[o + 1] = count; geo.seg[o + 2] = mode;
   geo.nSeg++;
 }
+/**
+ * Move the staged fills then lines into geo.verts and empty the stages, so each part
+ * (stalks, then each leaflet) is drawn whole before the next covers it.
+ */
 function flushStaged(leaflet) {
-  let ink = 0;
-  const a = sFill.a;
-  for (let t = 0; t + 2 < sFill.n; t += 3) {
-    const o = t * STRIDE;
-    ink += Math.abs((a[o + STRIDE] - a[o]) * (a[o + 2 * STRIDE + 1] - a[o + 1]) - (a[o + 2 * STRIDE] - a[o]) * (a[o + STRIDE + 1] - a[o + 1])) / 2;
-  }
   const c0 = geo.count;
   appendBuf(sFill);
   const c1 = geo.count;
@@ -907,7 +602,6 @@ function flushStaged(leaflet) {
     pushSeg(c2, c3 - c2, SEG_PLAIN);
   } else pushSeg(c0, c3 - c0, SEG_PLAIN);
   sFill.n = sStroke.n = sVeinlet.n = sRib.n = sOutline.n = 0;
-  return ink;
 }
 
 // Where appending stops: the buffer's end, or a leaf's own share on its last try (buildShapes).
@@ -915,171 +609,9 @@ let vertCap = MAX_VERTS;
 function appendBuf(b) {
   const room = vertCap - geo.count;
   const n = Math.min(b.n, room);
-  if (n < b.n) geo.overflow = true;
   const src = b.a, dst = geo.verts, o = geo.count * STRIDE, m = n * STRIDE;
   for (let i = 0; i < m; i++) dst[o + i] = src[i];
   geo.count += n;
-}
-
-// ---------------------------------------------------------------- collision circles
-// A leaf's footprint for packing: up to MAX_CIRC circles inscribed in its shape, chosen
-// biggest first until they cover the outline. Inscribed circles hug the shape (a covering
-// hull would hold neighbours off at the narrow ends), and the Gap keeps the clearance.
-
-const NB = 180, NCAND = 300;
-const BPX = new Float32Array(NB), BPY = new Float32Array(NB), bCov = new Uint8Array(NB);
-const CDX = new Float32Array(NCAND), CDY = new Float32Array(NCAND), CDR = new Float32Array(NCAND);
-
-function fitCircles(start, count, out, oo, pad, maxC, hull) {
-  const a = geo.verts;
-  // Boundary points: fill vertices on the outline. Candidates: along each quad's spoke from
-  // the midrib anchor toward the outline. Fill quads are 6 vertices: anchor, outline, …
-  let nFillQuads = 0;
-  for (let v = start; v + 5 < start + count; v += 6) if ((a[v * STRIDE + 7] & 7) === KIND_FILL) nFillQuads++;
-  if (nFillQuads === 0) { out[oo] = 0; out[oo + 1] = 0; out[oo + 2] = 0.1; return 1; }
-  // Round up: rounding down fills the sample before the second side of the leaf is reached.
-  const qStride = Math.max(1, Math.ceil(nFillQuads / NB));
-  let nb = 0, nc = 0, qi = 0;
-  // Odd stride: a multiple of 4 would only ever pick the same point on every spoke.
-  let cStride = Math.max(1, Math.ceil(nFillQuads * 4 / NCAND));
-  if (cStride % 2 === 0) cStride++;
-  let ci = 0;
-  for (let v = start; v + 5 < start + count; v += 6) {
-    const o = v * STRIDE;
-    if ((a[o + 7] & 7) !== KIND_FILL) continue;
-    const ax = a[o], ay = a[o + 1], ox = a[o + STRIDE], oy = a[o + STRIDE + 1];
-    if (qi++ % qStride === 0 && nb < NB) { BPX[nb] = ox; BPY[nb] = oy; nb++; }
-    // Four along each spoke, the last near the outline so narrow lobe tips get a circle.
-    for (let k = 0; k < 4; k++) {
-      if (ci++ % cStride !== 0 || nc >= NCAND) continue;
-      const t = k < 3 ? k * 0.33 : 0.93;
-      CDX[nc] = ax + (ox - ax) * t; CDY[nc] = ay + (oy - ay) * t; nc++;
-    }
-  }
-  if (hull) return fitHull(out, oo, pad, maxC, nb);
-  // Inscribed radius: distance to the nearest boundary point.
-  for (let c = 0; c < nc; c++) {
-    let d2 = 1e9;
-    for (let b = 0; b < nb; b++) { const dx = BPX[b] - CDX[c], dy = BPY[b] - CDY[c], d = dx * dx + dy * dy; if (d < d2) d2 = d; }
-    CDR[c] = Math.sqrt(d2);
-  }
-  // Greedy by gain: each round takes the circle covering the most still-uncovered outline,
-  // until nearly all of it is covered (the last few points are tooth tips).
-  bCov.fill(0, 0, nb);
-  const tol = 0.025;
-  let n = 0, left = nb;
-  while (n < maxC && left > nb * 0.01) {
-    let best = -1, bestGain = 0;
-    for (let c = 0; c < nc; c++) {
-      const r = CDR[c] + tol, r2 = r * r;
-      let gain = 0;
-      for (let b = 0; b < nb; b++) {
-        if (bCov[b]) continue;
-        const dx = BPX[b] - CDX[c], dy = BPY[b] - CDY[c];
-        if (dx * dx + dy * dy < r2) gain++;
-      }
-      if (gain > bestGain) { bestGain = gain; best = c; }
-    }
-    if (best < 0) break;
-    const r = CDR[best] + tol, r2 = r * r;
-    for (let b = 0; b < nb; b++) {
-      const dx = BPX[b] - CDX[best], dy = BPY[b] - CDY[best];
-      if (!bCov[b] && dx * dx + dy * dy < r2) { bCov[b] = 1; left--; }
-    }
-    // Stored at the radius the cover assumed (with its tolerance), so it really covers.
-    out[oo + n * 3] = CDX[best]; out[oo + n * 3 + 1] = CDY[best]; out[oo + n * 3 + 2] = CDR[best] + tol + pad;
-    n++;
-  }
-  return Math.max(1, n);
-}
-
-/**
- * Compound leaves: a covering hull instead. Cells along and across the leaf's main axis, one
- * circle per occupied cell, sized to cover its outline points. Gaps between leaflets are
- * too small to be worth filling with another leaf anyway.
- */
-function fitHull(out, oo, pad, maxC, nb) {
-  let mx = 0, my = 0;
-  for (let i = 0; i < nb; i++) { mx += BPX[i]; my += BPY[i]; }
-  mx /= nb; my /= nb;
-  let cxx = 0, cyy = 0, cxy = 0;
-  for (let i = 0; i < nb; i++) { const dx = BPX[i] - mx, dy = BPY[i] - my; cxx += dx * dx; cyy += dy * dy; cxy += dx * dy; }
-  const th = 0.5 * Math.atan2(2 * cxy, cxx - cyy), c = Math.cos(th), s = Math.sin(th);
-  let p0 = 1e9, p1 = -1e9, q0 = 1e9, q1 = -1e9;
-  for (let i = 0; i < nb; i++) {
-    const dx = BPX[i] - mx, dy = BPY[i] - my, p = dx * c + dy * s, q = -dx * s + dy * c;
-    if (p < p0) p0 = p; if (p > p1) p1 = p; if (q < q0) q0 = q; if (q > q1) q1 = q;
-  }
-  const cells = Math.min(maxC, 12);
-  const nq = clamp(Math.round(Math.sqrt(cells / ((p1 - p0) / Math.max(q1 - q0, 1e-3)))), 1, 4);
-  const np = clamp(Math.floor(cells / nq), 1, cells);
-  const bw = (p1 - p0) / np + 1e-6, bh = (q1 - q0) / nq + 1e-6;
-  for (let b = 0; b < np * nq; b++) { const o = b * 6; CS[o] = 1e9; CS[o + 1] = -1e9; CS[o + 2] = 1e9; CS[o + 3] = -1e9; CS[o + 5] = 0; }
-  for (let i = 0; i < nb; i++) {
-    const dx = BPX[i] - mx, dy = BPY[i] - my, p = dx * c + dy * s, q = -dx * s + dy * c;
-    const o = cellOf(p, q, p0, q0, bw, bh, np, nq) * 6;
-    if (p < CS[o]) CS[o] = p; if (p > CS[o + 1]) CS[o + 1] = p;
-    if (q < CS[o + 2]) CS[o + 2] = q; if (q > CS[o + 3]) CS[o + 3] = q;
-  }
-  for (let i = 0; i < nb; i++) {
-    const dx = BPX[i] - mx, dy = BPY[i] - my, p = dx * c + dy * s, q = -dx * s + dy * c;
-    const o = cellOf(p, q, p0, q0, bw, bh, np, nq) * 6;
-    const d = Math.hypot(p - (CS[o] + CS[o + 1]) / 2, q - (CS[o + 2] + CS[o + 3]) / 2);
-    if (d > CS[o + 5]) CS[o + 5] = d;
-  }
-  let n = 0;
-  for (let b = 0; b < np * nq; b++) {
-    const o = b * 6;
-    if (CS[o] > CS[o + 1]) continue;
-    const p = (CS[o] + CS[o + 1]) / 2, q = (CS[o + 2] + CS[o + 3]) / 2;
-    out[oo + n * 3] = mx + p * c - q * s;
-    out[oo + n * 3 + 1] = my + p * s + q * c;
-    out[oo + n * 3 + 2] = CS[o + 5] + pad;
-    n++;
-  }
-  return Math.max(1, n);
-}
-function cellOf(p, q, p0, q0, bw, bh, np, nq) {
-  const a = Math.min(np - 1, Math.max(0, Math.floor((p - p0) / bw)));
-  const b = Math.min(nq - 1, Math.max(0, Math.floor((q - q0) / bh)));
-  return b * np + a;
-}
-const CS = new Float32Array(16 * 6);
-
-
-/** Pivot (area-weighted centre), bound radius, union area and radius of gyration² of circles. */
-let cPivX = 0, cPivY = 0, cBound = 0, cArea = 0, cGyr = 0, cRad = 0;
-function circleStats(arr, o, nc) {
-  let sw = 0, sx = 0, sy = 0, x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
-  for (let i = 0; i < nc; i++) {
-    const x = arr[o + i * 3], y = arr[o + i * 3 + 1], r = arr[o + i * 3 + 2], w = r * r;
-    sw += w; sx += x * w; sy += y * w;
-    if (x - r < x0) x0 = x - r; if (x + r > x1) x1 = x + r; if (y - r < y0) y0 = y - r; if (y + r > y1) y1 = y + r;
-  }
-  cPivX = sx / sw; cPivY = sy / sw;
-  let r3 = 0;
-  for (let i = 0; i < nc; i++) { const r = arr[o + i * 3 + 2]; r3 += r * r * r; }
-  cRad = r3 / sw;
-  cBound = 0; cGyr = 0;
-  for (let i = 0; i < nc; i++) {
-    const x = arr[o + i * 3] - cPivX, y = arr[o + i * 3 + 1] - cPivY, r = arr[o + i * 3 + 2];
-    const d = Math.hypot(x, y) + r;
-    if (d > cBound) cBound = d;
-    cGyr += r * r * (x * x + y * y + r * r * 0.5);
-  }
-  cGyr /= sw;
-  const G2 = 28;
-  let hit = 0;
-  for (let gy = 0; gy < G2; gy++) {
-    for (let gx = 0; gx < G2; gx++) {
-      const px = x0 + (gx + 0.5) / G2 * (x1 - x0), py = y0 + (gy + 0.5) / G2 * (y1 - y0);
-      for (let i = 0; i < nc; i++) {
-        const dx = px - arr[o + i * 3], dy = py - arr[o + i * 3 + 1], r = arr[o + i * 3 + 2];
-        if (dx * dx + dy * dy < r * r) { hit++; break; }
-      }
-    }
-  }
-  cArea = hit / (G2 * G2) * (x1 - x0) * (y1 - y0);
 }
 
 // ---------------------------------------------------------------- one leaf variant
@@ -1216,7 +748,7 @@ function buildLeafVariant(v, seed) {
   }
 
   // Leaflets, each drawn whole (fill, then lines) over the stalks and earlier leaflets.
-  let ink = flushStaged(false);
+  flushStaged(false);
   for (let j = 0; j < MAX_SLOTS; j++) {
     const o = j * SF;
     if (slots[o + 3] <= 0.004) continue;
@@ -1236,11 +768,10 @@ function buildLeafVariant(v, seed) {
     if (wingJoin < 0.002) wingJoin = 0;
     curSeed = rnd(ls, 2);
     emitBlade(ls);
-    ink += flushStaged(true);
+    flushStaged(true);
   }
   wingJoin = 0;
 
-  geo.leafInk[v] = ink;
   geo.leafCount[v] = geo.count - geo.leafStart[v];
   geo.leafSegCount[v] = geo.nSeg - geo.leafSegStart[v];
 
@@ -1252,25 +783,6 @@ function buildLeafVariant(v, seed) {
   geo.leafAttach[v * 3 + 2] = Math.atan2(TY - ay, TX - ax);
   bladeMode = true;
 
-  const co = v * MAX_CIRC * 3;
-  // The blade gets inscribed circles; the petiole a chain of small ones.
-  const nPet = pl > 0.03 ? Math.min(4, Math.ceil(pl / 0.12)) : 0;
-  // No packing here, so no collision circles.
-  let nc = 0;
-  bladeMode = false;
-  for (let k = 0; k < nPet; k++) {
-    toFinal(-pl * (k + 0.5) / nPet, 0);
-    geo.leafCirc[co + nc * 3] = TX; geo.leafCirc[co + nc * 3 + 1] = TY;
-    geo.leafCirc[co + nc * 3 + 2] = Math.max(pl / nPet * 0.55, stalkW + 0.005);
-    nc++;
-  }
-  bladeMode = true;
-  geo.leafNCirc[v] = nc;
-  circleStats(geo.leafCirc, co, nc);
-  geo.leafPivot[v * 2] = cPivX; geo.leafPivot[v * 2 + 1] = cPivY;
-  geo.leafBound[v] = cBound; geo.leafArea[v] = cArea; geo.leafGyr[v] = cGyr;
-  geo.leafFoot[v] = Math.max(geo.leafInk[v], cArea * 0.8);
-  geo.leafRad[v] = cRad;
 }
 
 // ---------------------------------------------------------------- sprigs
@@ -1507,7 +1019,6 @@ export function buildShapes(P, B, variety) {
   const seed = P.seed.value;
   geo.count = 0;
   geo.nSeg = 0;
-  geo.overflow = false;
   geo.nLeaf = nv;
   // Each leaf gets an equal share of the buffer, with one share kept for the sprig. A leaf over
   // its share (many leaflets, mostly mid-morph between two compound types, when both layouts'
@@ -1516,18 +1027,17 @@ export function buildShapes(P, B, variety) {
   // threw the framing out.
   const share = Math.floor(Math.min(160000, MAX_VERTS / (nv + 1)));
   for (let v = 0; v < nv; v++) {
-    const c0 = geo.count, s0 = geo.nSeg, o0 = geo.overflow;
+    const c0 = geo.count, s0 = geo.nSeg;
     for (resDiv = 1; ; resDiv *= 2) {
       // Last try: still too many (veins cost the same at any resolution), so cut it at its
       // share rather than starve the leaves after it and the stem.
       if (resDiv === 4) vertCap = c0 + share;
       buildLeafVariant(v, seed);
       if (geo.count - c0 <= share || resDiv >= 4) break;
-      geo.count = c0; geo.nSeg = s0; geo.overflow = o0;
+      geo.count = c0; geo.nSeg = s0;
     }
     vertCap = MAX_VERTS;
   }
   resDiv = 1;
-  geo.nSprig = 1;
   buildSprigVariant(0, P, B, seed);
 }

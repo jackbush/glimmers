@@ -9,9 +9,10 @@ import { createModel } from './params';
 import { buildPanel } from './panel';
 import { setupChrome } from './chrome';
 import { createLoop } from './loop';
+import { MANIFEST_DEFAULTS } from './manifest.js';
 import type { Group, Manifest, Presets, Sketch, SketchInstance } from './types';
 
-interface SketchModules {
+export interface SketchModules {
   manifest: Manifest;
   params: Group[];
   /** Optional `export const presets` from params.js. */
@@ -63,10 +64,13 @@ export function run(slug: string, { manifest, params, presets, sketch }: SketchM
   // Autoplay (manifest.autoplay): cycling through the presets until the pane opens.
   let autoplay: { names: string[]; i: number; wait: number } | null = null;
   const chrome = setupChrome(!capture, (open) => { if (open) autoplay = null; });
-  const presetSeconds = manifest.presetSeconds ?? 1.5;
-  const autoHold = manifest.autoplay?.hold ?? 1;
+  const presetSeconds = manifest.presetSeconds ?? MANIFEST_DEFAULTS.presetSeconds;
+  const autoHold = manifest.autoplay?.hold ?? MANIFEST_DEFAULTS.autoplayHold;
+  // Whether the preset morph under way is the user's (saved when it lands) or autoplay's.
+  let saveOnLanding = false;
   function applyPreset(name: string, seconds = presetSeconds, save = true) {
     if (!presets?.[name]) return;
+    saveOnLanding = save;
     const own = !!instance?.morph;
     store.applyPreset(presets[name], seconds, !own);
     if (own) instance!.morph!(seconds);
@@ -112,8 +116,9 @@ export function run(slug: string, { manifest, params, presets, sketch }: SketchM
       panel.syncAll();
       panel.refreshStatus();
     }
-    // Autoplay's presets aren't the user's settings, so they aren't saved.
-    if (state === 'done' && !autoplay) store.scheduleSave();
+    // Autoplay's presets aren't the user's settings, so they aren't saved, even if the pane
+    // opened (stopping autoplay) while one was morphing in.
+    if (state === 'done' && saveOnLanding) store.scheduleSave();
   };
 
   // Play/pause: freezes scene time (anything on real time, like film grain, keeps running).

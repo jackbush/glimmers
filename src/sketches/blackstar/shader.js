@@ -26,7 +26,7 @@
 //   u_time      scene seconds (scaled & pausable)
 //   u_realTime  wall-clock seconds (drives the film layer, so grain keeps running while paused)
 
-const MAX_POINTS = 12; // keep in sync with the GLSL #define below
+const MAX_POINTS = 12;
 const TAU = Math.PI * 2;
 
 // ---------------------------------------------------------------- CPU noise (allocation-free)
@@ -108,18 +108,11 @@ export default {
 
   },
 
-  vert: `#version 300 es
-void main() {
-  // Fullscreen triangle from vertex id — no buffers needed.
-  vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);
-  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
-}`,
-
   // Prepended (after uniform declarations) to every pass.
   common: `
 #define TAU 6.28318530718
 #define PI  3.14159265359
-#define MAX_POINTS 12
+#define MAX_POINTS ${MAX_POINTS}
 
 // 3D simplex noise — Ashima Arts / Stefan Gustavson (MIT).
 vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
