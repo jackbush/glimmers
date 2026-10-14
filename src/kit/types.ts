@@ -20,6 +20,13 @@ export interface ParamDef {
   options?: string[];
   desc?: string;
   uniform?: boolean;
+  /**
+   * Only relevant when another param (its parent) has one of the `is` values, or none of the
+   * `not` values. The pane shows it only then (indented, under the parent), and only shown
+   * params count as changes or are copied. The parent must come earlier in the same group,
+   * with nothing unrelated between them: scripts/check.mjs enforces it.
+   */
+  when?: { key: string; is?: ParamValue[]; not?: ParamValue[] };
   [extra: string]: unknown;
 }
 
@@ -41,6 +48,9 @@ export interface Param extends ParamDef {
   group: string;
   default: ParamValue;
   decimals: number;
+  /** The param `when` depends on, and how many such levels deep this one is (0 = none). */
+  parent: Param | null;
+  depth: number;
   /** Colour params only: the value as 0–1 floats, updated in place on every edit. */
   rgb: Float32Array;
 }

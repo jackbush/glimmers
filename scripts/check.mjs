@@ -44,7 +44,13 @@ for (const slug of slugs) {
       keys.add(p.key);
       params.push(p);
       if (!p.label) errors.push(`${where}: missing label`);
-      else if (p.label.length > 18) warnings.push(`${where}: label "${p.label}" is over 18 characters and will be cut off`);
+      else {
+        // The pane marks each level of `when` with "- ", which takes from the same width.
+        let depth = 0;
+        for (let q = p; q && q.when; q = group.params.find((r) => r.key === q.when.key)) depth++;
+        const shown = '- '.repeat(depth) + p.label;
+        if (shown.length > 18) warnings.push(`${where}: label "${shown}" is over 18 characters and will be cut off`);
+      }
       if (!p.desc) warnings.push(`${where}: missing desc (tooltip)`);
       if (type === 'range') {
         for (const f of ['min', 'max', 'step']) if (typeof p[f] !== 'number') errors.push(`${where}: missing ${f}`);
@@ -62,6 +68,35 @@ for (const slug of slugs) {
       }
     }
   }
+  // Dependencies (`when`): the parent comes earlier in the same group, with only its own
+  // dependents in between, so the pane can show them straight under it.
+  for (const group of schema || []) {
+    const seen = [];
+    for (const p of group.params || []) {
+      const w = p.when;
+      if (w) {
+        const where = `${group.group}/${p.key}`;
+        const parent = seen.find((q) => q.key === w.key);
+        const vals = w.is || w.not;
+        if (!parent) errors.push(`${where}: when.key "${w.key}" isn't earlier in the same group`);
+        else if (!!w.is === !!w.not || !Array.isArray(vals) || !vals.length) errors.push(`${where}: when needs exactly one of is: [...] or not: [...]`);
+        else {
+          const ptype = parent.type || 'range';
+          for (const v of vals) {
+            const ok = ptype === 'select' ? parent.options.includes(v) : ptype === 'bool' ? typeof v === 'boolean'
+              : ptype === 'color' ? /^#[0-9a-f]{6}$/.test(v) : typeof v === 'number' && v >= parent.min && v <= parent.max;
+            if (!ok) errors.push(`${where}: when value ${JSON.stringify(v)} isn't a possible ${w.key}`);
+          }
+          // The param just before must be the parent or one of its dependents.
+          let prev = seen[seen.length - 1];
+          while (prev && prev !== parent) prev = prev.when && seen.find((q) => q.key === prev.when.key);
+          if (prev !== parent) errors.push(`${where}: must come straight after ${w.key} (or another param that depends on it)`);
+        }
+      }
+      seen.push(p);
+    }
+  }
+
   for (const k of ['timeScale', 'maxDpr']) {
     if (schema && !keys.has(k)) errors.push(`no "${k}" param — start params.js with playback() from src/kit/standard.js`);
   }

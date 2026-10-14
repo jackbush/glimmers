@@ -11,6 +11,9 @@ export interface ParamStore extends Model {
   /** Set a value. A preset morph still under way stops moving this param. */
   setValue(p: Param, v: unknown): void;
   isChanged(p: Param): boolean;
+  /** False while the param's `when` (or an ancestor's) doesn't hold. */
+  isShown(p: Param): boolean;
+  /** Changed params that are shown. */
   changedCount(): number;
   /** Every param back to its default, ending any preset morph. */
   resetAll(): void;
@@ -84,7 +87,15 @@ export function createModel(schema: Group[], storageKey: string | null): ParamSt
         default: def.value,
         decimals: type === 'range' ? decimalsOf(def.step) : 0,
         rgb: new Float32Array(3),
+        parent: null,
+        depth: 0,
       };
+      if (def.when) {
+        const parent = live.find((q) => q.key === def.when!.key);
+        if (!parent) throw new Error(`${def.key}: "when" names ${def.when.key}, which isn't earlier in its group`);
+        p.parent = parent;
+        p.depth = parent.depth + 1;
+      }
       writeDerived(p);
       params.push(p);
       live.push(p);
@@ -117,9 +128,17 @@ export function createModel(schema: Group[], storageKey: string | null): ParamSt
       assign(p, v);
     },
     isChanged: (p) => p.value !== p.default,
+    isShown(p) {
+      for (let q: Param | null = p; q && q.when; q = q.parent) {
+        const v = q.parent!.value, w = q.when;
+        if (w.is && !w.is.includes(v)) return false;
+        if (w.not && w.not.includes(v)) return false;
+      }
+      return true;
+    },
     changedCount() {
       let n = 0;
-      for (const p of params) if (p.value !== p.default) n++;
+      for (const p of params) if (p.value !== p.default && store.isShown(p)) n++;
       return n;
     },
     resetAll() {

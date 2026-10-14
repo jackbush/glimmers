@@ -21,7 +21,7 @@ interface PanelOptions {
 
 export interface Panel {
   syncAll(): void;
-  /** Refresh the changes line and Reset visibility. */
+  /** Refresh which rows are shown, the changes line and Reset's visibility. */
   refreshStatus(): void;
 }
 
@@ -46,11 +46,12 @@ export function buildPanel({ slug, store, onEdited, presets, onPreset }: PanelOp
   const copyBtn = document.getElementById('copy') as HTMLButtonElement;
   const resetBtn = document.getElementById('reset') as HTMLButtonElement;
   const statusEl = document.getElementById('status')!;
-  const rows: { sync(): void }[] = [];
+  const rows: { p: Param; wrap: HTMLElement; sync(): void }[] = [];
 
   function buildRow(p: Param): HTMLElement {
     const wrap = el('div', 'row row-' + p.type);
-    const label = el('label', 'lbl', p.label);
+    // Dependent params sit under their parent, marked "- " per level.
+    const label = el('label', 'lbl', '- '.repeat(p.depth) + p.label);
     const id = 'p-' + p.key;
     label.htmlFor = id;
     label.title = (p.desc ? p.desc + '\n' : '') + 'key: ' + p.key + ' · default: ' + p.default + '\nDouble-click to reset.';
@@ -110,7 +111,7 @@ export function buildPanel({ slug, store, onEdited, presets, onPreset }: PanelOp
     }
     wrap.title = p.desc || '';
     sync();
-    rows.push({ sync });
+    rows.push({ p, wrap, sync });
     return wrap;
   }
 
@@ -145,6 +146,7 @@ export function buildPanel({ slug, store, onEdited, presets, onPreset }: PanelOp
   const panel: Panel = {
     syncAll() { for (const r of rows) r.sync(); },
     refreshStatus() {
+      for (const r of rows) r.wrap.hidden = !store.isShown(r.p);
       const n = store.changedCount();
       statusEl.textContent = n === 0 ? 'No changes' : n + (n === 1 ? ' change' : ' changes');
       resetBtn.hidden = n === 0;
@@ -154,7 +156,7 @@ export function buildPanel({ slug, store, onEdited, presets, onPreset }: PanelOp
   // ---- copy state
   function buildState(): string {
     const changed: Record<string, { from: unknown; to: unknown }> = {};
-    for (const p of store.params) if (store.isChanged(p)) changed[p.key] = { from: p.default, to: p.value };
+    for (const p of store.params) if (store.isChanged(p) && store.isShown(p)) changed[p.key] = { from: p.default, to: p.value };
     return JSON.stringify({ glimmers: STATE_TAG, sketch: slug, changed }, null, 2);
   }
   async function writeClipboard(text: string): Promise<boolean> {

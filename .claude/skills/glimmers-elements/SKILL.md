@@ -29,7 +29,8 @@ description: Add, edit, or remove visual elements and parameters in a glimmers s
    - `key` is camelCase, unique and descriptive. It's the key in copied state, so treat it as permanent. Don't reuse a standard key (`timeScale`, `renderScale`, `targetFps`, `maxDpr`).
    - `type` is `'range'` (the default), `'color'` (lowercase `'#rrggbb'`), `'bool'` or `'select'` (a dropdown: `options: ['Ovate', 'Cordate']`, and the value is one of those strings).
    - The default must sit inside `[min, max]`. Pick ranges that are useful but not destructive, and pick `step` to suit the precision that matters.
-   - `label` stays short (≤ 18 characters) so it fits the 124px label column. `desc` is required because it's the tooltip.
+   - `label` stays short (≤ 18 characters, counting the "- " a dependent gets per level) so it fits the 124px label column. `desc` is required because it's the tooltip.
+   - If it only matters for some values of another param, add `when: { key: 'style', is: ['Watercolour'] }` (or `not: [...]`; for a number, e.g. `not: [0]`). The pane then shows it only when it applies, straight under its parent with its label marked "- ", and it's left out of the change count and Copy changes while hidden. Put it right after its parent (or the parent's other dependents) in the same group; `check.mjs` enforces that. Only add one where the code confirms the param has no effect otherwise.
 2. Read it in the sketch as `P.<key>.value`.
 3. Run `node scripts/check.mjs <slug>`.
 

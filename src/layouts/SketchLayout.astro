@@ -161,7 +161,11 @@ const { title, appTitle, background, image, imageAlt } = Astro.props;
   .group[open] summary::before { content: "▾ "; }
 
   .row { display: grid; grid-template-columns: 124px 1fr 84px; align-items: center; gap: 8px; padding: 3px 14px; }
-  .row-bool, .row-select { grid-template-columns: 124px 1fr; }
+  .row-select { grid-template-columns: 124px 1fr; }
+  /* A checkbox keeps the three columns and sits in the last, lined up with the number boxes. */
+  .row-bool input[type=checkbox] { grid-column: 3; }
+  /* A dependent param whose parent's value makes it irrelevant (see `when` in kit/types.ts). */
+  .row[hidden] { display: none; }
   .lbl { color: var(--ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: default; user-select: none; }
   .row.changed .lbl { color: var(--ink); }
   .row.changed .lbl::after { content: " •"; color: var(--accent); }
