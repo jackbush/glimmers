@@ -15,7 +15,7 @@ Preset names are what a tree guide's index would print.
 - **Invert a qualified name with a comma**, the index form, so relatives sit together in the menu: English oak → `Oak, English`; Field maple → `Maple, Field`; Silver birch → `Birch, Silver`; Crab apple → `Apple, Crab`. Capitalise both parts.
 - **Invert by the name, not by botany.** Horse chestnut (*Aesculus*) and Sweet chestnut (*Castanea*) aren't related, but both are `Chestnut, …`, as an index lists them.
 - **Leave one-word names alone**: Holly, Sycamore, Robinia, Eucalyptus. Sycamore is botanically a maple, but nobody calls it one.
-- **Don't invent qualifiers**, unless a second preset would share the name. Adding a second cherry turned `Cherry` into `Cherry, Wild` beside the new `Cherry, Japanese`.
+- **Don't invent qualifiers**, unless a second preset would share the name. Adding a second cherry turned `Cherry` into `Cherry, Wild` beside the new `Cherry, Japanese 'Kanzan'`.
 - **Cultivars** go in single quotes after the species name: `Maple, Japanese 'Bloodgood'`. Hybrids keep the × in the comment (*Tilia × europaea*).
 - **Order:** `presets` is in alphabetical order by name, because that is the menu order. Insert new presets in place.
 - **Quoting:** keys with spaces or commas are quoted: `'Oak, English': species({`.
@@ -31,11 +31,11 @@ Preset names are what a tree guide's index would print.
 
 ```js
   // English oak (Quercus robur): what the leaf, twig, bud and fruit look like, in a sentence
-  // or two of plain description. Leaf colour on paper colour.
+  // or two of plain description. Leaf colour.
   'Oak, English': species({
     compound: …, outline: …,                     // the Leaf, Lobes, Margin, Veins, Stalk, Stem
     …                                            // Fruit and Flowers groups, as others lay them out
-    paper: '#…', leafWash: '#…', leafShade: '#…',
+    leafWash: '#…', leafShade: '#…',
     stemWash: '#…', budColour: '#…', budShade: '#…',
     fruitColour: '#…', fruitShade: '#…', flowerColour: '#…', flowerShade: '#…', flowerCentre: '#…',
   }),
@@ -45,10 +45,11 @@ Preset names are what a tree guide's index would print.
 - **What `species()` covers:** it fills every shape param (all groups but Finish) from the defaults, so name only what makes this tree itself. Never set Finish params (outline, shading, wash), because a user's Finish must survive picking a species.
 - **Colours:**
   - Use summer colours unless autumn is the point.
-  - The paper is a very pale pastel from roughly the far side of the hue wheel from the leaf, or from a strong stem colour.
+  - Don't set the paper: every preset shares the warm cream default.
   - Set fruit and flower colours only when there's fruit or flowers. The acorn cup uses the bud colours; a bract has its own `bractColour`.
+- **Odd parts:** Thorns (and Terminal Thorn) for hawthorn, blackthorn, robinia; Outline Fan + Venation Forking for ginkgo; Apex Cut for the tulip tree; Palmate with many leaflets and Tip flop for palms; Petal rings for double blossom.
 - **Nodes:** 3–15 for a broadleaf, never 2 (it looks unfinished). Up to 15 keeps leaves at full resolution; from 16 they step down (fine for needles, not for big toothed leaves).
-- **Conifers** (see NOTES Long shoots): Outline Needle, no side veins (Vein weight 0), a short internode, dozens of nodes. Two ranks: Alternate, Divergence 180; spirals: 137.5 with Foreshorten; bundles: Per node, Bundle fan, Sheath; spruce's Pegs; Base shrink for small-at-both-ends shoots. Decide which side is up: stomatal bands are on the underside of most flat needles, so a shoot seen from above (yew) shows none. Spread out 0, since they're meant to be dense, and Every to space fruit along the shoot. Larch and cedar tufts are Spurs (a rosette on a knob every nth node); branched sprays are Side shoots.
+- **Conifers** (see NOTES Long shoots): Outline Needle, no side veins (Vein weight 0), a short internode, dozens of nodes. Two ranks: Alternate, Divergence 180; spirals: 137.5 with Foreshorten; bundles: Per node, Bundle fan, Sheath; spruce's Pegs; Base shrink for small-at-both-ends shoots. Decide which side is up: stomatal bands are on the underside of most flat needles, so a shoot seen from above (yew) shows none. Spread out 0, since they're meant to be dense, and Every to space fruit along the shoot. Larch and cedar tufts are Spurs (a rosette on a knob every nth node); branched sprays are Side shoots. Cones are a Fruit type.
 - **Fruit and flowers** (see NOTES Fruit and flowers):
   - A preset may show both seasons at once, as a botanical plate does (Elder: flowers at the tip, berries lower down). Keep them apart: flowers count their nodes from the tip down, fruit from the base up.
   - Put them where they read, in open space off the leaves; small clusters at a dense tip get lost. Hang and Cluster stalk move them out.

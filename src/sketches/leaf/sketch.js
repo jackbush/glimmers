@@ -29,24 +29,25 @@ const SELECTS = ['compound', 'outline', 'base', 'apex', 'lobing', 'margin', 'ven
 // are shrunk to nothing (see beginMorph).
 const LEAF_KEYS = new Set([
   'compound', 'outline', 'base', 'apex', 'lobing', 'margin', 'venation',
-  'leaflets', 'leafletPairs', 'leafletTerm', 'leafletAngle', 'width', 'bend', 'sCurve', 'lobeDepth', 'lobes', 'lobeSharpness',
+  'leaflets', 'leafletPairs', 'leafletTerm', 'leafletAngle', 'leafletFlop', 'width', 'bend', 'sCurve', 'lobeDepth', 'lobes', 'lobeSharpness',
   'teeth', 'toothDepth', 'veinCount', 'veinAngle', 'veinCurve', 'veinlets', 'veinWeight', 'midribWeight',
   'petioleLength', 'petioleFlat', 'petioleWing', 'stipules',
 ]);
 // Params that change the geometry (selects in SELECTS morph and are tracked separately).
 const GEOM_KEYS = [
-  'seed', 'leaflets', 'leafletAngle', 'width', 'bend', 'sCurve', 'lobeDepth', 'lobes', 'lobeSharpness',
+  'seed', 'leaflets', 'leafletAngle', 'leafletFlop', 'width', 'bend', 'sCurve', 'lobeDepth', 'lobes', 'lobeSharpness',
   'teeth', 'toothDepth', 'veinCount', 'veinAngle', 'veinCurve', 'veinlets', 'veinWeight', 'midribWeight',
   'petioleLength', 'petioleFlat', 'petioleWing', 'stipules', 'outlineWeight', 'wobble',
   'arrangement', 'nodes', 'divergence', 'decussate', 'whorlCount', 'internode', 'internodeTaper', 'bareStem',
-  'frontReach', 'foreshorten', 'perNode', 'bundleSpread', 'sheath', 'baseShrink', 'pegs',
+  'frontReach', 'thorns', 'thornAngle', 'thornPairs', 'foreshorten', 'perNode', 'bundleSpread', 'sheath', 'baseShrink', 'pegs',
   'spurs', 'spurEvery', 'spurLeaves', 'spurFan', 'spurLength', 'spurAngle',
   'sideShoots', 'sideEvery', 'sideLength', 'sideAngle', 'sideNodes',
   'insertion', 'tipInsertion', 'sizeGradient', 'stemWidth', 'stemTaper', 'stemCurve', 'stemDroop', 'zigzag', 'stemWander', 'spreadOut',
   'terminal', 'budType', 'budSize', 'budStem', 'leafVariety',
   'fruit', 'fruitNodes', 'fruitEvery', 'fruitTip', 'fruitCount', 'fruitSize', 'fruitLength', 'fruitPeduncle', 'fruitBudScales', 'fruitStalk', 'fruitHang', 'fruitSpread',
-  'fruitForm', 'fruitAxis', 'fruitRays', 'fruitTaper', 'fruitBract', 'fruitCurve',
-  'fruitAsym', 'fruitSeeds', 'fruitCup', 'fruitSpines', 'fruitSpineCount', 'fruitCut', 'fruitKernels',
+  'fruitForm', 'fruitAxis', 'fruitRays', 'fruitTaper', 'fruitPairs', 'fruitRaySpread', 'fruitBract', 'fruitCurve',
+  'fruitAsym', 'fruitSeeds', 'fruitCup', 'fruitSpines', 'fruitSpineCount', 'fruitCut', 'fruitKernels', 'fruitConeRows', 'fruitNutShow',
+  'flowerPairs', 'flowerRaySpread', 'flowerRings', 'flowerViews',
   'flower', 'flowerNodes', 'flowerEvery', 'flowerTip', 'flowerForm', 'flowerAxis', 'flowerRays', 'flowerTaper', 'flowerCount', 'flowerSize', 'flowerBudScales',
   'flowerLength', 'flowerPeduncle', 'flowerBract', 'flowerStalk', 'flowerHang', 'flowerSpread', 'flowerCurve', 'flowerPetals',
   'flowerNotch', 'flowerStamens', 'flowerFlare',

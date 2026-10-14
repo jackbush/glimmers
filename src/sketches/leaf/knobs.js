@@ -7,17 +7,19 @@ import { DEG, clamp, rnd2 } from './util.js';
 // Each select option is a row of continuous numbers. sketch.js eases a weight per option,
 // and the shape uses the weighted sum, so switching category morphs.
 
-// Outline: [widest point (0 base … 1 tip), half-width per unit length, roundness exponent, cordate lobes]
+// Outline: [widest point (0 base … 1 tip), half-width per unit length, roundness exponent, cordate lobes, fan]
+// Fan (ginkgo) replaces the blade's width with a wedge opening to an arc round its base.
 const OUTLINE = {
-  Linear: [0.5, 0.07, 0.35, 0],
-  Lanceolate: [0.32, 0.15, 1.0, 0],
-  Elliptic: [0.5, 0.27, 0.85, 0],
-  Ovate: [0.36, 0.33, 0.85, 0],
-  Obovate: [0.66, 0.3, 0.85, 0],
-  Cordate: [0.3, 0.42, 0.8, 0.55],
-  Orbicular: [0.5, 0.47, 0.6, 0.12],
-  Deltoid: [0.1, 0.48, 0.9, 0],
-  Needle: [0.5, 0.022, 0.25, 0],
+  Linear: [0.5, 0.07, 0.35, 0, 0],
+  Lanceolate: [0.32, 0.15, 1.0, 0, 0],
+  Elliptic: [0.5, 0.27, 0.85, 0, 0],
+  Ovate: [0.36, 0.33, 0.85, 0, 0],
+  Obovate: [0.66, 0.3, 0.85, 0, 0],
+  Cordate: [0.3, 0.42, 0.8, 0.55, 0],
+  Orbicular: [0.5, 0.47, 0.6, 0.12, 0],
+  Deltoid: [0.1, 0.48, 0.9, 0, 0],
+  Needle: [0.5, 0.022, 0.25, 0, 0],
+  Fan: [0.7, 0.5, 0.6, 0, 1],
 };
 // Base: [base exponent (1 = wedge, small = blunt), cordate lobes, asymmetry]
 const BASE = {
@@ -27,13 +29,15 @@ const BASE = {
   Truncate: [0.35, 0, 0],
   Asymmetric: [0.6, 0.12, 1],
 };
-// Apex: [apex exponent, drawn-out tip, notch]
+// Apex: [apex exponent, drawn-out tip, notch, cut]
+// Cut (tulip tree): the blade stays wide to its end and stops in a broad shallow V, as if snipped.
 const APEX = {
-  Acute: [1.0, 0, 0],
-  Acuminate: [1.15, 1, 0],
-  Obtuse: [0.62, 0, 0],
-  Rounded: [0.4, 0, 0],
-  Notched: [0.38, 0, 1],
+  Acute: [1.0, 0, 0, 0],
+  Acuminate: [1.15, 1, 0, 0],
+  Obtuse: [0.62, 0, 0, 0],
+  Rounded: [0.4, 0, 0, 0],
+  Notched: [0.38, 0, 1, 0],
+  Cut: [0.6, 0, 0, 1],
 };
 // Lobing: [pinnate amount, palmate amount]
 const LOBING = { Unlobed: [0, 0], 'Pinnately lobed': [1, 0], 'Palmately lobed': [0, 1] };
@@ -49,10 +53,10 @@ function rows(table, options, name) {
 // ---------------------------------------------------------------- resolved shape knobs
 
 export const G = {
-  pw: 0.4, W: 0.3, expMul: 1, cord: 0, baseE: 1, asym: 0, apexE: 1, acum: 0, notch: 0,
+  pw: 0.4, W: 0.3, expMul: 1, cord: 0, fan: 0, baseE: 1, asym: 0, apexE: 1, acum: 0, notch: 0, cut: 0,
   pin: 0, palm: 0, lobeDepth: 0, lobes: 5, lobeSharp: 0.5,
   mw: new Float32Array(7), teeth: 20, toothDepth: 0.02,
-  vw: new Float32Array(4), veinCount: 8, veinAngle: 0.8, veinCurve: 0.3, veinWeight: 0.004, midribWeight: 0.008,
+  vw: new Float32Array(5), flop: 0, veinCount: 8, veinAngle: 0.8, veinCurve: 0.3, veinWeight: 0.004, midribWeight: 0.008,
   cw: new Float32Array(5), leaflets: 7, lPairs: 3, lTerm: 1, leafletAngle: 1,
   bend: 0, sCurve: 0, petLen: 0.15, petFlat: 0, wing: 0, stipules: 0,
   veinlets: 0, outlineW: 0.005, wobble: 0.004, variety: 0.3,
@@ -70,22 +74,23 @@ export function resolveKnobs(P, B, variety) {
     tApex = rows(APEX, P.apex.options, 'apex');
     tLobing = rows(LOBING, P.lobing.options, 'lobing');
   }
-  let pw = 0, W = 0, em = 0, cord = 0;
+  let pw = 0, W = 0, em = 0, cord = 0, fan = 0;
   for (let i = 0; i < tOutline.length; i++) {
     const w = B.outline[i], r = tOutline[i];
-    pw += w * r[0]; W += w * r[1]; em += w * r[2]; cord += w * r[3];
+    pw += w * r[0]; W += w * r[1]; em += w * r[2]; cord += w * r[3]; fan += w * r[4];
   }
-  let be = 0, asym = 0, ae = 0, acum = 0, notch = 0;
+  let be = 0, asym = 0, ae = 0, acum = 0, notch = 0, cut = 0;
   for (let i = 0; i < tBase.length; i++) { const w = B.base[i], r = tBase[i]; be += w * r[0]; cord += w * r[1]; asym += w * r[2]; }
-  for (let i = 0; i < tApex.length; i++) { const w = B.apex[i], r = tApex[i]; ae += w * r[0]; acum += w * r[1]; notch += w * r[2]; }
+  for (let i = 0; i < tApex.length; i++) { const w = B.apex[i], r = tApex[i]; ae += w * r[0]; acum += w * r[1]; notch += w * r[2]; cut += w * r[3]; }
   let pin = 0, palm = 0;
   for (let i = 0; i < tLobing.length; i++) { pin += B.lobing[i] * tLobing[i][0]; palm += B.lobing[i] * tLobing[i][1]; }
   G.pw = pw; G.W = W * P.width.value; G.expMul = em; G.cord = Math.min(cord, 0.9);
-  G.baseE = be; G.asym = asym; G.apexE = ae; G.acum = acum; G.notch = notch;
+  G.baseE = be; G.asym = asym; G.apexE = ae; G.acum = acum; G.notch = notch; G.cut = cut; G.fan = fan;
   G.pin = pin; G.palm = palm; G.lobeDepth = P.lobeDepth.value; G.lobes = P.lobes.value; G.lobeSharp = P.lobeSharpness.value;
   for (let i = 0; i < 7; i++) G.mw[i] = B.margin[i];
   G.teeth = P.teeth.value; G.toothDepth = P.toothDepth.value;
-  for (let i = 0; i < 4; i++) G.vw[i] = B.venation[i];
+  for (let i = 0; i < 5; i++) G.vw[i] = B.venation[i];
+  G.flop = P.leafletFlop.value;
   G.veinCount = P.veinCount.value; G.veinAngle = P.veinAngle.value * DEG; G.veinCurve = P.veinCurve.value;
   G.veinWeight = P.veinWeight.value; G.midribWeight = P.midribWeight.value;
   for (let i = 0; i < 5; i++) G.cw[i] = B.compound[i];

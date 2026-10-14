@@ -166,6 +166,7 @@ void main() {
         : v_kind == 13 ? mix(u_seedColour, u_seedShade, shaded * u_halfShade)
         : v_kind == 12 ? u_fruitFlesh * mix(1.0, 0.9, shaded * u_halfShade)
         : v_kind == 15 ? u_seedScar * mix(1.0, 0.85, shaded * u_halfShade)
+        : v_kind == 16 ? u_stemWash * mix(1.0, 0.55, shaded * u_halfShade)
         : v_kind == 9 ? mix(u_flowerColour, u_flowerShade, shaded * u_halfShade)
         : v_kind == 10 ? u_flowerCentre * mix(1.0, 0.55, shaded * u_halfShade)
         : v_kind == 11 ? mix(u_bractColour, u_leafShade, shaded * u_halfShade * 0.4)
@@ -173,6 +174,7 @@ void main() {
       float d = u_washDensity;
       d *= 1.0 + u_bloom * field(v_lp * u_bloomScale / 6.0, 1.0) * 1.4;     // blooms
       d *= 1.0 + u_grain * grainAt() * 0.9;                                  // granulation
+      if (v_kind == 0) d *= 1.0 + u_ridge * (a * 1.3 - 0.45);              // ridge: darker to both edges
       d += u_edgeDarken * 0.45 * (1.0 - smoothstep(0.0, 0.06, -gap - v_s)); // dried rim
       col = mix(paper, wash(paper, pig, d), washIn);
       alpha = max(inside, washIn);
@@ -188,7 +190,7 @@ void main() {
     }
     if (u_shading > 0.5) {
       // --- pen hatching: more lines where it's darker; cross-hatching in the darkest.
-      float tone = u_hatching * clamp(shaded * 0.7 + smoothstep(0.55, 1.0, a) * 0.45 + field(v_lp * 2.0, 4.0) * 0.4, 0.0, 1.0);
+      float tone = u_hatching * clamp(shaded * 0.7 + smoothstep(0.55, 1.0, a) * (0.45 + 0.5 * u_ridge) + field(v_lp * 2.0, 4.0) * 0.4, 0.0, 1.0);
       float th = radians(u_hatchAngle);
       float lines = hatch(v_pos, th, tone, 1.0);
       lines = max(lines, hatch(v_pos, th - 1.4, (tone - 0.5) * 2.0 * u_crossHatch, 2.0));

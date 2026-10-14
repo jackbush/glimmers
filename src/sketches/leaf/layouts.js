@@ -50,6 +50,7 @@ function layoutPinnate(L, n, ang) {
 }
 function layoutBipinnate(L, n, ang) {
   L.fill(0);
+  n = Math.min(n, 15); // (its side leaflets start at PINNA_SIDE, past the most pinnae)
   const pairs = Math.floor(n / 2);
   const lp = 1 / (0.62 * pairs + 1.1);
   const rl = pinnatePositions(L, n, ang, lp, 0);
