@@ -40,6 +40,12 @@ export const manifestSchema = z
          * over presetSeconds; the last morphs back to the first, so it loops.
          */
         presets: z.object({ sequence: z.array(z.string()).min(1), hold: z.number().min(0).optional() }).strict(),
+        /**
+         * A preset for the link preview (share.jpg) instead of the clip's first frame. The home
+         * page's still (cover.jpg) is always the clip's first frame, so the video fades in
+         * over it seamlessly.
+         */
+        share: z.string(),
       })
       .partial()
       .strict()

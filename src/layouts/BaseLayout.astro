@@ -32,7 +32,9 @@ const shareImage = new URL(image, Astro.site);
 <html lang="en" style={`background:${background}`}>
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!-- No pinch or double-tap zoom on phones (a deliberate trade against accessibility: zooming
+         a full-screen sketch only breaks it). Desktop browsers ignore these, so their zoom still works. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <title>{title}</title>
     <meta name="description" content={site.description} />
     <link rel="canonical" href={canonical} />
@@ -66,6 +68,12 @@ const shareImage = new URL(image, Astro.site);
     <script>
       import { autoReload } from '../kit/version';
       autoReload();
+      // iOS Safari ignores user-scalable=no, so block its pinch gestures on touch screens. Only
+      // there: Safari on a Mac sends the same events for a trackpad pinch, which should still zoom.
+      if (matchMedia('(pointer: coarse)').matches) {
+        for (const type of ['gesturestart', 'gesturechange']) document.addEventListener(type, (e) => e.preventDefault());
+        document.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+      }
     </script>
   </body>
 </html>
@@ -80,4 +88,6 @@ const shareImage = new URL(image, Astro.site);
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; }
+  /* No double-tap zoom (pinch is handled above). */
+  html { touch-action: manipulation; }
 </style>

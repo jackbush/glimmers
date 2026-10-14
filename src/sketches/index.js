@@ -9,7 +9,7 @@ export default {
   name: 'Glimmers',
 
   /** Meta and share description, for every page. */
-  description: 'Browser sketches in light, shape and motion.',
+  description: 'Little looks into other worlds.',
 
   sketches: [
     'blackstar',

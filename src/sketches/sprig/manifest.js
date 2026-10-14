@@ -9,10 +9,11 @@ export default {
   // The page opens on a random preset, then cycles on through the rest, in a loop that keeps
   // each morph small (tour.js), until the settings pane opens.
   autoplay: { hold: 1, sequence: tour() },
-  // The cover holds on each species, then morphs to the next, and back to the first: an order
-  // that keeps each morph small.
+  // The cover holds on each species, then morphs to the next, and back to the first.
   capture: {
-    presets: { sequence: ['Oak, Holm', 'Pine, Scots', 'Laburnum', 'Ginkgo', 'Birch, Silver', 'Holly'], hold: 1 },
+    presets: { sequence: ['Hawthorn', 'Whitebeam', 'Oak, Holm', 'Laburnum'], hold: 1 },
+    // The link preview: elder, flowers and berries at once.
+    share: 'Elder',
     crf: 31,
   },
 };

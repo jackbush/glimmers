@@ -31,8 +31,8 @@ export const MAX_VARIANTS = 16;
 export const MAX_PLACE = 320;
 // Nodes on a sprig (the Nodes param's max, with room to spare).
 const MAX_NODES = 128;
-// Fruit and flower clusters on a sprig: two bearers × (10 nodes + the tip), with room to spare.
-const MAX_CL = 24;
+// Fruit and flower clusters on a sprig: two bearers × (up to 23 bearing nodes + the tip).
+const MAX_CL = 48;
 
 export const KIND_FILL = 0, KIND_OUTLINE = 1, KIND_VEIN = 2, KIND_RIB = 3, KIND_STEM = 6, KIND_BUD = 7, KIND_FRUIT = 8,
   KIND_FLOWER = 9, KIND_CENTRE = 10, KIND_BRACT = 11, KIND_FLESH = 12, KIND_SEED = 13, KIND_HUSK = 14, KIND_SCAR = 15, KIND_THORN = 16;
@@ -1498,9 +1498,16 @@ const MAX_SP = MAX_PLACE + MAX_CL;
 const SPREAD_K = 5;
 // Cluster list (clusterSpecs): bearer, node index, side, presence, direction.
 const CL_FLOWER = new Uint8Array(MAX_CL), CL_NI = new Int32Array(MAX_CL);
-// Each cluster's place in its bearer's list (from the base for fruit, the tip for flowers; the
-// tip itself MAX_NODES): its identity, which unlike its node index survives nodes coming and going.
+// Each cluster's identity: its node (the tip MAX_NODES), for seeds and the draw order.
 const CL_ID = new Int32Array(MAX_CL);
+// What falls on each node, from the clusters placed between nodes (clusterSpecs).
+const NODE_CP = new Float32Array(MAX_NODES);
+/**
+ * Presence multipliers that sketch.js dips to nothing around a preset morph's midpoint, for
+ * fruit, flowers, spurs and side shoots, while their Every switches (so they don't wander as it
+ * eases). 1 otherwise.
+ */
+export const DIP = new Float32Array([1, 1, 1, 1]);
 const CL_SIDE = new Float32Array(MAX_CL), CL_PRES = new Float32Array(MAX_CL), CL_DIR = new Float32Array(MAX_CL);
 // Where each cluster starts: its node, or the tip of the node's spur (flowers and fruit come
 // out of the spur's bud, among its leaves).
@@ -1561,19 +1568,37 @@ function clusterSpecs(K, flower, P, B, nN, fracN, stemN, stemW) {
   const size = P[K.size].value * stemW;
   // A rough length for one item: catkins are long, fruit a little longer than wide.
   const itemLen = size * P[K.length].value * (flower ? 1 + 4 * wT[4] / there : 1.5);
-  // Every: only every nth node bears (spaced along a long needled shoot).
-  const every = Math.max(1, Math.round(P[K.every].value));
-  for (let i = 0; i <= nN && nCl < MAX_CL; i++) {
-    const tip = i === nN, ni = tip ? nN : flower ? nN - 1 - i * every : i * every;
-    if (!tip && (ni < 0 || ni >= nN)) continue;
-    // Presence: the node's, times the type's weight, so a cluster whose type is fading out
-    // shrinks whole, stalks and all (stalks left at full length vanished in one frame at the
-    // end, and the framing jumped as the box lost them).
-    const pres = (tip ? P[K.tip].value : clamp(P[K.nodes].value - i, 0, 1) * (ni === nN - 1 ? fracN : 1)) * there;
+  // Where the clusters go: the ith (from the base for fruit, from the tip for flowers, every
+  // Every-th node) at a fractional place, shared between the two nodes either side, so as the
+  // node count or Every eases a cluster crossfades from node to node rather than jumping (a
+  // hazel's catkins on the shrinking top node fell to the next one, full size, as the count
+  // landed). Each node gathers what falls on it; in a preset morph a changing Every switches
+  // at the midpoint while the clusters dip (DIP), so they don't wander.
+  const every = Math.max(1, P[K.every].value), dip = DIP[flower ? 1 : 0];
+  const nodesF = P.nodes.value;
+  for (let n = 0; n < nN; n++) NODE_CP[n] = 0;
+  for (let i = 0; i < nN; i++) {
+    const want = clamp(P[K.nodes].value - i, 0, 1);
+    if (want < 0.002) break;
+    const pos = flower ? Math.max(0, nodesF - 1) - i * every : i * every;
+    if (pos < -0.999 || pos > nN - 1e-6) continue;
+    const n0 = Math.floor(pos), f = pos - n0;
+    if (n0 >= 0) NODE_CP[n0] += want * (1 - f);
+    if (n0 + 1 < nN && f > 0) NODE_CP[n0 + 1] += want * f;
+  }
+  for (let j = 0; j <= nN && nCl < MAX_CL; j++) {
+    const tip = j === nN, ni = tip ? nN : j;
+    // Presence: the node's share, times the type's weight, so a cluster whose type is fading
+    // out shrinks whole, stalks and all (stalks left at full length vanished in one frame at
+    // the end, and the framing jumped as the box lost them). Fruit on the newest node grow in
+    // with it.
+    const share = tip ? P[K.tip].value : Math.min(1, NODE_CP[ni]) * (!flower && ni === nN - 1 ? fracN : 1);
+    const pres = share * there * dip;
     if (pres < 0.002) continue;
     const si = tip ? stemN - 1 : NODE_I[ni], side = tip ? 1 : ni % 2 ? 1 : -1;
     const c = nCl++, k = nSpLeaf + c;
-    CL_FLOWER[c] = flower ? 1 : 0; CL_NI[c] = ni; CL_ID[c] = tip ? MAX_NODES : i; CL_SIDE[c] = side; CL_PRES[c] = pres;
+    // Identity by node (the tip MAX_NODES): steady while it bears, whatever the counts do.
+    CL_FLOWER[c] = flower ? 1 : 0; CL_NI[c] = ni; CL_ID[c] = tip ? MAX_NODES : ni; CL_SIDE[c] = side; CL_PRES[c] = pres;
     CL_DIR[c] = SPH[si] + side * hang;
     const onSpur = !tip && NSPUR_W[ni] > 0;
     CL_X[c] = onSpur ? NSPUR_X[ni] : SX[si]; CL_Y[c] = onSpur ? NSPUR_Y[ni] : SY[si];
@@ -1617,8 +1642,10 @@ function spreadOut(n, amount) {
             const fj = l / (SPREAD_K - 1), xj = lerp(SP_PX[j], SP_QX[j], fj), yj = lerp(SP_PY[j], SP_QY[j], fj);
             const d = Math.hypot(xi - xj, yi - yj);
             if (d >= rr) continue;
-            const vx = xj - SP_NX[i], vy = yj - SP_NY[i], vl = Math.hypot(vx, vy);
-            if (vl < 1e-6) continue;
+            // (Divided by at least a fraction of i's radius, not by the distance alone: for a point
+            // at i's own node, as when a cluster grows from the same node as a leaf, the angle
+            // is noise, and a drift of a millionth flipped the push as a morph landed.)
+            const vx = xj - SP_NX[i], vy = yj - SP_NY[i], vl = Math.max(Math.hypot(vx, vy), SP_RAD[i] * 0.5);
             torque -= SP_W[j] * (rr - d) / rr * (ca * vy - sa * vx) / vl / SPREAD_K;
           }
         }
@@ -1737,8 +1764,8 @@ function buildSprigVariant(j, P, B, seed) {
   const fore = P.foreshorten.value, baseShrink = P.baseShrink.value, leaderScales = P.leaderScales.value * smooth(0, 0.3, P.sideShoots.value);
   // Spurs: every Spur every-th node is a short knobbly shoot ending in a rosette, which takes
   // over from the node's own leaves as Spurs rises (so it morphs).
-  const spurW = P.spurs.value * stemW, spurEvery = Math.max(1, Math.round(P.spurEvery.value));
-  const sideW = P.sideShoots.value * stemW, sideEvery = Math.max(1, Math.round(P.sideEvery.value));
+  const spurW = P.spurs.value * stemW * DIP[2], spurEvery = Math.max(1, Math.round(P.spurEvery.value));
+  const sideW = P.sideShoots.value * stemW * DIP[3], sideEvery = Math.max(1, Math.round(P.sideEvery.value));
   // Leaves per rosette and per side shoot: fewer as the feature fades (down to one shrinking
   // leaf), and, over the leaf budget (a cedar's rosettes fading as a fir's needles and side
   // shoots grow in), all thinned by one smooth factor. Cut off in placing order instead, the

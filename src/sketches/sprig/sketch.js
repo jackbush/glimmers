@@ -19,7 +19,7 @@
 import * as SH from './shaders.js';
 import { presets } from './params.js';
 import { blades, presetSeconds } from './pace.js';
-import { buildShapes, geo, STRIDE, MAX_VERTS, MAX_PLACE, SEG_FILL, SEG_VEIN, DRAW_LEAF, DRAW_CLUSTER, freezeOrder, setOrderMode } from './shapes.js';
+import { buildShapes, geo, STRIDE, MAX_VERTS, MAX_PLACE, SEG_FILL, SEG_VEIN, DRAW_LEAF, DRAW_CLUSTER, freezeOrder, setOrderMode, DIP } from './shapes.js';
 import { rng } from '../../kit/random.js';
 import { FULLSCREEN_VERT, paramDecls, program, shaderParams, uploadParams } from '../../kit/gl.js';
 
@@ -130,6 +130,9 @@ export default function create({ canvas, P, model, degrade }) {
   // in a preset morph they change while it's faded out (see beginMorph), not in steps as it
   // fades (a larch's spurs hopping between nodes as Spur every rounded 4 → 3 → 2).
   const SPACING = { spurEvery: 'spurs', sideEvery: 'sideShoots', fruitEvery: 'fruit', flowerEvery: 'flower' };
+  // Each spacing's slot in shapes.js's DIP, and whether this morph dips it.
+  const DIP_SLOT = { fruitEvery: 0, flowerEvery: 1, spurEvery: 2, sideEvery: 3 };
+  const dipping = new Uint8Array(4);
   let easedInit = false;
   /** Move each eased number a share `k` of the way to its target. Returns whether any moved. */
   function easeNumbers(k) {
@@ -164,6 +167,7 @@ export default function create({ canvas, P, model, degrade }) {
   let leafGrow = 1;
   const viewFrom = new Float32Array(4), viewTo = new Float32Array(4);
   const smooth01 = (x) => x * x * (3 - 2 * x);
+  const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
   /** A shape param as it is on screen (eased numbers, the leading option of each select). */
   function shown(key) {
     const w = blend[key];
@@ -184,6 +188,7 @@ export default function create({ canvas, P, model, degrade }) {
     freezeOrder(1);
     leafGrow = 1; // (a new preset mid-dip starts its leaves from full)
     for (let i = 0; i < eased.length; i++) { const e = eased[i]; e.from = e.value; e.to = e.target(); e.hold = -1; }
+    dipping.fill(0);
     // A spacing whose feature is gone at the start takes its end value at once; one whose
     // feature is gone at the end keeps its start value throughout; otherwise it eases.
     for (const key in SPACING) {
@@ -191,6 +196,8 @@ export default function create({ canvas, P, model, degrade }) {
       const off = (v) => (typeof v === 'string' ? v === 'None' : v < 1e-3);
       if (off(shown(amount))) e.hold = 1;
       else if (off(P[amount].value)) e.hold = 0;
+      // On at both ends but respaced: switch at the midpoint, while the feature dips to nothing.
+      else if (Math.round(e.from) !== Math.round(e.to)) { e.hold = 2; dipping[DIP_SLOT[key]] = 1; }
     }
     for (let b = 0; b < blendList.length; b++) blendList[b].from.set(blendList[b].w);
     // The end: build the final shape once and measure its box.
@@ -212,7 +219,7 @@ export default function create({ canvas, P, model, degrade }) {
   }
   /** Advance the morph; returns false once it has landed (or was cut short). */
   function stepMorph(rdt) {
-    if (geomSig() !== morphSig) { morphLen = 0; leafGrow = 1; setOrderMode(0); return false; }
+    if (geomSig() !== morphSig) { morphLen = 0; leafGrow = 1; setOrderMode(0); DIP.fill(1); return false; }
     morphT = Math.min(morphLen, morphT + rdt);
     const k = morphT >= morphLen ? 1 : smooth01(morphT / morphLen);
     // The order swaps once, at the midpoint; at the end it goes live (and matches the end's).
@@ -222,7 +229,7 @@ export default function create({ canvas, P, model, degrade }) {
     const kl = twoPhase ? (k < 0.5 ? 0 : 1) : k;
     leafGrow = !twoPhase ? 1 : k < 0.5 ? 1 - smooth01(Math.min(1, k / 0.45)) : smooth01(Math.max(0, (k - 0.55) / 0.45));
     for (let i = 0; i < eased.length; i++) {
-      const e = eased[i], ke = e.hold >= 0 ? (k >= 1 ? 1 : e.hold) : e.leaf ? kl : k;
+      const e = eased[i], ke = e.hold === 2 ? (k < 0.5 ? 0 : 1) : e.hold >= 0 ? (k >= 1 ? 1 : e.hold) : e.leaf ? kl : k;
       e.value = ke === 1 ? e.to : e.from + (e.to - e.from) * ke;
     }
     for (let b = 0; b < blendList.length; b++) {
@@ -230,6 +237,9 @@ export default function create({ canvas, P, model, degrade }) {
       const ti = p.options.indexOf(p.value), kb = leaf ? kl : k;
       for (let i = 0; i < w.length; i++) w[i] = from[i] + ((i === ti ? 1 : 0) - from[i]) * kb;
     }
+    // Dipping features: gone over 0.15–0.45 of the morph, back over 0.55–0.85.
+    const d = k < 0.5 ? 1 - smooth01(clamp01((k - 0.15) / 0.3)) : smooth01(clamp01((k - 0.55) / 0.3));
+    for (let i = 0; i < 4; i++) DIP[i] = dipping[i] && morphT < morphLen ? d : 1;
     for (let i = 0; i < 4; i++) viewBox[i] = viewFrom[i] + (viewTo[i] - viewFrom[i]) * k;
     if (morphT >= morphLen) morphLen = 0;
     return true;

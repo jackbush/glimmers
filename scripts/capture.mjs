@@ -22,6 +22,8 @@
 // any species, say), before --set applies.
 // A manifest `capture.presets` ({ sequence, hold }) morphs through the sketch's presets instead:
 // each held for `hold` s, then morphed to the next over `presetSeconds`, looping (no ping-pong).
+// cover.jpg is always the clip's first frame (the home page shows it until the video plays);
+// `capture.share` names a preset for the link preview, share.jpg, instead.
 
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -145,17 +147,24 @@ const run = (argv) => {
 };
 run(['-framerate', String(fps), '-i', join(work, 'seq', '%05d.png'),
   '-c:v', 'libx264', '-preset', 'slow', '-crf', crf, '-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-an', video]);
+// A still of this sketch, rendered natively at width×height (at dpr) by a second run of this
+// script, on the manifest's `share` preset if it has one (else the clip's first).
+const stillPreset = preset.share || seq[0];
+function renderStill(file, size, sdpr) {
+  const self = spawnSync('node', [new URL(import.meta.url).pathname, slug, '--still', file, '--size', size, '--dpr', String(sdpr),
+    '--start', String(start), ...(opt('--url', null) ? ['--url', opt('--url', null)] : []),
+    ...(stillPreset ? ['--preset', stillPreset] : []), ...overrides.flatMap(([k, v]) => ['--set', `${k}=${v}`])],
+    { stdio: ['ignore', 'ignore', 'inherit'], env: { ...process.env, GLIMMERS_BUILT: '1' } }); // built already
+  if (self.status !== 0) throw new Error('still capture failed: ' + file);
+}
+// The poster: the clip's first frame, so the home page's video takes over from it seamlessly.
 run(['-i', join(work, 'raw', '00000.png'), '-q:v', '3', poster]);
 
-// The link-preview image: the same moment as the poster, rendered natively at the size share
-// cards use (1200×630, at 2× then scaled down), so nothing is cropped or stretched.
+// The link-preview image (the `share` preset, or the clip's first frame), rendered natively at
+// the size share cards use (1200×630, at 2× then scaled down), so nothing is cropped or stretched.
 const shareSrc = join(root, '.capture', slug + '-share.png');
 const share = join(dir, 'share.jpg');
-const self = spawnSync('node', [new URL(import.meta.url).pathname, slug, '--still', shareSrc, '--size', '1200x630', '--dpr', '2',
-  '--start', String(start), ...(opt('--url', null) ? ['--url', opt('--url', null)] : []),
-  ...(seq.length ? ['--preset', seq[0]] : []), ...overrides.flatMap(([k, v]) => ['--set', `${k}=${v}`])],
-  { stdio: ['ignore', 'ignore', 'inherit'], env: { ...process.env, GLIMMERS_BUILT: '1' } }); // built already
-if (self.status !== 0) throw new Error('share image capture failed');
+renderStill(shareSrc, '1200x630', 2);
 run(['-i', shareSrc, '-vf', 'scale=1200:630:flags=lanczos', '-q:v', '3', share]);
 rmSync(shareSrc, { force: true });
 rmSync(work, { recursive: true, force: true });

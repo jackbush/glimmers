@@ -116,6 +116,7 @@ for (const slug of slugs) {
   for (const n of manifest?.capture?.presets?.sequence || []) {
     if (!presets?.[n]) errors.push(`manifest.js: capture preset "${n}" isn't in params.js presets`);
   }
+  if (manifest?.capture?.share && !presets?.[manifest.capture.share]) errors.push(`manifest.js: share preset "${manifest.capture.share}" isn't in params.js presets`);
   for (const n of manifest?.autoplay?.sequence || []) {
     if (!presets?.[n]) errors.push(`manifest.js: autoplay preset "${n}" isn't in params.js presets`);
   }
