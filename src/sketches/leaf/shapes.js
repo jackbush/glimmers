@@ -47,6 +47,7 @@ let fillKind = KIND_FILL;
 // their own leaflet with the stencil buffer. Modes: SEG_PLAIN, SEG_FILL (marks the stencil),
 // SEG_VEIN (drawn only where its leaflet's fill marked; edges then cores).
 export const SEG_PLAIN = 0, SEG_FILL = 1, SEG_VEIN = 2;
+export const DRAW_LEAF = 0, DRAW_CLUSTER = 1, DRAW_SHEATH = 2;
 const MAX_SEG = 6000;
 
 export const geo = {
@@ -54,9 +55,6 @@ export const geo = {
   nSeg: 0,
   leafSegStart: new Int32Array(MAX_VARIANTS),
   leafSegCount: new Int32Array(MAX_VARIANTS),
-  // How many of a leaf's first segments are its stalks (petiole, rachis, leaflet stalks, wing),
-  // which the renderer draws in the back layer with the stem.
-  leafStalkSegs: new Int32Array(MAX_VARIANTS),
   verts: new Float32Array(MAX_VERTS * STRIDE),
   count: 0,
   nLeaf: 0,
@@ -68,20 +66,22 @@ export const geo = {
   // The terminal bud, drawn after the leaves (it sits beyond them).
   budStart: new Int32Array(MAX_VARIANTS),
   budCount: new Int32Array(MAX_VARIANTS),
-  // All the fruit and flowers (for the framing box), and each cluster's own run and node, so
-  // the renderer can layer clusters among the leaves in stem order.
+  // All the fruit and flowers (for the framing box), and each cluster's own run.
   fruitStart: new Int32Array(MAX_VARIANTS),
   fruitCount: new Int32Array(MAX_VARIANTS),
   nCl: 0,
   clStart: new Int32Array(MAX_CL),
   clCount: new Int32Array(MAX_CL),
-  // How much of each cluster's run is its stalks (and bract), drawn in the back layer.
-  clStalk: new Int32Array(MAX_CL),
-  clNode: new Int32Array(MAX_CL),
-  // The node each placement grows from (the tip is node sprigNodes), and how many nodes.
-  placeNode: new Int32Array(MAX_PLACE),
-  sprigNodes: 0,
-  // Woody pegs under the leaves (back layer), and each node's sheaths (drawn after its leaves).
+  // Draw order above the stem (see orderUnits), bottom first: each entry a leaf placement, a
+  // cluster or a node's sheaths (drawKind DRAW_*), drawn whole.
+  nDraw: 0,
+  drawKind: new Uint8Array(MAX_PLACE + MAX_CL + MAX_NODES + 1),
+  drawIdx: new Int32Array(MAX_PLACE + MAX_CL + MAX_NODES + 1),
+  // Each entry's identity, the same from one build to the next (placements shift index as
+  // nodes come and go): what the order is checked by.
+  drawKey: new Int32Array(MAX_PLACE + MAX_CL + MAX_NODES + 1),
+  // Woody pegs, spur knobs and side-shoot axes, behind everything with the stem; each node's
+  // sheaths (placed in the draw order over their bundle's leaves).
   pegStart: 0,
   pegCount: 0,
   sheathStart: new Int32Array(MAX_NODES + 1),
@@ -764,7 +764,6 @@ function buildLeafVariant(v, seed) {
     bladeMode = true;
   }
   flushStaged(false);
-  geo.leafStalkSegs[v] = geo.nSeg - geo.leafSegStart[v];
   // Stipules, over the stalk, each drawn whole (like a leaflet) so the second covers the first
   // where they overlap at their bases.
   if (G.stipules > 0.01) {
@@ -1221,12 +1220,12 @@ function emitFlower(bx, by, a, size, seed, mir, bend) {
 // Fruit and flowers share one cluster engine, each with its own params under its own prefix.
 // Flowers count their nodes from the tip down (they're on the new growth), fruit from the base up.
 const FRUIT_KEYS = {
-  type: 'fruit', nodes: 'fruitNodes', every: 'fruitEvery', tip: 'fruitTip', form: 'fruitForm', axis: 'fruitAxis', rays: 'fruitRays', taper: 'fruitTaper',
+  type: 'fruit', budScales: 'fruitBudScales', nodes: 'fruitNodes', every: 'fruitEvery', tip: 'fruitTip', form: 'fruitForm', axis: 'fruitAxis', rays: 'fruitRays', taper: 'fruitTaper',
   count: 'fruitCount', size: 'fruitSize', length: 'fruitLength', ped: 'fruitPeduncle', bract: 'fruitBract', stalk: 'fruitStalk',
   hang: 'fruitHang', spread: 'fruitSpread', curve: 'fruitCurve',
 };
 const FLOWER_KEYS = {
-  type: 'flower', nodes: 'flowerNodes', every: 'flowerEvery', tip: 'flowerTip', form: 'flowerForm', axis: 'flowerAxis', rays: 'flowerRays', taper: 'flowerTaper',
+  type: 'flower', budScales: 'flowerBudScales', nodes: 'flowerNodes', every: 'flowerEvery', tip: 'flowerTip', form: 'flowerForm', axis: 'flowerAxis', rays: 'flowerRays', taper: 'flowerTaper',
   count: 'flowerCount', size: 'flowerSize', length: 'flowerLength', ped: 'flowerPeduncle', bract: 'flowerBract', stalk: 'flowerStalk',
   hang: 'flowerHang', spread: 'flowerSpread', curve: 'flowerCurve',
 };
@@ -1263,34 +1262,51 @@ function emitClusters(K, flower, P, B, stemW, ss) {
   const wF = B[K.form]; // Fan, Raceme, Corymb
   const v = G.variety, cF = Math.max(1, P[K.count].value), cN = Math.ceil(cF - 1e-6), fracC = cF - (cN - 1);
   const spread = P[K.spread].value * DEG, curve = P[K.curve].value;
-  const size = P[K.size].value * there * stemW, stalk = P[K.stalk].value, ped = P[K.ped].value, bract = P[K.bract].value;
+  // (Presence, CL_PRES, carries the type's weight, so the whole cluster shrinks as it fades.)
+  const size = P[K.size].value * stemW, stalk = P[K.stalk].value, ped = P[K.ped].value, bract = P[K.bract].value;
   const axis = P[K.axis].value, taper = P[K.taper].value;
   const rays = Math.max(1, P[K.rays].value);
-  const sw = P.stemWidth.value * (1 - P.stemTaper.value) * 0.6;
+  const sw = P.stemWidth.value * (1 - P.stemTaper.value) * 0.6, budScales = P[K.budScales].value;
   const seed0 = ss + (flower ? 9001 : 7001);
   // This bearer's clusters from the list (clusterSpecs), each turned by spreadOut.
   for (let c = 0; c < nCl; c++) {
     if (CL_FLOWER[c] !== (flower ? 1 : 0)) continue;
-    const ni = CL_NI[c], si = CL_SI[c], side = CL_SIDE[c], pres = CL_PRES[c];
+    // Seeds come from the cluster's identity, not its node: a tip cluster's node is the node
+    // count, which stays one higher until the very end of a morph that lowers it (it eases down
+    // to a whole number from above), so its bow and jitter re-rolled on the landing frame.
+    const id = CL_ID[c], side = CL_SIDE[c], pres = CL_PRES[c], bx0 = CL_X[c], by0 = CL_Y[c];
     const dir = CL_DIR[c] + SP_TURN[nSpLeaf + c];
-    const pl = ped * pres * (1 + v * 0.3 * rnd2(seed0 + ni * 17, 9));
+    const pl = ped * pres * (1 + v * 0.3 * rnd2(seed0 + id * 17, 9));
     if (bract > 0.002 && pl > 1e-4) {
       // Under the stalk, which runs down its middle.
       shapeBuf = sStroke;
-      emitShape(SX[si], SY[si], dir, pl * 1.1, pl * bract * 0.3, 10, bractW, KIND_BRACT, 0, 0, 0);
+      emitShape(bx0, by0, dir, pl * 1.1, pl * bract * 0.3, 10, bractW, KIND_BRACT, 0, 0, 0);
       shapeBuf = sFill;
     }
-    if (pl > 1e-4) stalkLine(SX[si], SY[si], dir, pl, sw, sw * 0.8, Math.sqrt(pres), ss + ni + (flower ? 500 : 0), 0, 6);
-    arcAt(SX[si], SY[si], dir, pl, 0, 1, 0);
+    if (pl > 1e-4) stalkLine(bx0, by0, dir, pl, sw, sw * 0.8, Math.sqrt(pres), ss + id + (flower ? 500 : 0), 0, 6);
+    arcAt(bx0, by0, dir, pl, 0, 1, 0);
     const nx = EX, ny = EY;
+    // The opened bud the cluster comes out of: a cup of bud scales over its stalks' bases
+    // (drawn before the items, after every stalk), in bud colours.
+    if (budScales > 0.002) {
+      const L = budScales * Math.max(size, 0.04) * pres * 0.9;
+      bwP = 0; bwPl = 0; bwS = 1;
+      for (let k = -1; k <= 1; k++) {
+        const a = dir + k * 0.5 + 0.12 * rnd2(seed0 + id * 17, 30 + k);
+        emitShape(bx0 - Math.cos(a) * L * 0.15, by0 - Math.sin(a) * L * 0.15, a, L * (k ? 0.85 : 1), L * (k ? 0.85 : 1), 8, budW, KIND_BUD, 0, 0, 0);
+      }
+    }
     // The raceme's axis, as long as its form's weight makes it (the corymb's rays are drawn
     // with their items, below).
-    const axL = axis * pres, axR = axL * wF[1], bendA = curve * side * wF[1], axSeed = seed0 + ni * 17 + 3;
+    const axL = axis * pres, axR = axL * wF[1], bendA = curve * side * wF[1], axSeed = seed0 + id * 17 + 3;
     if (axR > 1e-4) stalkLine(nx, ny, dir, axR, sw * 0.8, sw * 0.5, Math.sqrt(pres), axSeed, bendA, 24);
     let lastRc = -1;
-    for (let q = 0; q < cN; q++) {
+    // Items from the cluster's tip back to its base, so each lies over those beyond it: nearer
+    // the base is on top, as along the stem, and an item never covers the point where the next
+    // one in joins (a hanging chain's flowers each over the stalk of the one below).
+    for (let q = cN - 1; q >= 0; q--) {
       if (sFill.n > sFill.cap - 6000 || geo.count + sFill.n + sStroke.n > MAX_VERTS - 6000) break;
-      const fs = seed0 + ni * 17 + q * 5;
+      const fs = seed0 + id * 17 + q * 5;
       const p = pres * (q === cN - 1 ? fracC : 1);
       // Fan: from the stalk's end, spread across Spread.
       const f = (q - (cF - 1) / 2) / Math.max(1, cF - 1);
@@ -1310,7 +1326,7 @@ function emitClusters(K, flower, P, B, stemW, ss) {
       // Each ray is drawn once, by the first item on it (items between rays, mid-morph, draw
       // their own), so every item's stalk starts on a ray.
       if (wF[2] > 0.002 && L > 1e-4 && Math.abs(rc - lastRc) > 1e-6) {
-        stalkLine(rx, ry, ph, L, sw * 0.7, sw * 0.5, Math.sqrt(pres), seed0 + ni * 17 + 50 + Math.round(rc * 97), 0, 6);
+        stalkLine(rx, ry, ph, L, sw * 0.7, sw * 0.5, Math.sqrt(pres), seed0 + id * 17 + 50 + Math.round(rc * 97), 0, 6);
         lastRc = rc;
       }
       const ang = (wF[0] * aFan + wF[1] * aRac + wF[2] * aCor) + v * 0.15 * rnd2(fs, 1);
@@ -1333,12 +1349,9 @@ function emitClusters(K, flower, P, B, stemW, ss) {
     }
     // The cluster as its own run (stalks, then items), so it can be layered among the leaves.
     geo.clStart[c] = geo.count;
-    appendBuf(sStroke);
-    geo.clStalk[c] = geo.count - geo.clStart[c];
-    appendBuf(sFill);
+    appendBuf(sStroke); appendBuf(sFill);
     sStroke.n = sFill.n = 0;
     geo.clCount[c] = geo.count - geo.clStart[c];
-    geo.clNode[c] = ni;
   }
 }
 
@@ -1352,13 +1365,34 @@ function emitClusters(K, flower, P, B, stemW, ss) {
 const MAX_SP = MAX_PLACE + MAX_CL;
 // Points sampled along each capsule (see spreadOut).
 const SPREAD_K = 5;
-// Cluster list (clusterSpecs): bearer, node index, stem sample, side, presence, direction.
-const CL_FLOWER = new Uint8Array(MAX_CL), CL_NI = new Int32Array(MAX_CL), CL_SI = new Int32Array(MAX_CL);
+// Cluster list (clusterSpecs): bearer, node index, side, presence, direction.
+const CL_FLOWER = new Uint8Array(MAX_CL), CL_NI = new Int32Array(MAX_CL);
+// Each cluster's place in its bearer's list (from the base for fruit, the tip for flowers; the
+// tip itself MAX_NODES): its identity, which unlike its node index survives nodes coming and going.
+const CL_ID = new Int32Array(MAX_CL);
 const CL_SIDE = new Float32Array(MAX_CL), CL_PRES = new Float32Array(MAX_CL), CL_DIR = new Float32Array(MAX_CL);
+// Where each cluster starts: its node, or the tip of the node's spur (flowers and fruit come
+// out of the spur's bud, among its leaves).
+const CL_X = new Float32Array(MAX_CL), CL_Y = new Float32Array(MAX_CL);
 let nCl = 0;
 // Queued leaf placements (placed after spreading).
-const PL_LV = new Int32Array(MAX_PLACE), PL_SI = new Int32Array(MAX_PLACE), PL_NODE = new Int32Array(MAX_PLACE);
+// Each grows from a point (on the stem, a spur's tip or a side shoot) in a base direction, at
+// `rel` from it; PL_PART says which: 0 the stem, 1 a spur's rosette, 2 a side shoot.
+const PL_LV = new Int32Array(MAX_PLACE), PL_NODE = new Int32Array(MAX_PLACE), PL_PART = new Uint8Array(MAX_PLACE);
+const PL_X = new Float32Array(MAX_PLACE), PL_Y = new Float32Array(MAX_PLACE), PL_ANG = new Float32Array(MAX_PLACE);
 const PL_REL = new Float32Array(MAX_PLACE), PL_SIZE = new Float32Array(MAX_PLACE), PL_PRES = new Float32Array(MAX_PLACE);
+// Each placement's identity (node, kind, position), the same from one build to the next, so a
+// frozen draw order can find it again (see orderUnits).
+const PL_KEY = new Int32Array(MAX_PLACE);
+// Spurs (knob from x, y along ang, len long) and side shoots (axis from x, y along ang, len
+// long, curving by bend, seed for its wobble), drawn behind everything with the stem.
+const MAX_BR = MAX_NODES;
+const SPUR_X = new Float32Array(MAX_BR), SPUR_Y = new Float32Array(MAX_BR), SPUR_ANG = new Float32Array(MAX_BR), SPUR_LEN = new Float32Array(MAX_BR);
+const SIDE_X = new Float32Array(MAX_BR), SIDE_Y = new Float32Array(MAX_BR), SIDE_ANG = new Float32Array(MAX_BR);
+const SIDE_LEN = new Float32Array(MAX_BR), SIDE_BEND = new Float32Array(MAX_BR), SIDE_W = new Float32Array(MAX_BR), SIDE_SEED = new Int32Array(MAX_BR);
+let nSpur = 0, nSide = 0;
+// Each node's spur tip and how far it has grown in (0 = no spur), where its clusters start.
+const NSPUR_X = new Float32Array(MAX_NODES), NSPUR_Y = new Float32Array(MAX_NODES), NSPUR_W = new Float32Array(MAX_NODES);
 // Capsules (leaves first, then clusters): node, direction, extent along it (r0 … r1), radius,
 // weight (presence); the near and far points; each item's turn so far, and its capped turn.
 const SP_NX = new Float32Array(MAX_SP), SP_NY = new Float32Array(MAX_SP), SP_ANG = new Float32Array(MAX_SP);
@@ -1393,7 +1427,7 @@ function clusterSpecs(K, flower, P, B, nN, fracN, stemN, stemW) {
   if (there < 0.001 || stemW < 0.001) return;
   const wF = B[K.form], hang = P[K.hang].value * DEG, spread = P[K.spread].value * DEG;
   const ped = P[K.ped].value, axis = P[K.axis].value, stalk = P[K.stalk].value;
-  const size = P[K.size].value * there * stemW;
+  const size = P[K.size].value * stemW;
   // A rough length for one item: catkins are long, fruit a little longer than wide.
   const itemLen = size * P[K.length].value * (flower ? 1 + 4 * wT[4] / there : 1.5);
   // Every: only every nth node bears (spaced along a long needled shoot).
@@ -1401,16 +1435,21 @@ function clusterSpecs(K, flower, P, B, nN, fracN, stemN, stemW) {
   for (let i = 0; i <= nN && nCl < MAX_CL; i++) {
     const tip = i === nN, ni = tip ? nN : flower ? nN - 1 - i * every : i * every;
     if (!tip && (ni < 0 || ni >= nN)) continue;
-    const pres = tip ? P[K.tip].value : clamp(P[K.nodes].value - i, 0, 1) * (ni === nN - 1 ? fracN : 1);
+    // Presence: the node's, times the type's weight, so a cluster whose type is fading out
+    // shrinks whole, stalks and all (stalks left at full length vanished in one frame at the
+    // end, and the framing jumped as the box lost them).
+    const pres = (tip ? P[K.tip].value : clamp(P[K.nodes].value - i, 0, 1) * (ni === nN - 1 ? fracN : 1)) * there;
     if (pres < 0.002) continue;
     const si = tip ? stemN - 1 : NODE_I[ni], side = tip ? 1 : ni % 2 ? 1 : -1;
     const c = nCl++, k = nSpLeaf + c;
-    CL_FLOWER[c] = flower ? 1 : 0; CL_NI[c] = ni; CL_SI[c] = si; CL_SIDE[c] = side; CL_PRES[c] = pres;
+    CL_FLOWER[c] = flower ? 1 : 0; CL_NI[c] = ni; CL_ID[c] = tip ? MAX_NODES : i; CL_SIDE[c] = side; CL_PRES[c] = pres;
     CL_DIR[c] = SPH[si] + side * hang;
-    SP_NX[k] = SX[si]; SP_NY[k] = SY[si]; SP_ANG[k] = CL_DIR[c];
+    const onSpur = !tip && NSPUR_W[ni] > 0;
+    CL_X[c] = onSpur ? NSPUR_X[ni] : SX[si]; CL_Y[c] = onSpur ? NSPUR_Y[ni] : SY[si];
+    SP_NX[k] = CL_X[c]; SP_NY[k] = CL_Y[c]; SP_ANG[k] = CL_DIR[c];
     SP_R0[k] = ped * pres * 0.5;
-    SP_R1[k] = (ped + axis * (wF[1] + wF[2])) * pres + stalk + itemLen;
-    SP_RAD[k] = itemLen * 0.5 + (stalk + axis * wF[2] * pres) * Math.sin(Math.min(spread, Math.PI) / 2);
+    SP_R1[k] = (ped + axis * (wF[1] + wF[2]) + stalk + itemLen) * pres;
+    SP_RAD[k] = (itemLen * 0.5 + (stalk + axis * wF[2]) * Math.sin(Math.min(spread, Math.PI) / 2)) * pres;
     SP_W[k] = pres;
   }
 }
@@ -1563,9 +1602,33 @@ function buildSprigVariant(j, P, B, seed) {
   const bunF = Math.max(1, P.perNode.value), bunN = Math.ceil(bunF - 1e-6), fracB = bunF - (bunN - 1), bunSpread = P.bundleSpread.value * DEG;
   const ins0 = P.insertion.value * DEG, ins1 = P.tipInsertion.value * DEG, grad = P.sizeGradient.value;
   const fore = P.foreshorten.value, baseShrink = P.baseShrink.value;
+  // Spurs: every Spur every-th node is a short knobbly shoot ending in a rosette, which takes
+  // over from the node's own leaves as Spurs rises (so it morphs).
+  const spurW = P.spurs.value * stemW, spurEvery = Math.max(1, Math.round(P.spurEvery.value));
+  const sideW = P.sideShoots.value * stemW, sideEvery = Math.max(1, Math.round(P.sideEvery.value));
+  // Leaves per rosette and per side shoot: fewer as the feature fades (down to one shrinking
+  // leaf), and, over the leaf budget (a cedar's rosettes fading as a fir's needles and side
+  // shoots grow in), all thinned by one smooth factor. Cut off in placing order instead, the
+  // top of the shoot went bare, then filled all at once when the old feature finally went.
+  // The budget counts exactly what's placed: each rosette or shoot rounds its count up.
+  const mainPer = wA[1] * bunF + wA[2] * 2 + wA[3] * perF;
+  const nSpurF = spurW > 0.001 ? Math.ceil(nodesF / spurEvery) : 0, nSideF = sideW > 0.001 ? Math.ceil(nodesF / sideEvery) : 0;
+  const rosWant = Math.max(1, P.spurLeaves.value) * smooth(0, 0.3, spurW), sideWant = Math.max(1, P.sideNodes.value) * smooth(0, 0.3, sideW);
+  const fixed = Math.ceil(nodesF) * Math.ceil(mainPer) * stemW + 1 + nSpurF + nSideF;
+  const extra = nSpurF * rosWant + nSideF * sideWant;
+  const thin = extra > 0 ? clamp((MAX_PLACE - 4 - fixed) / extra, 0, 1) : 1;
+  const rosF = Math.max(1e-3, rosWant * thin), rosN = Math.ceil(rosF - 1e-6), fracR = rosF - (rosN - 1);
+  const rosFan = P.spurFan.value * DEG, spurLen = P.spurLength.value, spurAng = P.spurAngle.value * DEG;
+  // Side shoots: every Shoot every-th node bears a side shoot in the plane, with its own leaves.
+  const sideF = Math.max(1e-3, sideWant * thin), sideN = Math.ceil(sideF - 1e-6), fracS = sideF - (sideN - 1);
+  const sideLen = P.sideLength.value, sideAng = P.sideAngle.value * DEG;
+  nSpur = nSide = 0;
+  for (let i = 0; i < nN; i++) NSPUR_W[i] = 0;
+  fWander = P.stemWander.value;
   for (let i = 0; i < nN; i++) {
     const fi = nodesF > 1 ? Math.min(1, i / (nodesF - 1)) : 0;
     const nodeGrow = i === nN - 1 ? fracN : 1;
+    const spurHere = spurW > 0.001 && i % spurEvery === 0, mainW = spurHere ? 1 - spurW : 1;
     for (let a = 1; a <= 3; a++) {
       const wa = wA[a] * stemW;
       if (wa < 0.001) continue;
@@ -1599,19 +1662,52 @@ function buildSprigVariant(j, P, B, seed) {
         // Smaller toward the tip (Size gradient) and, with Base shrink, toward the base too.
         const size = (1 - grad * fi) * (1 - baseShrink * (1 - smooth(0, 0.6, fi))) * fsh * (1 + v * 0.12 * rnd2(ss, 70 + key));
         // The same node and position keep the same leaf shape across arrangements.
-        np = queuePlace(np, (i * 3 + q * 5) % nLeaf, NODE_I[i], i, rel, size, pres);
+        const si = NODE_I[i];
+        np = queuePlace(np, (i * 3 + q * 5) % nLeaf, SX[si], SY[si], SPH[si], i, 0, rel, size, pres * mainW, placeKey(i, a, q));
+      }
+    }
+    const si = NODE_I[i], nodeSize = (1 - grad * fi) * (1 - baseShrink * (1 - smooth(0, 0.6, fi)));
+    // The rosette: Rosette leaves fanned across Rosette fan ° about the spur, from its tip.
+    if (spurHere && nSpur < MAX_BR) {
+      // Spurs alternate sides by their own count (by node parity, every 2nd node's spurs all
+      // fell on one side).
+      const pres = spurW * nodeGrow, ang = SPH[si] + (nSpur % 2 ? -1 : 1) * spurAng, kl = spurLen * pres * nodeSize;
+      SPUR_X[nSpur] = SX[si]; SPUR_Y[nSpur] = SY[si]; SPUR_ANG[nSpur] = ang; SPUR_LEN[nSpur] = kl; nSpur++;
+      const tx = SX[si] + Math.cos(ang) * kl, ty = SY[si] + Math.sin(ang) * kl;
+      NSPUR_X[i] = tx; NSPUR_Y[i] = ty; NSPUR_W[i] = 1;
+      for (let q = 0; q < rosN && np < MAX_PLACE; q++) {
+        const off = rosFan * ((q - (rosF - 1) / 2) / Math.max(1, rosF - 1)) + v * 0.15 * rnd2(ss, 900 + i * 41 + q);
+        const size = nodeSize * (0.8 + 0.4 * rnd(ss, 1300 + i * 41 + q));
+        np = queuePlace(np, (i * 3 + q * 5) % nLeaf, tx, ty, ang, i, 1, off, size, pres * (q === rosN - 1 ? fracR : 1), placeKey(i, 4, q));
+      }
+    }
+    // The side shoot: from the node, sides alternating by the shoots' own count, its leaves
+    // alternating along it, smaller toward its tip; placed on the axis as drawn (stalkAt).
+    if (sideW > 0.001 && i % sideEvery === sideEvery - 1 && nSide < MAX_BR) {
+      const ssd = nSide % 2 ? -1 : 1;
+      const pres = sideW * nodeGrow, ang = SPH[si] + ssd * sideAng, L = sideLen * pres * (1 - 0.6 * grad * fi);
+      const bend = ssd * P.stemCurve.value * 0.4, seed = ss + 2000 + i;
+      SIDE_X[nSide] = SX[si]; SIDE_Y[nSide] = SY[si]; SIDE_ANG[nSide] = ang; SIDE_LEN[nSide] = L;
+      SIDE_BEND[nSide] = bend; SIDE_SEED[nSide] = seed;
+      SIDE_W[nSide] = P.stemWidth.value * Math.sqrt(stemW) * (1 - P.stemTaper.value * (0.2 + 0.6 * fi)) * 0.7; nSide++;
+      for (let k = 0; k < sideN && np < MAX_PLACE; k++) {
+        const t = (k + 0.6) / (sideF + 0.3);
+        stalkAt(SX[si], SY[si], ang, L, bend, seed, t);
+        const beta = lerp(ins0, ins1, t) + v * 0.12 * rnd2(ss, 1700 + i * 41 + k);
+        const size = nodeSize * 0.85 * (1 - grad * t * 0.8) * (1 + v * 0.12 * rnd2(ss, 1500 + i * 41 + k));
+        np = queuePlace(np, (i * 5 + k * 3) % nLeaf, EX, EY, ang + bend * t, i, 2, (k % 2 ? -1 : 1) * beta, size, pres * (k === sideN - 1 ? fracS : 1), placeKey(i, 5, k));
       }
     }
   }
   // The terminal leaf: all there is with no stem; otherwise weighted by Terminal = Leaf.
   const tipPres = wA[0] + stemW * wT[0];
-  if (tipPres > 0.001 && np < MAX_PLACE) np = queuePlace(np, 0, stemN - 1, nN, 0, lerp(1, (1 - grad) * 0.9, stemW), tipPres);
+  if (tipPres > 0.001 && np < MAX_PLACE) np = queuePlace(np, 0, SX[stemN - 1], SY[stemN - 1], SPH[stemN - 1], nN, 0, 0, lerp(1, (1 - grad) * 0.9, stemW), tipPres, placeKey(MAX_NODES, 0, 0));
 
   // Spread the leaves and clusters apart, then place them.
   nSpLeaf = np; nCl = 0;
   for (let p = 0; p < np; p++) {
-    const lv = PL_LV[p], si = PL_SI[p], sz = Math.max(0.05, PL_SIZE[p]);
-    SP_NX[p] = SX[si]; SP_NY[p] = SY[si]; SP_ANG[p] = SPH[si] + PL_REL[p];
+    const lv = PL_LV[p], sz = Math.max(0.05, PL_SIZE[p]);
+    SP_NX[p] = PL_X[p]; SP_NY[p] = PL_Y[p]; SP_ANG[p] = PL_ANG[p] + PL_REL[p];
     SP_R0[p] = VLEN[lv] * sz * 0.35; SP_R1[p] = VLEN[lv] * sz * 0.85; SP_RAD[p] = VWID[lv] * sz * 0.75;
     SP_W[p] = PL_PRES[p];
   }
@@ -1619,16 +1715,15 @@ function buildSprigVariant(j, P, B, seed) {
   clusterSpecs(FLOWER_KEYS, true, P, B, nN, fracN, stemN, stemW);
   spreadOut(np + nCl, P.spreadOut.value * stemW);
   for (let p = 0; p < np; p++) {
-    // A leaf can turn toward the stem, but not across it.
+    // A leaf on the stem can turn toward it, but not across it (rosette and side-shoot leaves
+    // turn freely about their own spur or shoot).
     const rel = PL_REL[p], r = rel + SP_TURN[p], lim = Math.min(Math.abs(rel), 0.1);
-    const relT = rel > 1e-3 ? Math.max(r, lim) : rel < -1e-3 ? Math.min(r, -lim) : r;
-    place(po, p, PL_LV[p], PL_SI[p], relT, PL_SIZE[p], PL_PRES[p]);
-    geo.placeNode[p] = PL_NODE[p];
+    const relT = PL_PART[p] ? r : rel > 1e-3 ? Math.max(r, lim) : rel < -1e-3 ? Math.min(r, -lim) : r;
+    place(po, p, PL_LV[p], PL_X[p], PL_Y[p], PL_ANG[p], relT, PL_SIZE[p], PL_PRES[p]);
     PL_REL[p] = relT;
   }
   emitNodeParts(P, np, nN, stemW, ss);
   geo.sprigNPlace[j] = np;
-  geo.sprigNodes = nN;
 
   // Fruit and flowers: each cluster its own run, layered among the leaves by the renderer.
   sFill.n = sStroke.n = 0;
@@ -1637,24 +1732,219 @@ function buildSprigVariant(j, P, B, seed) {
   emitClusters(FLOWER_KEYS, true, P, B, stemW, ss);
   geo.nCl = nCl;
   geo.fruitCount[j] = geo.count - geo.fruitStart[j];
+  orderUnits(np, nN, len, P.frontReach.value * stemW);
+}
+
+// ---------------------------------------------------------------- draw order
+// Above the stem (and the bud, spur knobs, side-shoot axes and pegs, all woody and behind
+// everything), each leaf (stalk and blade) and each cluster (stalks and items) is drawn whole,
+// so its parts never get split by something else. The order:
+// 1. Tree order: by node from the tip down, so whatever grows nearer the base lies on top; at
+//    each node its leaves (a side shoot's from its tip back), the sheath round their bases, then
+//    its clusters, so flowers and fruit show over their own node's leaves. A cluster can be
+//    promoted to draw with a lower node (Fruit in front), so crowded spurs read as one.
+// 2. Physics overrides it: if one thing covers the point where another joins its stem, it must
+//    lie over all of that other thing, or the other would seem to come out from under it and
+//    pass over it. Each is a capsule round its blade or cluster; every such "covers the base
+//    of" pair is a constraint, and a topological sort keeps to them, taking the tree order
+//    wherever it's free to choose (and where constraints conflict, giving way to it).
+
+const MAX_U = MAX_PLACE + MAX_CL + MAX_NODES + 1;
+const U_KIND = new Uint8Array(MAX_U), U_IDX = new Int32Array(MAX_U), U_RANK = new Float64Array(MAX_U);
+const U_BX = new Float32Array(MAX_U), U_BY = new Float32Array(MAX_U);
+const U_PX = new Float32Array(MAX_U), U_PY = new Float32Array(MAX_U), U_QX = new Float32Array(MAX_U), U_QY = new Float32Array(MAX_U);
+const U_RAD = new Float32Array(MAX_U), U_IN = new Int32Array(MAX_U), U_DONE = new Uint8Array(MAX_U);
+const U_SORT = new Int32Array(MAX_U);
+// A rank that doesn't drift mid-morph (a cluster's own node's, before promotion, which depends
+// on distances along a changing stem): what frozenOrder places units in neither list by.
+const U_RANKF = new Float64Array(MAX_U);
+// U_BELOW[a * MAX_U + b] = 1: a must be drawn before (under) b.
+const U_BELOW = new Uint8Array(MAX_U * MAX_U);
+
+// Unit identities: placements by placeKey, then clusters, then sheaths.
+const KEY_CL = placeKey(MAX_NODES + 1, 0, 0), KEY_SH = KEY_CL + 2 * (MAX_NODES + 1), KEY_MAX = KEY_SH + MAX_NODES + 1;
+const U_KEY = new Int32Array(MAX_U);
+// Draw orders as lists of identities: the last one worked out live (slot 0), and two frozen
+// (see freezeOrder); KEYPOS maps an identity to its place in the frozen list in use.
+const ORD = [new Int32Array(MAX_U), new Int32Array(MAX_U), new Int32Array(MAX_U)], ORD_N = new Int32Array(3);
+const ORD_RANK = [new Float64Array(MAX_U), new Float64Array(MAX_U), new Float64Array(MAX_U)];
+const KEYPOS = new Int32Array(KEY_MAX).fill(-1), KEYPOS2 = new Int32Array(KEY_MAX).fill(-1), U_POS = new Float64Array(MAX_U);
+let orderMode = 0;
+/**
+ * The draw order during a preset morph. Worked out afresh every build, it flipped wherever two
+ * shapes crossed on the way, and as nodes came and went, often near the end, where it showed.
+ * Instead the order of what's on screen (slot 1) and of where the morph ends (slot 2) are
+ * frozen, the first used until halfway and the second after, so the order changes once, at
+ * the midpoint, where things are smallest (a two-phase morph has shrunk the leaves to nothing).
+ * Mode 0: live.
+ */
+export function freezeOrder(slot) {
+  ORD[slot].set(ORD[0].subarray(0, ORD_N[0])); ORD_RANK[slot].set(ORD_RANK[0].subarray(0, ORD_N[0])); ORD_N[slot] = ORD_N[0];
+}
+export function setOrderMode(m) { orderMode = m; }
+
+/** Is (x, y) within `r` of segment p–q? */
+function nearSeg(x, y, px, py, qx, qy, r) {
+  const dx = qx - px, dy = qy - py, l2 = dx * dx + dy * dy;
+  const t = l2 > 0 ? clamp(((x - px) * dx + (y - py) * dy) / l2, 0, 1) : 0;
+  const ex = px + dx * t - x, ey = py + dy * t - y;
+  return ex * ex + ey * ey < r * r;
+}
+
+function orderUnits(np, nN, len, reach) {
+  let n = 0;
+  // Leaves.
+  for (let p = 0; p < np; p++) {
+    const sz = Math.max(0.05, PL_SIZE[p]) * PL_PRES[p];
+    if (sz < 0.002) continue;
+    const lv = PL_LV[p], a = PL_ANG[p] + PL_REL[p], c = Math.cos(a), sn = Math.sin(a);
+    U_KIND[n] = DRAW_LEAF; U_IDX[n] = p; U_KEY[n] = PL_KEY[p];
+    // (Ranks count nodes from MAX_NODES, the tip's, not from nN, which changes mid-morph.)
+    // Within a node, by identity (kind, then position, the last first), not by index, which
+    // shifts as others come and go.
+    U_RANK[n] = (MAX_NODES - (PL_NODE[p] >= nN ? MAX_NODES : PL_NODE[p])) * 1000 + (512 - PL_KEY[p] % 512) * 0.001;
+    U_RANKF[n] = U_RANK[n];
+    U_BX[n] = PL_X[p]; U_BY[n] = PL_Y[p];
+    U_PX[n] = PL_X[p] + c * VLEN[lv] * sz * 0.3; U_PY[n] = PL_Y[p] + sn * VLEN[lv] * sz * 0.3;
+    U_QX[n] = PL_X[p] + c * VLEN[lv] * sz * 0.92; U_QY[n] = PL_Y[p] + sn * VLEN[lv] * sz * 0.92;
+    U_RAD[n] = VWID[lv] * sz * 0.6;
+    n++;
+  }
+  // Clusters, each ranked with its own node, or promoted to the lowest node within `reach`
+  // below it.
+  for (let c = 0; c < nCl; c++) {
+    const k = nSpLeaf + c, a = CL_DIR[c] + SP_TURN[k], ca = Math.cos(a), sa = Math.sin(a);
+    if (SP_W[k] < 0.002) continue;
+    const ni = CL_NI[c], s0 = ni >= nN ? len : NODE_S[ni];
+    let m = Math.min(ni, nN - 1);
+    while (m > 0 && s0 - NODE_S[m - 1] <= reach) m--;
+    const node = s0 - NODE_S[m] <= reach ? m : ni;
+    U_KIND[n] = DRAW_CLUSTER; U_IDX[n] = c; U_KEY[n] = KEY_CL + CL_FLOWER[c] * (MAX_NODES + 1) + CL_ID[c];
+    U_RANK[n] = (MAX_NODES - (node >= nN ? MAX_NODES : node)) * 1000 + 600 + CL_FLOWER[c] * 0.5 + CL_ID[c] * 0.001;
+    U_RANKF[n] = U_RANK[n] + ((node >= nN ? MAX_NODES : node) - (ni >= nN ? MAX_NODES : ni)) * 1000;
+    const x = CL_X[c], y = CL_Y[c];
+    U_BX[n] = x; U_BY[n] = y;
+    U_PX[n] = x + ca * SP_R0[k]; U_PY[n] = y + sa * SP_R0[k];
+    U_QX[n] = x + ca * SP_R1[k]; U_QY[n] = y + sa * SP_R1[k];
+    U_RAD[n] = SP_RAD[k] * 0.8;
+    n++;
+  }
+  const nGeom = n;
+  // Sheaths: over every leaf of their bundle.
+  for (let i = 0; i < nN; i++) {
+    if (geo.sheathCount[i] === 0) continue;
+    U_KIND[n] = DRAW_SHEATH; U_IDX[n] = i; U_KEY[n] = KEY_SH + i; U_RANK[n] = U_RANKF[n] = (MAX_NODES - i) * 1000 + 500; U_RAD[n] = 0;
+    n++;
+  }
+  if (orderMode > 0) { frozenOrder(n); return; }
+  for (let a = 0; a < n; a++) { U_IN[a] = 0; U_DONE[a] = 0; for (let b = 0; b < n; b++) U_BELOW[a * MAX_U + b] = 0; }
+  // Constraints: a covers b's base (and they don't grow from the same point) → b under a.
+  for (let a = 0; a < nGeom; a++) {
+    const mx = (U_PX[a] + U_QX[a]) / 2, my = (U_PY[a] + U_QY[a]) / 2;
+    const reachA = Math.hypot(U_QX[a] - U_PX[a], U_QY[a] - U_PY[a]) / 2 + U_RAD[a];
+    for (let b = 0; b < nGeom; b++) {
+      if (a === b) continue;
+      const dx = U_BX[b] - mx, dy = U_BY[b] - my;
+      if (dx * dx + dy * dy > reachA * reachA) continue;
+      if (Math.hypot(U_BX[b] - U_BX[a], U_BY[b] - U_BY[a]) < 0.02) continue;
+      if (!nearSeg(U_BX[b], U_BY[b], U_PX[a], U_PY[a], U_QX[a], U_QY[a], U_RAD[a])) continue;
+      if (!U_BELOW[b * MAX_U + a]) { U_BELOW[b * MAX_U + a] = 1; U_IN[a]++; }
+    }
+  }
+  // A sheath goes over its own bundle's leaves.
+  for (let s = nGeom; s < n; s++) {
+    for (let a = 0; a < nGeom; a++) {
+      if (U_KIND[a] !== DRAW_LEAF || PL_PART[U_IDX[a]] !== 0 || PL_NODE[U_IDX[a]] !== U_IDX[s]) continue;
+      U_BELOW[a * MAX_U + s] = 1; U_IN[s]++;
+    }
+  }
+  // Topological sort, lowest rank first among those free to go; if none is free (constraints
+  // in a loop), the lowest-ranked one left goes anyway.
+  let out = 0;
+  while (out < n) {
+    let pick = -1, pickFree = false;
+    for (let a = 0; a < n; a++) {
+      if (U_DONE[a]) continue;
+      const free = U_IN[a] === 0;
+      if (pick < 0 || (free && !pickFree) || (free === pickFree && U_RANK[a] < U_RANK[pick])) { pick = a; pickFree = free; }
+    }
+    U_DONE[pick] = 1;
+    geo.drawKind[out] = U_KIND[pick]; geo.drawIdx[out] = U_IDX[pick]; geo.drawKey[out] = U_KEY[pick];
+    ORD[0][out] = U_KEY[pick]; ORD_RANK[0][out] = U_RANK[pick]; out++;
+    for (let b = 0; b < n; b++) if (U_BELOW[pick * MAX_U + b] && !U_DONE[b]) U_IN[b]--;
+  }
+  geo.nDraw = out; ORD_N[0] = out;
 }
 
 /**
- * Pegs (spruce: a short woody stub under each leaf, in the back layer with the stem) and sheaths
- * (pine: a papery sleeve round the base of each bundle, drawn over it), each from its leaf's node
- * along its direction, scaled with the leaf.
+ * The n units in the frozen order: each where its identity is in the frozen list; one not in it
+ * (there only mid-morph) just above the entry of the list (present now or not, so it doesn't
+ * drift as others come and go) nearest below it in tree order.
+ */
+function frozenOrder(n) {
+  const list = ORD[orderMode], ranks = ORD_RANK[orderMode], ln = ORD_N[orderMode];
+  // The other frozen list: a unit missing from this one takes its rank from there if it can
+  // (fixed), rather than its live rank, which can drift mid-morph (a promoted cluster's node).
+  const other = 3 - orderMode, list2 = ORD[other], ranks2 = ORD_RANK[other], ln2 = ORD_N[other];
+  for (let k = 0; k < ln; k++) KEYPOS[list[k]] = k;
+  for (let k = 0; k < ln2; k++) KEYPOS2[list2[k]] = k;
+  for (let a = 0; a < n; a++) {
+    const pos = KEYPOS[U_KEY[a]];
+    if (pos >= 0) { U_POS[a] = pos; continue; }
+    const p2 = KEYPOS2[U_KEY[a]], r = p2 >= 0 ? ranks2[p2] : U_RANKF[a];
+    let best = -1, bestRank = -Infinity;
+    for (let k = 0; k < ln; k++) if (ranks[k] < r && ranks[k] > bestRank) { best = k; bestRank = ranks[k]; }
+    U_POS[a] = best + 0.5 + r * 1e-9;
+  }
+  for (let k = 0; k < ln; k++) KEYPOS[list[k]] = -1;
+  for (let k = 0; k < ln2; k++) KEYPOS2[list2[k]] = -1;
+  // Insertion sort by place (allocation-free, and n is a few hundred at most).
+  for (let a = 0; a < n; a++) U_SORT[a] = a;
+  for (let i = 1; i < n; i++) {
+    const u = U_SORT[i], pu = U_POS[u];
+    let j = i - 1;
+    while (j >= 0 && U_POS[U_SORT[j]] > pu) { U_SORT[j + 1] = U_SORT[j]; j--; }
+    U_SORT[j + 1] = u;
+  }
+  for (let i = 0; i < n; i++) {
+    const u = U_SORT[i];
+    geo.drawKind[i] = U_KIND[u]; geo.drawIdx[i] = U_IDX[u]; geo.drawKey[i] = U_KEY[u];
+  }
+  geo.nDraw = n;
+}
+
+/**
+ * Behind everything, with the stem: side shoots' axes, spurs (a thick knob with growth rings),
+ * and pegs (spruce: a short woody stub under each leaf). Then sheaths (pine: a papery sleeve
+ * round the base of each bundle), one run per node, drawn over its leaves. Pegs and sheaths go
+ * with the stem's own leaves, from each one's node along its direction, scaled with it.
  */
 function emitNodeParts(P, np, nN, stemW, ss) {
   const pegs = P.pegs.value * stemW, sheath = P.sheath.value * stemW;
   const pw = P.stemWidth.value * (1 - P.stemTaper.value) * 0.7;
   sStroke.n = sFill.n = 0;
   geo.pegStart = geo.count;
-  for (let p = 0; p < np && pegs > 0.002; p++) {
-    const si = PL_SI[p], sz = PL_SIZE[p] * PL_PRES[p];
-    if (PL_NODE[p] >= nN || sz < 1e-3) continue;
-    stalkLine(SX[si], SY[si], SPH[si] + PL_REL[p], pegs * 0.1 * sz, pw, pw * 0.8, 1, ss + 300 + p, 0, 2);
+  for (let b = 0; b < nSide; b++) {
+    if (SIDE_LEN[b] > 1e-4) stalkLine(SIDE_X[b], SIDE_Y[b], SIDE_ANG[b], SIDE_LEN[b], SIDE_W[b], SIDE_W[b] * 0.45, 1, SIDE_SEED[b], SIDE_BEND[b], 24);
   }
-  appendBuf(sStroke); sStroke.n = 0;
+  const ow = G.outlineW;
+  for (let b = 0; b < nSpur; b++) {
+    const L = SPUR_LEN[b], w = pw * 1.5;
+    if (L < 1e-4) continue;
+    stalkLine(SPUR_X[b], SPUR_Y[b], SPUR_ANG[b], L, w * 1.1, w, 1, ss + 1100 + b, 0, 3);
+    // Growth rings: a few short pen arcs across the knob.
+    const c = Math.cos(SPUR_ANG[b]), sn = Math.sin(SPUR_ANG[b]);
+    for (let r = 1; r <= 3; r++) {
+      const x = SPUR_X[b] + c * L * r / 4, y = SPUR_Y[b] + sn * L * r / 4;
+      penLine(x - sn * w, y + c * w, x + sn * w, y - c * w, 0.3, ow * 0.7, ow * 0.7, 3);
+    }
+  }
+  for (let p = 0; p < np && pegs > 0.002; p++) {
+    const sz = PL_SIZE[p] * PL_PRES[p];
+    if (PL_PART[p] !== 0 || PL_NODE[p] >= nN || sz < 1e-3) continue;
+    stalkLine(PL_X[p], PL_Y[p], PL_ANG[p] + PL_REL[p], pegs * 0.1 * sz, pw, pw * 0.8, 1, ss + 300 + p, 0, 2);
+  }
+  appendBuf(sStroke); appendBuf(sFill); sStroke.n = sFill.n = 0;
   geo.pegCount = geo.count - geo.pegStart;
   // One sheath per bundle: at the first leaf of each node, pointing along the bundle's middle.
   let p = 0;
@@ -1662,10 +1952,10 @@ function emitNodeParts(P, np, nN, stemW, ss) {
     geo.sheathStart[n] = geo.count;
     let a = 0, sz = 0, k = 0;
     const p0 = p;
-    for (; p < np && PL_NODE[p] === n; p++) { a += PL_REL[p]; sz += PL_SIZE[p] * PL_PRES[p]; k++; }
+    for (; p < np && PL_NODE[p] === n; p++) if (PL_PART[p] === 0) { a += PL_REL[p]; sz += PL_SIZE[p] * PL_PRES[p]; k++; }
     if (sheath > 0.002 && k > 0 && n < nN) {
-      const si = PL_SI[p0], L = sheath * 0.16 * sz / k;
-      emitShape(SX[si], SY[si], SPH[si] + a / k, L, L, 6, sheathW, KIND_BUD, 0, 0, 0);
+      const L = sheath * 0.16 * sz / k;
+      emitShape(PL_X[p0], PL_Y[p0], PL_ANG[p0] + a / k, L, L, 6, sheathW, KIND_BUD, 0, 0, 0);
       appendBuf(sFill); sFill.n = 0;
     }
     geo.sheathCount[n] = geo.count - geo.sheathStart[n];
@@ -1674,17 +1964,20 @@ function emitNodeParts(P, np, nN, stemW, ss) {
 // A sheath: a narrow papery sleeve, open at its end.
 function sheathW(u) { return 0.12 + 0.06 * u; }
 
+/** A placement's identity: node i (MAX_NODES for the tip leaf), kind a (1–3 the arrangements, 4 a spur's rosette, 5 a side shoot), position q. */
+function placeKey(i, a, q) { return (i * 8 + a) * 64 + q; }
+
 /** Queue one leaf placement (see buildSprigVariant); returns the new count. */
-function queuePlace(np, lv, si, node, rel, size, pres) {
-  PL_LV[np] = lv; PL_SI[np] = si; PL_NODE[np] = node; PL_REL[np] = rel; PL_SIZE[np] = size; PL_PRES[np] = pres;
+function queuePlace(np, lv, x, y, ang, node, part, rel, size, pres, key) {
+  PL_KEY[np] = key; PL_LV[np] = lv; PL_X[np] = x; PL_Y[np] = y; PL_ANG[np] = ang; PL_NODE[np] = node; PL_PART[np] = part;
+  PL_REL[np] = rel; PL_SIZE[np] = size; PL_PRES[np] = pres;
   return np + 1;
 }
 
 
-/** Add one leaf placement at stem sample si; returns the new count. */
-function place(po, np, lv, si, rel, size, pres) {
+/** Add one leaf placement at (nx, ny), at `rel` from direction sph; returns the new count. */
+function place(po, np, lv, nx, ny, sph, rel, size, pres) {
   const flip = rel >= 0 ? 1 : -1;
-  const sph = SPH[si], nx = SX[si], ny = SY[si];
   const A = lv * 3, axp = geo.leafAttach[A], ayp = geo.leafAttach[A + 1], th = geo.leafAttach[A + 2];
   const g = sph + rel, cg = Math.cos(g), sgn = Math.sin(g), cA = Math.cos(th), sA = Math.sin(th);
   const sx = Math.max(0.05, size), sy = Math.max(0.05, size) * flip;
@@ -1709,7 +2002,10 @@ export function buildShapes(P, B, variety) {
   resolveKnobs(P, B, variety);
   // No stem at all: one leaf. Any stem: a few variants so the sprig's leaves differ.
   const nv = B.arrangement[0] < 0.999 ? 6 : 1;
-  nodeDiv = nv > 1 ? clamp(Math.pow(2, Math.floor(Math.log2(Math.max(1, P.nodes.value / 8)))), 1, 8) : 1;
+  // (Spur rosettes and side shoots count as more leaves on the shoot.)
+  const leaves = P.nodes.value * (1 + P.spurs.value * P.spurLeaves.value / Math.max(1, P.spurEvery.value)
+    + P.sideShoots.value * P.sideNodes.value / Math.max(1, P.sideEvery.value));
+  nodeDiv = nv > 1 ? clamp(Math.pow(2, Math.floor(Math.log2(Math.max(1, leaves / 8)))), 1, 8) : 1;
   const seed = P.seed.value;
   geo.count = 0;
   geo.nSeg = 0;

@@ -17,7 +17,9 @@
 // per-frame values computed here. The frame allocates nothing.
 
 import * as SH from './shaders.js';
-import { buildShapes, geo, STRIDE, MAX_VERTS, MAX_PLACE, SEG_FILL, SEG_VEIN } from './shapes.js';
+import { presets } from './params.js';
+import { blades, presetSeconds } from './pace.js';
+import { buildShapes, geo, STRIDE, MAX_VERTS, MAX_PLACE, SEG_FILL, SEG_VEIN, DRAW_LEAF, DRAW_CLUSTER, freezeOrder, setOrderMode } from './shapes.js';
 import { rng } from '../../kit/random.js';
 import { FULLSCREEN_VERT, paramDecls, program, shaderParams, uploadParams } from '../../kit/gl.js';
 
@@ -37,13 +39,15 @@ const GEOM_KEYS = [
   'teeth', 'toothDepth', 'veinCount', 'veinAngle', 'veinCurve', 'veinlets', 'veinWeight', 'midribWeight',
   'petioleLength', 'petioleFlat', 'petioleWing', 'stipules', 'outlineWeight', 'wobble',
   'arrangement', 'nodes', 'divergence', 'decussate', 'whorlCount', 'internode', 'internodeTaper', 'bareStem',
-  'foreshorten', 'perNode', 'bundleSpread', 'sheath', 'baseShrink', 'pegs',
+  'frontReach', 'foreshorten', 'perNode', 'bundleSpread', 'sheath', 'baseShrink', 'pegs',
+  'spurs', 'spurEvery', 'spurLeaves', 'spurFan', 'spurLength', 'spurAngle',
+  'sideShoots', 'sideEvery', 'sideLength', 'sideAngle', 'sideNodes',
   'insertion', 'tipInsertion', 'sizeGradient', 'stemWidth', 'stemTaper', 'stemCurve', 'stemDroop', 'zigzag', 'stemWander', 'spreadOut',
   'terminal', 'budType', 'budSize', 'budStem', 'leafVariety',
-  'fruit', 'fruitNodes', 'fruitEvery', 'fruitTip', 'fruitCount', 'fruitSize', 'fruitLength', 'fruitPeduncle', 'fruitStalk', 'fruitHang', 'fruitSpread',
+  'fruit', 'fruitNodes', 'fruitEvery', 'fruitTip', 'fruitCount', 'fruitSize', 'fruitLength', 'fruitPeduncle', 'fruitBudScales', 'fruitStalk', 'fruitHang', 'fruitSpread',
   'fruitForm', 'fruitAxis', 'fruitRays', 'fruitTaper', 'fruitBract', 'fruitCurve',
   'fruitAsym', 'fruitSeeds', 'fruitCup', 'fruitSpines', 'fruitSpineCount', 'fruitCut', 'fruitKernels',
-  'flower', 'flowerNodes', 'flowerEvery', 'flowerTip', 'flowerForm', 'flowerAxis', 'flowerRays', 'flowerTaper', 'flowerCount', 'flowerSize',
+  'flower', 'flowerNodes', 'flowerEvery', 'flowerTip', 'flowerForm', 'flowerAxis', 'flowerRays', 'flowerTaper', 'flowerCount', 'flowerSize', 'flowerBudScales',
   'flowerLength', 'flowerPeduncle', 'flowerBract', 'flowerStalk', 'flowerHang', 'flowerSpread', 'flowerCurve', 'flowerPetals',
   'flowerNotch', 'flowerStamens', 'flowerFlare',
   // Pen lines on fruit stop at the highlight, so these move geometry too.
@@ -109,7 +113,7 @@ export default function create({ canvas, P, model, degrade }) {
   const eased = [];
   for (const k in P) PE[k] = P[k];
   const ease1 = (key, p, target, eps) => {
-    const e = { p, target, value: 0, from: 0, to: 0, eps, leaf: LEAF_KEYS.has(key) };
+    const e = { p, target, value: 0, from: 0, to: 0, eps, leaf: LEAF_KEYS.has(key), hold: -1 };
     PE[key] = e;
     eased.push(e);
   };
@@ -121,6 +125,10 @@ export default function create({ canvas, P, model, degrade }) {
   }
   ease1('leafletPairs', P.leaflets, () => Math.floor(P.leaflets.value / 2), 1e-3);
   ease1('leafletTerm', P.leaflets, () => P.leaflets.value % 2, 1e-3);
+  // Whole-number spacings that rearrange where their feature sits, by the amount that shows it:
+  // in a preset morph they change while it's faded out (see beginMorph), not in steps as it
+  // fades (a larch's spurs hopping between nodes as Spur every rounded 4 → 3 → 2).
+  const SPACING = { spurEvery: 'spurs', sideEvery: 'sideShoots', fruitEvery: 'fruit', flowerEvery: 'flower' };
   let easedInit = false;
   /** Move each eased number a share `k` of the way to its target. Returns whether any moved. */
   function easeNumbers(k) {
@@ -155,13 +163,34 @@ export default function create({ canvas, P, model, degrade }) {
   let leafGrow = 1;
   const viewFrom = new Float32Array(4), viewTo = new Float32Array(4);
   const smooth01 = (x) => x * x * (3 - 2 * x);
+  /** A shape param as it is on screen (eased numbers, the leading option of each select). */
+  function shown(key) {
+    const w = blend[key];
+    if (w) { let m = 0; for (let i = 1; i < w.length; i++) if (w[i] > w[m]) m = i; return P[key].options[m]; }
+    if (key === 'leaflets') return 2 * PE.leafletPairs.value + PE.leafletTerm.value;
+    return PE[key].value;
+  }
+  function target(key) { return P[key].value; }
   function beginMorph(seconds) {
-    const cw = blend.compound;
-    let c0 = 0;
-    for (let i = 1; i < cw.length; i++) if (cw[i] > cw[c0]) c0 = i;
-    twoPhase = P.compound.options[c0] !== P.compound.value;
+    // Two phases when the leaf type changes, or the number of blades on show does by more than
+    // about three times (three leaves to a hundred needles): the old leaves shrink into the stem,
+    // the shape changes while they're small, the new ones grow out. Blended straight through,
+    // big changes read as a scramble.
+    twoPhase = shown('compound') !== P.compound.value || Math.abs(Math.log2((blades(target) + 1) / (blades(shown) + 1))) > 1.5;
+    // The draw order: what's on screen now (rebuilt live), frozen for the first half.
+    setOrderMode(0);
+    rebuild();
+    freezeOrder(1);
     leafGrow = 1; // (a new preset mid-dip starts its leaves from full)
-    for (let i = 0; i < eased.length; i++) { const e = eased[i]; e.from = e.value; e.to = e.target(); }
+    for (let i = 0; i < eased.length; i++) { const e = eased[i]; e.from = e.value; e.to = e.target(); e.hold = -1; }
+    // A spacing whose feature is gone at the start takes its end value at once; one whose
+    // feature is gone at the end keeps its start value throughout; otherwise it eases.
+    for (const key in SPACING) {
+      const e = PE[key], amount = SPACING[key];
+      const off = (v) => (typeof v === 'string' ? v === 'None' : v < 1e-3);
+      if (off(shown(amount))) e.hold = 1;
+      else if (off(P[amount].value)) e.hold = 0;
+    }
     for (let b = 0; b < blendList.length; b++) blendList[b].from.set(blendList[b].w);
     // The end: build the final shape once and measure its box.
     for (let i = 0; i < eased.length; i++) eased[i].value = eased[i].to;
@@ -172,23 +201,27 @@ export default function create({ canvas, P, model, degrade }) {
     }
     rebuild();
     viewTo.set(box);
+    freezeOrder(2); // the end's order, for the second half
     // Back to the start; the frame rebuilds from there.
     for (let i = 0; i < eased.length; i++) eased[i].value = eased[i].from;
     for (let b = 0; b < blendList.length; b++) blendList[b].w.set(blendList[b].from);
     viewFrom.set(viewBox);
     morphLen = seconds; morphT = 0; morphSig = geomSig();
+    setOrderMode(1);
   }
   /** Advance the morph; returns false once it has landed (or was cut short). */
   function stepMorph(rdt) {
-    if (geomSig() !== morphSig) { morphLen = 0; leafGrow = 1; return false; }
+    if (geomSig() !== morphSig) { morphLen = 0; leafGrow = 1; setOrderMode(0); return false; }
     morphT = Math.min(morphLen, morphT + rdt);
     const k = morphT >= morphLen ? 1 : smooth01(morphT / morphLen);
+    // The order swaps once, at the midpoint; at the end it goes live (and matches the end's).
+    setOrderMode(morphT >= morphLen ? 0 : k < 0.5 ? 1 : 2);
     // Two phases: leaf shape holds at the start, then at the end, swapping at the midpoint while
     // the leaves are shrunk to nothing (out over 0–0.45, back over 0.55–1).
     const kl = twoPhase ? (k < 0.5 ? 0 : 1) : k;
     leafGrow = !twoPhase ? 1 : k < 0.5 ? 1 - smooth01(Math.min(1, k / 0.45)) : smooth01(Math.max(0, (k - 0.55) / 0.45));
     for (let i = 0; i < eased.length; i++) {
-      const e = eased[i], ke = e.leaf ? kl : k;
+      const e = eased[i], ke = e.hold >= 0 ? (k >= 1 ? 1 : e.hold) : e.leaf ? kl : k;
       e.value = ke === 1 ? e.to : e.from + (e.to - e.from) * ke;
     }
     for (let b = 0; b < blendList.length; b++) {
@@ -471,13 +504,49 @@ export default function create({ canvas, P, model, degrade }) {
     gl.disable(gl.STENCIL_TEST);
   }
 
+  // ---- the preset's name, bottom left (Finish → Preset name), to tell presets apart
+  // As far from the bottom and left edges as the back button is from the top and left. One
+  // element, written only when it fades in or out (its name once per morph), never every frame.
+  // It fades in over the last 300 ms of a morph (or as soon as the page's first preset lands),
+  // and out over 300 ms once anything moves away from the preset.
+  const label = document.createElement('div');
+  label.setAttribute('aria-hidden', 'true');
+  label.style.cssText = 'position:fixed;left:max(14px,env(safe-area-inset-left));bottom:max(14px,env(safe-area-inset-bottom));'
+    + 'pointer-events:none;white-space:nowrap;opacity:0;transition:opacity 300ms ease;'
+    + 'font:italic 300 15px/1 "Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;letter-spacing:0.02em;';
+  canvas.parentElement.appendChild(label);
+  // Every preset's keys, listed once, so checking whether one still holds allocates nothing.
+  const presetKeys = {};
+  for (const name in presets) presetKeys[name] = Object.keys(presets[name]);
+  let labelName = '', labelShown = false, labelCheck = false, morphEndAt = 0;
+  // Not in capture mode: covers and share images don't carry it.
+  const capturing = new URLSearchParams(location.search).has('capture');
+  /** Do the params still hold preset `name`? */
+  function presetHolds(name) {
+    const keys = presetKeys[name], vals = presets[name];
+    for (let i = 0; i < keys.length; i++) if (P[keys[i]] && P[keys[i]].value !== vals[keys[i]]) return false;
+    return true;
+  }
+  function showLabel() {
+    label.textContent = labelName;
+    label.style.color = P.penColour.value;
+    label.style.opacity = '0.7';
+    labelShown = true;
+  }
+  function hideLabel() {
+    if (!labelShown) return;
+    label.style.opacity = '0';
+    labelShown = false;
+  }
+
   buildAll();
 
   return {
     resize(_w, _h, px) { fPx = px; needsDraw = true; },
     // Started on the next frame, from whatever is on screen then (0 = jump straight there).
-    morph(seconds) { morphPending = seconds; morphLen = 0; },
-    frame(t, dt, _rt, rdt) {
+    morph(seconds, name) { morphPending = seconds; morphLen = 0; hideLabel(); labelName = name; },
+    presetSeconds(values) { return presetSeconds(P, values); },
+    frame(t, dt, rt, rdt) {
       if (!ready) return;
       const cssW = canvas.width / fPx, cssH = canvas.height / fPx;
       // How far everything that chases its target (outside a preset morph) moves this frame.
@@ -489,6 +558,7 @@ export default function create({ canvas, P, model, degrade }) {
         morphPending = -1;
       }
       const morphing = morphLen > 0 && stepMorph(rdt);
+      if (morphing && morphLen === 0) morphEndAt = rt;
       let dirty = morphing;
       if (!morphing) {
         if (easeBlends(chase)) dirty = true;
@@ -496,6 +566,7 @@ export default function create({ canvas, P, model, degrade }) {
       }
       if (model.version !== lastVersion) {
         lastVersion = model.version;
+        labelCheck = true;
         const s = geomSig();
         if (s !== lastSig) { lastSig = s; dirty = true; }
       }
@@ -520,6 +591,15 @@ export default function create({ canvas, P, model, degrade }) {
         }
         viewInit = true;
       }
+      // The label: once a morph has landed (and the colours, gliding as long, with it), any edit
+      // that moves away from the preset drops it; it shows over the morph's last 300 ms.
+      if (labelCheck && !morphing && rt - morphEndAt > 0.35) {
+        labelCheck = false;
+        if (labelName && !presetHolds(labelName)) labelName = '';
+      }
+      const labelWanted = !capturing && labelName !== '' && P.presetLabel.value && viewInit && (!morphing || morphLen - morphT <= 0.3);
+      if (labelWanted && !labelShown) showLabel();
+      else if (!labelWanted && labelShown) hideLabel();
       const swaying = P.sway.value > 0 && dt > 0;
       // Nothing changed and nothing sways: leave the last frame on screen. WebGL keeps showing
       // it until we draw again, so a still leaf costs no GPU time (a constant heavy redraw
@@ -561,32 +641,19 @@ export default function create({ canvas, P, model, degrade }) {
       stencilRef = 0;
       gl.stencilMask(0xff);
       gl.clear(gl.STENCIL_BUFFER_BIT);
-      // Back layer, with the stem: the bud at its end, and every stalk (leaf stalks, rachises,
-      // fruit and flower stalks), so a stalk can pass behind a leaf, fruit or flower but never in
-      // front of something hanging across the stem it grows from.
+      // Behind everything, with the stem: the bud at its end, spur knobs, side-shoot axes and
+      // pegs. Then each leaf, cluster and sheath whole, in the order shapes.js worked out (tree
+      // order, overridden where something covers where another joins: see orderUnits).
       drawRun(geo.budStart[0], geo.budCount[0], 0, 1);
-      const nPl = geo.sprigNPlace[0];
-      for (let p = nPl - 1; p >= 0; p--) {
-        if (geo.sprigPlace[p * 8 + 7] * leafGrow < 0.002) continue; // not grown in yet
-        const v = geo.sprigPlace[p * 8], s0 = geo.leafSegStart[v];
-        drawLeaf(v, 1 + p, s0, s0 + geo.leafStalkSegs[v]);
-      }
-      for (let c = 0; c < geo.nCl; c++) drawRun(geo.clStart[c], geo.clStalk[c], 0, 1);
       drawRun(geo.pegStart, geo.pegCount, 0, 1);
-      // Then the rest in natural order, node by node from the tip, so whatever grows nearer the
-      // base covers what's above it: at each node its fruit and flowers, then its leaves.
-      let p = nPl - 1;
-      for (let n = geo.sprigNodes; n >= 0; n--) {
-        for (let c = 0; c < geo.nCl; c++) {
-          if (geo.clNode[c] === n) drawRun(geo.clStart[c] + geo.clStalk[c], geo.clCount[c] - geo.clStalk[c], 0, 1);
-        }
-        for (; p >= 0 && geo.placeNode[p] === n; p--) {
-          if (geo.sprigPlace[p * 8 + 7] * leafGrow < 0.002) continue;
-          const v = geo.sprigPlace[p * 8], s0 = geo.leafSegStart[v];
-          drawLeaf(v, 1 + p, s0 + geo.leafStalkSegs[v], s0 + geo.leafSegCount[v]);
-        }
-        // A bundle's sheath, round its leaves' bases.
-        drawRun(geo.sheathStart[n], geo.sheathCount[n], 0, 1);
+      for (let k = 0; k < geo.nDraw; k++) {
+        const kind = geo.drawKind[k], i = geo.drawIdx[k];
+        if (kind === DRAW_LEAF) {
+          if (geo.sprigPlace[i * 8 + 7] * leafGrow < 0.002) continue; // not grown in yet
+          const v = geo.sprigPlace[i * 8], s0 = geo.leafSegStart[v];
+          drawLeaf(v, 1 + i, s0, s0 + geo.leafSegCount[v]);
+        } else if (kind === DRAW_CLUSTER) drawRun(geo.clStart[i], geo.clCount[i], 0, 1);
+        else drawRun(geo.sheathStart[i], geo.sheathCount[i], 0, 1);
       }
       gl.disable(gl.BLEND);
       gl.bindVertexArray(null);

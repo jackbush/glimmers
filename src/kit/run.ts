@@ -35,7 +35,7 @@ declare global {
 
 export function run(slug: string, { manifest, params, presets, sketch }: SketchModules): void {
   const capture = new URLSearchParams(location.search).has('capture');
-  const store = createModel(params, capture ? null : 'glimmers:' + slug + ':overrides');
+  const store = createModel(params, capture ? null : 'glimmers:' + slug + ':overrides', presets);
   const P = store.byKey;
 
   const canvas = document.getElementById('stage') as HTMLCanvasElement;
@@ -68,17 +68,23 @@ export function run(slug: string, { manifest, params, presets, sketch }: SketchM
   const autoHold = manifest.autoplay?.hold ?? MANIFEST_DEFAULTS.autoplayHold;
   // Whether the preset morph under way is the user's (saved when it lands) or autoplay's.
   let saveOnLanding = false;
-  function applyPreset(name: string, seconds = presetSeconds, save = true) {
-    if (!presets?.[name]) return;
+  // The preset applied before the sketch existed (autoplay's first), announced to it once it does.
+  let firstPreset = '';
+  /** Morph to a preset over `seconds` (by default as long as the sketch says it needs); returns them. */
+  function applyPreset(name: string, seconds?: number, save = true): number {
+    if (!presets?.[name]) return 0;
+    const s = seconds ?? instance?.presetSeconds?.(presets[name]) ?? presetSeconds;
     saveOnLanding = save;
     const own = !!instance?.morph;
-    store.applyPreset(presets[name], seconds, !own);
-    if (own) instance!.morph!(seconds);
+    store.applyPreset(name, s, !own);
+    if (own) instance!.morph!(s, name);
+    else firstPreset = name;
     // What landed at once shows now; gliding colours catch up as they move.
     syncPageColour();
     panel.syncAll();
     panel.refreshStatus();
     if (save) store.scheduleSave();
+    return s;
   }
   const panel = buildPanel({
     slug,
@@ -104,8 +110,7 @@ export function run(slug: string, { manifest, params, presets, sketch }: SketchM
   loop.onTick = (dt) => {
     if (autoplay && (autoplay.wait -= dt) <= 0) {
       autoplay.i = (autoplay.i + 1) % autoplay.names.length;
-      applyPreset(autoplay.names[autoplay.i], presetSeconds, false);
-      autoplay.wait = presetSeconds + autoHold;
+      autoplay.wait = applyPreset(autoplay.names[autoplay.i], undefined, false) + autoHold;
     }
     const state = store.tick(dt);
     if (state === 'idle') return;
@@ -131,9 +136,9 @@ export function run(slug: string, { manifest, params, presets, sketch }: SketchM
   syncPlay();
 
   // The first preset lands before the sketch starts, so it opens on it rather than morphing in.
-  const names = presets ? Object.keys(presets) : [];
+  const names = manifest.autoplay?.sequence ?? (presets ? Object.keys(presets) : []);
   if (!capture && manifest.autoplay && names.length && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    // A random one first, then on through the menu order from there.
+    // A random one first, then on through the sequence (or the menu order) from there.
     const first = Math.floor(Math.random() * names.length);
     autoplay = { names, i: first, wait: autoHold };
     applyPreset(names[first], 0, false);
@@ -145,6 +150,7 @@ export function run(slug: string, { manifest, params, presets, sketch }: SketchM
     fail(err);
     return;
   }
+  if (firstPreset) instance.morph?.(0, firstPreset);
 
   window.__glimmer = { get frames() { return loop.frames; } };
   if (capture) {

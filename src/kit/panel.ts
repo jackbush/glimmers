@@ -54,11 +54,11 @@ export function buildPanel({ slug, store, onEdited, presets, onPreset }: PanelOp
     const label = el('label', 'lbl', '- '.repeat(p.depth) + p.label);
     const id = 'p-' + p.key;
     label.htmlFor = id;
-    label.title = (p.desc ? p.desc + '\n' : '') + 'key: ' + p.key + ' · default: ' + p.default + '\nDouble-click to reset.';
+    label.title = (p.desc ? p.desc + '\n' : '') + 'key: ' + p.key + ' · default: ' + p.default + '\nDouble-click to reset (to the preset\'s value, if one set it).';
     // Labels stay linked to their control for accessibility, but a click on one must not activate it
     // (that opened the colour picker / toggled checkboxes); double-click is reserved for reset.
     label.addEventListener('click', (e) => e.preventDefault());
-    label.addEventListener('dblclick', () => { store.setValue(p, p.default); sync(); onEdited(); });
+    label.addEventListener('dblclick', () => { store.setValue(p, p.base); sync(); onEdited(); });
     wrap.appendChild(label);
     const mark = () => wrap.classList.toggle('changed', store.isChanged(p));
 
@@ -156,8 +156,9 @@ export function buildPanel({ slug, store, onEdited, presets, onPreset }: PanelOp
   // ---- copy state
   function buildState(): string {
     const changed: Record<string, { from: unknown; to: unknown }> = {};
-    for (const p of store.params) if (store.isChanged(p) && store.isShown(p)) changed[p.key] = { from: p.default, to: p.value };
-    return JSON.stringify({ glimmers: STATE_TAG, sketch: slug, changed }, null, 2);
+    // Edits since the preset (if one was applied): `from` is its value, or the default.
+    for (const p of store.params) if (store.isChanged(p) && store.isShown(p)) changed[p.key] = { from: p.base, to: p.value };
+    return JSON.stringify({ glimmers: STATE_TAG, sketch: slug, ...(store.preset ? { preset: store.preset } : {}), changed }, null, 2);
   }
   async function writeClipboard(text: string): Promise<boolean> {
     try {

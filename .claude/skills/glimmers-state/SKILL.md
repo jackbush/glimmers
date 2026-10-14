@@ -20,7 +20,8 @@ The settings pane's **Copy changes** button produces this:
 
 - `sketch` is the folder: every default lives in `src/sketches/<sketch>/params.js`.
 - Old blobs may carry `paused`: it isn't a param any more (it's the play/pause button), so skip it and say so.
-- `changed` holds every param that differs from the code defaults at the moment of copying. `from` is the code default the user's page was running. `to` is what they want.
+- `changed` holds every param that differs from its base at the moment of copying. The base is the code default, unless the blob has a `preset`: then it's that preset's value for the params the preset sets (the default for the rest). `from` is the base the user's page was running. `to` is what they want.
+- A blob with `"preset": "Name"` was copied while that preset was applied: the user tweaked the preset. Changes to keys the preset sets belong in that preset's entry in `presets` (params.js); changes to other keys (Finish, playback) go to the defaults as usual. If it's unclear whether they meant to change the preset or the defaults, ask.
 - The user's intent, if any, is in the chat message around the blob.
 - Old Blackstar blobs (`"blackstar": "blackstar/state@1"`, no `sketch`) are for `blackstar`. Their keys still apply.
 

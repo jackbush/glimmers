@@ -4,28 +4,33 @@
 // (e.g. after a pasted state has been baked into params.js): they're signed with a hash of
 // every default.
 
-import type { Group, Model, Param, ParamValue } from './types';
+import type { Group, Model, Param, ParamValue, Presets } from './types';
 
 export interface ParamStore extends Model {
   groups: Group<Param>[];
   /** Set a value. A preset morph still under way stops moving this param. */
   setValue(p: Param, v: unknown): void;
+  /** Differs from its base: the default, or the last applied preset's value. */
   isChanged(p: Param): boolean;
+  /** The preset last applied ('' if none since the defaults). */
+  readonly preset: string;
   /** False while the param's `when` (or an ancestor's) doesn't hold. */
   isShown(p: Param): boolean;
   /** Changed params that are shown. */
   changedCount(): number;
-  /** Every param back to its default, ending any preset morph. */
+  /** Every param back to its default (and every base), ending any preset morph. */
   resetAll(): void;
   /** Persist the current overrides (debounced). */
   scheduleSave(): void;
   /** Forget saved overrides, and cancel a pending save. */
   clearSaved(): void;
   /**
-   * Start morphing to these values over `seconds` (0 = at once). With `glideNumbers` false,
-   * numbers land at once and only colours glide (the sketch morphs its shape itself).
+   * Start morphing to preset `name` over `seconds` (0 = at once). With `glideNumbers` false,
+   * numbers land at once and only colours glide (the sketch morphs its shape itself). The
+   * params it sets take its values as their bases, so they count as unchanged; the rest keep
+   * their values and bases (a user's edit stays an edit).
    */
-  applyPreset(values: Record<string, ParamValue>, seconds: number, glideNumbers?: boolean): void;
+  applyPreset(name: string, seconds: number, glideNumbers?: boolean): void;
   /** Advance a preset morph by dt seconds. Returns 'moving', 'done' (just landed) or 'idle'. */
   tick(dt: number): 'moving' | 'done' | 'idle';
 }
@@ -68,8 +73,9 @@ function signature(params: Param[]): string {
 /**
  * @param schema the sketch's params.js (groups → params). Defs are copied, not mutated.
  * @param storageKey localStorage key for saved overrides; null = don't load or save (capture mode).
+ * @param presets the sketch's presets, if any.
  */
-export function createModel(schema: Group[], storageKey: string | null): ParamStore {
+export function createModel(schema: Group[], storageKey: string | null, presets?: Presets): ParamStore {
   const params: Param[] = [];
   const byKey: Record<string, Param> = Object.create(null);
   const groups: Group<Param>[] = [];
@@ -85,6 +91,7 @@ export function createModel(schema: Group[], storageKey: string | null): ParamSt
         type,
         group: g.group,
         default: def.value,
+        base: def.value,
         decimals: type === 'range' ? decimalsOf(def.step) : 0,
         rgb: new Float32Array(3),
         parent: null,
@@ -106,6 +113,7 @@ export function createModel(schema: Group[], storageKey: string | null): ParamSt
 
   const sig = signature(params);
   let saveTimer = 0;
+  let preset = '';
 
   // Preset morph: numbers and colours glide from where they were to the preset's values.
   interface Glide { p: Param; from: number; to: number; rgbFrom?: number[]; rgbTo?: number[] }
@@ -127,7 +135,8 @@ export function createModel(schema: Group[], storageKey: string | null): ParamSt
       if (glides.length) glides = glides.filter((g) => g.p !== p);
       assign(p, v);
     },
-    isChanged: (p) => p.value !== p.default,
+    get preset() { return preset; },
+    isChanged: (p) => p.value !== p.base,
     isShown(p) {
       for (let q: Param | null = p; q && q.when; q = q.parent) {
         const v = q.parent!.value, w = q.when;
@@ -138,12 +147,13 @@ export function createModel(schema: Group[], storageKey: string | null): ParamSt
     },
     changedCount() {
       let n = 0;
-      for (const p of params) if (p.value !== p.default && store.isShown(p)) n++;
+      for (const p of params) if (p.value !== p.base && store.isShown(p)) n++;
       return n;
     },
     resetAll() {
       glides = [];
-      for (const p of params) assign(p, p.default);
+      preset = '';
+      for (const p of params) { p.base = p.default; assign(p, p.default); }
     },
     scheduleSave() {
       if (!storageKey) return;
@@ -151,12 +161,22 @@ export function createModel(schema: Group[], storageKey: string | null): ParamSt
       saveTimer = window.setTimeout(() => {
         try {
           const values: Record<string, ParamValue> = {};
-          for (const p of params) if (p.value !== p.default) values[p.key] = p.value;
-          localStorage.setItem(storageKey, JSON.stringify({ sig, values }));
+          const bases: Record<string, ParamValue> = {};
+          for (const p of params) {
+            if (p.value !== p.default) values[p.key] = p.value;
+            if (p.base !== p.default) bases[p.key] = p.base;
+          }
+          localStorage.setItem(storageKey, JSON.stringify({ sig, values, bases, preset }));
         } catch { /* storage unavailable */ }
       }, 250);
     },
-    applyPreset(values, seconds, glideNumbers = true) {
+    applyPreset(name, seconds, glideNumbers = true) {
+      const values = presets?.[name];
+      if (!values) return;
+      // Its params are clean at its values; the rest keep their bases (so what an earlier preset
+      // set and this one doesn't still counts as unchanged, and a user's edit as changed).
+      preset = name;
+      for (const k in values) if (byKey[k]) byKey[k].base = coerce(byKey[k], values[k]);
       glides = [];
       for (const key in values) {
         const p = byKey[key];
@@ -201,6 +221,8 @@ export function createModel(schema: Group[], storageKey: string | null): ParamSt
       const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
       if (saved && saved.sig === sig) {
         for (const k in saved.values) if (byKey[k]) assign(byKey[k], saved.values[k]);
+        for (const k in saved.bases || {}) if (byKey[k]) byKey[k].base = coerce(byKey[k], saved.bases[k]);
+        if (typeof saved.preset === 'string' && presets?.[saved.preset]) preset = saved.preset;
       }
     } catch { /* storage unavailable — run on defaults */ }
   }

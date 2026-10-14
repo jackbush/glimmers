@@ -116,6 +116,9 @@ for (const slug of slugs) {
   for (const n of manifest?.capture?.presets?.sequence || []) {
     if (!presets?.[n]) errors.push(`manifest.js: capture preset "${n}" isn't in params.js presets`);
   }
+  for (const n of manifest?.autoplay?.sequence || []) {
+    if (!presets?.[n]) errors.push(`manifest.js: autoplay preset "${n}" isn't in params.js presets`);
+  }
 
   if (manifest?.pageColour) {
     const p = params.find((q) => q.key === manifest.pageColour);

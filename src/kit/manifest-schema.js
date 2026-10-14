@@ -12,16 +12,19 @@ export const manifestSchema = z
     year: z.number().int().min(1990).max(2100),
     /** Key of a colour param that drives the page background and theme-color. */
     pageColour: z.string().optional(),
-    /** Seconds a preset takes to morph in. */
+    /**
+     * Seconds a preset takes to morph in, unless the sketch works it out per morph
+     * (`presetSeconds()`); capture's preset sequences always use this.
+     */
     presetSeconds: z.number().min(0).optional(),
     /**
-     * Cycle through the presets when the page opens: a random one at once, then on in menu
-     * order, each held for `hold` seconds, then morphing to the next over presetSeconds, round
-     * and round. Opening the settings pane stops it (a morph under way finishes); it starts
-     * again next visit. Off for capture mode and for prefers-reduced-motion. Nothing it
-     * applies is saved.
+     * Cycle through the presets when the page opens: a random one at once, then on in order
+     * (`sequence`, or the menu's), each held for `hold` seconds, then morphing to the next (as
+     * long as the morph needs), round and round. Opening the settings pane stops it (a morph
+     * under way finishes); it starts again next visit. Off for capture mode and for
+     * prefers-reduced-motion. Nothing it applies is saved.
      */
-    autoplay: z.object({ hold: z.number().min(0).optional() }).strict().optional(),
+    autoplay: z.object({ hold: z.number().min(0).optional(), sequence: z.array(z.string()).min(1).optional() }).strict().optional(),
     /** Defaults for scripts/capture.mjs, so re-captures match. */
     capture: z
       .object({

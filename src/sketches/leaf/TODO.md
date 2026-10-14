@@ -6,34 +6,24 @@ Palettes are `leafWash / leafShade · stemWash · budColour / budShade · paper`
 
 ## Conifers
 
-Yew, `Fir, Silver`, `Redwood, Coast`, `Pine, Scots`, `Spruce, Norway` and Juniper are presets now (many leaves per sprig, stomatal bands, two ranks, foreshortened spirals, bundles with sheaths, pegs, Base shrink). What they still lack: cones (pine, spruce, fir; see Cones below), spruce's four-sided needles (a ridge down the middle, shaded either side, rather than a flat blade with a midrib), and redwood's second kind of foliage, scale leaves pressed to its leading shoots.
-
-### European larch (Larix decidua)
-- **Look:** soft, bright fresh-green needles, 2–3 cm. They come in tufts of 20–40 on knobbly short side shoots, and singly, spiralled, on the season's long shoot. A deciduous conifer, so they turn gold in autumn. Pale straw-yellow shoots; small cones like wooden rosebuds sit upright along the branches.
-- **Palette:** `#8fb257 / #3e5e28 · #c8a76a · #8a6040 / #3a2416 · #f3eff9` (spring green on lilac).
-- **Missing:** rosettes (a fan of many needles from one knob on a short shoot), short shoots off the main stem, and cones (overlapping scales; no fruit type draws them).
-
-### Cedar of Lebanon (Cedrus libani)
-- **Look:** like larch but evergreen, stiffer and darker: rosettes of 10–15 dark grey-green needles, 2–3 cm, on short shoots, held in flat tiers. Barrel-shaped cones stand upright.
-- **Palette:** `#5f7a6a / #253a30 · #7a6a5a · #8a7a5a / #3a3020 · #faf0ea` (grey-green on pale peach).
-- **Missing:** rosettes and short shoots (as larch), and cones.
+Yew, `Fir, Silver`, `Redwood, Coast`, `Pine, Scots`, `Spruce, Norway`, Juniper, `Larch, European` and Cedar of Lebanon are presets now (many leaves per sprig, stomatal bands, two ranks, foreshortened spirals, bundles with sheaths, pegs, Base shrink, spur rosettes, side shoots). What they still lack: cones (pine, spruce, fir, larch's rosebuds, cedar's barrels; see Cones below), spruce's four-sided needles (a ridge down the middle, shaded either side, rather than a flat blade with a midrib), and redwood's second kind of foliage, scale leaves pressed to its leading shoots.
 
 ### Lawson / Leyland cypress (Chamaecyparis, × Cuprocyparis)
 - **Look:** no needles: tiny scale leaves, 1–2 mm, clasping the shoot in opposite pairs, so each shoot looks like a flattened braided cord. Shoots branch repeatedly in one plane into flat, fern-like sprays, drooping at the tips. Lawson's undersides have faint white X marks. Dull to bright green; round cones the size of a pea.
 - **Palette:** `#5e8a52 / #23421f · #6a5a3a · #7a6a4a / #2e281a · #f7eef6` (green on orchid).
-- **Missing:** scale leaves (a shoot drawn as overlapping scales, not as separate leaves), branching sprays (side shoots off side shoots, in one plane), and cones.
+- **Missing:** scale leaves (a shoot drawn as overlapping scales, not as separate leaves), side shoots off side shoots (one level exists), and cones.
 
 ### Monkey puzzle (Araucaria araucana)
 - **Look:** thick, leathery, triangular leaves, 3–4 cm, ending in a sharp spine. They overlap in tight spirals that cover the branch completely, so the branch reads as a scaly green rope. Glossy dark green; they last for decades.
 - **Palette:** `#3e6a3a / #16301a · #5a6a3a · #6a6a3a / #2a2a14 · #f9eef2` (dark green on rose).
-- **Missing:** overlapping scale leaves on a thick shoot (as cypress, but large, and with a draw order that lets each scale overlap the next), and dense spiral placement.
+- **Missing:** overlapping scale leaves on a thick shoot (as cypress, but large, and with a draw order that lets each scale overlap the next). Dense spirals exist.
 
 ## Broadleaves with a missing part
 
 ### Ginkgo (Ginkgo biloba)
 - **Look:** a leathery fan, 5–8 cm across, often split into two lobes by a notch in the middle of its wavy outer edge. Fine veins fork again and again from the stalk out to the edge, with no midrib. Long stalks, the leaves in tufts of 3–5 on stubby short shoots. Fresh mid-green; brilliant butter-yellow in autumn.
 - **Palette:** `#8aab55 / #3e5a28 · #8a7a5a · #7a6a4a / #2e2818 · #f2eff9` (green on lilac; autumn `#e8c64a / #9a7a1a` on `#eef0fa`).
-- **Missing:** a fan outline (a wedge widening to a broad arc, not a midrib-based blade), forking (dichotomous) venation, and tufts on short shoots.
+- **Missing:** a fan outline (a wedge widening to a broad arc, not a midrib-based blade) and forking (dichotomous) venation. Its tufts on short shoots are Spurs with a Rosette of 3–5.
 
 ### Hawthorn (Crataegus monogyna)
 - **Look:** small leaves, 2–4 cm, wedge-based and cut deep, almost to the midrib, into three to five lobes, the lowest pair the deepest; a few teeth near the lobe tips only; leafy, toothed stipules at the stalk's base. Alternate on a zigzag twig, with straight sharp thorns, 1–2 cm, at the nodes, the same brown as the twig. In autumn, clusters of dark red haws.
@@ -65,12 +55,10 @@ Done: fruit on 21 presets and flowers on 11, in fans, racemes and corymbs (see N
 |---|---|---|
 | Cones | Overlapping scales, as a fruit type (fruit themselves are done) | Larch, Cedar, Cypress, `Pine, Scots`, `Spruce, Norway`, `Fir, Silver`, Alder |
 | Four-sided needles | A ridge down the middle of a needle, shaded either side | `Spruce, Norway` |
-| Rosettes on short shoots | A fan of many needles (or a few leaves) from one knob on a short side shoot | Larch, Cedar, Ginkgo |
-| Scale leaves | A shoot covered in overlapping clasping scales instead of separate leaves | Cypress, Monkey puzzle, Coast redwood (leading shoots) |
-| Branching sprays | Side shoots, and side shoots off those, in one plane | Cypress, Larch, Cedar |
+| Fan outline and forking veins, on spurs | Ginkgo's wedge-to-arc blade (spur rosettes exist) | Ginkgo |
+| Scale leaves | A shoot covered in overlapping clasping scales instead of separate leaves (side shoots for its sprays exist) | Cypress, Monkey puzzle, Coast redwood (leading shoots) |
 | Thorns | Spikes at nodes, or a thorn ending the sprig | Hawthorn, Blackthorn, Robinia (better than stipules) |
 | Cut-off apex and placed lobes | A tip cut across in a shallow V; lobes at chosen positions, not spread evenly | Tulip tree |
-| Fan outline and forking veins | A wedge-to-arc blade with dichotomous venation | Ginkgo |
 | More palmate segments and pleating | Up to ~50 segments, each folded down its length | Chusan palm |
 
 ## Roadmap
@@ -80,6 +68,6 @@ In build order. Stages 1–2 only add placed elements, so they improve nearly ev
 1. **Fruit at nodes and the tip.** Done: the Fruit group (Berry, Drupe, Nut, Key, Pod, Burr), clusters fanned from a stalk in the axils and at the tip, morphing like everything else (see NOTES.md). On 15 presets, plus `Apple, Crab` and `Oak, Holm`, new for it. Gives the yew aril, sloes, juniper berries and hawthorn haws once their other features land.
 2. **Clusters on branching stalks (fruit and flowers).** Done: the Flowers group (Open, Cup, Pea, Catkin) beside Fruit, both with a Cluster form (Fan, Raceme, Corymb), curving axes, bracts. Rowan, Elder, Whitebeam and Dogwood berry heads; laburnum and robinia pods and flower chains; plane balls on a thread; `Cherry, Japanese` (new) blossom, magnolia, elderflower, horse chestnut candles, lime flowers on their bracts; catkins on Hazel, `Birch, Silver`, Alder and Willow. May waits for thorns; panicles (ash keys) and raceme-of-pairs (sycamore) are left, above.
 3. **Many cheap leaves.** Done: up to 120 nodes and 320 leaves a sprig, their resolution stepping down on long shoots; Per node and Bundle fan with a Sheath, Pegs, Foreshorten, Base shrink, stomatal bands, Every for fruit and flowers along a long shoot. New: Yew, `Fir, Silver`, `Redwood, Coast`, `Pine, Scots`, `Spruce, Norway`, Juniper; Box, Willow and Eucalyptus on longer, denser shoots.
-4. **Short shoots and side branches.** Spur knobs carrying rosettes, side shoots in one plane. Cedar, larch, ginkgo; spur clusters on Cherry; side twigs carrying fruit.
+4. **Short shoots and side branches.** Done: Spurs (knobs with rosettes, every nth node) and Side shoots (in the plane, every nth node, with their own leaves). New: `Larch, European`, Cedar of Lebanon; spur clusters on both cherries; branched sprays on `Fir, Silver` and Yew. Ginkgo waits for its fan blade (step 6).
 5. **Overlapping scales.** One feature for cones (pine, cedar's barrel, larch's rosebud, alder's little cones) and scale leaves (cypress sprays, monkey puzzle).
 6. **One-offs.** Thorns (Hawthorn, Blackthorn, Robinia), cut-off apex (Tulip tree), fan blade with forking veins (Ginkgo), pleated segments (Chusan palm).

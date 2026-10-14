@@ -47,6 +47,12 @@ export interface Param extends ParamDef {
   type: ParamType;
   group: string;
   default: ParamValue;
+  /**
+   * What "unchanged" means for it: the default, or the value the last preset to set it gave it.
+   * A preset's params are clean after it lands, other params keep theirs; edits are counted
+   * (and copied) against this.
+   */
+  base: ParamValue;
   decimals: number;
   /** The param `when` depends on, and how many such levels deep this one is (0 = none). */
   parent: Param | null;
@@ -84,8 +90,16 @@ export interface SketchInstance {
    * Optional: the sketch morphs presets itself. A preset's numbers and selects then land at
    * once (colours still glide), and this is called to morph from what's on screen to them over
    * `seconds`, so it can work out where everything ends up first and move there on one curve.
+   * `name` is the preset's (the page's first preset is announced with seconds 0, once the
+   * sketch exists).
    */
-  morph?(seconds: number): void;
+  morph?(seconds: number, name: string): void;
+  /**
+   * Optional: how long a morph from what's on screen to these preset values should take, so a
+   * small change can be quick and a big one slow. Without it, presets take the manifest's
+   * presetSeconds. (Capture keeps its own timing.)
+   */
+  presetSeconds?(values: Record<string, ParamValue>): number;
 }
 
 export type Sketch = (ctx: SketchContext) => SketchInstance;
