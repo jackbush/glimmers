@@ -152,7 +152,8 @@ run(['-i', join(work, 'raw', '00000.png'), '-q:v', '3', poster]);
 const shareSrc = join(root, '.capture', slug + '-share.png');
 const share = join(dir, 'share.jpg');
 const self = spawnSync('node', [new URL(import.meta.url).pathname, slug, '--still', shareSrc, '--size', '1200x630', '--dpr', '2',
-  '--start', String(start), ...overrides.flatMap(([k, v]) => ['--set', `${k}=${v}`])],
+  '--start', String(start), ...(opt('--url', null) ? ['--url', opt('--url', null)] : []),
+  ...(seq.length ? ['--preset', seq[0]] : []), ...overrides.flatMap(([k, v]) => ['--set', `${k}=${v}`])],
   { stdio: ['ignore', 'ignore', 'inherit'], env: { ...process.env, GLIMMERS_BUILT: '1' } }); // built already
 if (self.status !== 0) throw new Error('share image capture failed');
 run(['-i', shareSrc, '-vf', 'scale=1200:630:flags=lanczos', '-q:v', '3', share]);

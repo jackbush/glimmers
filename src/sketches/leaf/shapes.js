@@ -236,6 +236,22 @@ function marginAt(ph) {
   return f;
 }
 
+// The tulip tree's half-width along the blade (u, w pairs, in lengths, for Width 1), traced from
+// a leaf: a rounded base, the lower lobes widening to sharp points, a deep notch, then a
+// narrower, straight-sided upper part with its own points at the top corners.
+const TULIP = new Float32Array([
+  0, 0.1, 0.04, 0.34, 0.12, 0.5, 0.24, 0.6, 0.36, 0.69, 0.46, 0.78,
+  0.49, 0.62, 0.53, 0.45, 0.58, 0.4, 0.7, 0.37, 0.82, 0.37, 0.92, 0.42, 1, 0.42,
+]);
+function tulipW(u) {
+  const t = TULIP, n = t.length / 2;
+  if (u <= t[0]) return t[1];
+  for (let i = 1; i < n; i++) {
+    if (u <= t[i * 2]) { const f = (u - t[i * 2 - 2]) / (t[i * 2] - t[i * 2 - 2]); return lerp(t[i * 2 - 1], t[i * 2 + 1], f); }
+  }
+  return t[n * 2 - 1];
+}
+
 /** Outline of one blade into LX/LY (lobed) and FX/FY (with margin), both sides. */
 function bladeOutline(ls) {
   const W = stip ? 0.34 : J.W;
@@ -243,7 +259,7 @@ function bladeOutline(ls) {
   const gam = Math.log(0.5) / Math.log(pw);
   const be = stip ? 0.7 : G.baseE, ae = stip ? 0.9 : G.apexE, em = stip ? 1 : G.expMul;
   const acum = stip ? 0 : G.acum, notch = stip ? 0 : G.notch, cord = stip ? 0 : G.cord, asym = stip ? 0 : G.asym;
-  const cut = stip ? 0 : G.cut, fan = stip ? 0 : G.fan;
+  const cut = stip ? 0 : G.cut, fan = stip ? 0 : G.fan, tulip = stip ? 0 : G.tulip;
   const pinD = stip ? 0 : G.pin * J.lobeDepth, palD = stip ? 0 : G.palm * J.lobeDepth;
   const lobes = G.lobes, sharpE = lerp(1.2, 6, G.lobeSharp);
   // Palmate lobes radiate from a point just above the base.
@@ -270,6 +286,9 @@ function bladeOutline(ls) {
       w *= 1 - acum * 0.72 * smooth(0.5, 0.97, u);
       // Fan: a wedge from the base (60° each side) opening to an arc round the base.
       if (fan > 0) w = lerp(w, Math.min(u * 1.73, Math.sqrt(Math.max(0, 1 - u * u))) * W * wsc / 0.5, fan);
+      // Tulip: broad low lobes with sharp tips flaring out, a deep notch above them, a narrower
+      // squarish top (Apex Cut snips it across in a V).
+      if (tulip > 0) w = lerp(w, tulipW(u) * W * wsc / 0.5, tulip);
       // Cut: wide to the end, then a straight V back to the midrib (with the x below).
       if (cut > 0) w = lerp(w, W * wsc * 0.85 * (1 - smooth(0.93, 1, u)), cut * smooth(0.45, 0.88, u));
       if (pinD > 0) {
@@ -1715,7 +1734,7 @@ function buildSprigVariant(j, P, B, seed) {
   // Alternate leaves in bundles (pine's pairs): Per node of them, fanned across Bundle spread.
   const bunF = Math.max(1, P.perNode.value), bunN = Math.ceil(bunF - 1e-6), fracB = bunF - (bunN - 1), bunSpread = P.bundleSpread.value * DEG;
   const ins0 = P.insertion.value * DEG, ins1 = P.tipInsertion.value * DEG, grad = P.sizeGradient.value;
-  const fore = P.foreshorten.value, baseShrink = P.baseShrink.value;
+  const fore = P.foreshorten.value, baseShrink = P.baseShrink.value, leaderScales = P.leaderScales.value * smooth(0, 0.3, P.sideShoots.value);
   // Spurs: every Spur every-th node is a short knobbly shoot ending in a rosette, which takes
   // over from the node's own leaves as Spurs rises (so it morphs).
   const spurW = P.spurs.value * stemW, spurEvery = Math.max(1, Math.round(P.spurEvery.value));
@@ -1774,7 +1793,11 @@ function buildSprigVariant(j, P, B, seed) {
           if (q === perN - 1) pres *= fracW;
         }
         // Smaller toward the tip (Size gradient) and, with Base shrink, toward the base too.
-        const size = (1 - grad * fi) * (1 - baseShrink * (1 - smooth(0, 0.6, fi))) * fsh * (1 + v * 0.12 * rnd2(ss, 70 + key));
+        // Leader scales (redwood): the main stem's own leaves shrink to small scales pressed to
+        // it, while side shoots keep full leaves: two kinds of foliage on one sprig.
+        const lead = 1 - leaderScales * 0.62;
+        rel *= 1 - leaderScales * 0.82;
+        const size = (1 - grad * fi) * (1 - baseShrink * (1 - smooth(0, 0.6, fi))) * fsh * lead * (1 + v * 0.12 * rnd2(ss, 70 + key));
         // The same node and position keep the same leaf shape across arrangements.
         const si = NODE_I[i];
         np = queuePlace(np, (i * 3 + q * 5) % nLeaf, SX[si], SY[si], SPH[si], i, 0, rel, size, pres * mainW, placeKey(i, a, q));
@@ -1808,7 +1831,10 @@ function buildSprigVariant(j, P, B, seed) {
         const t = (k + 0.6) / (sideF + 0.3);
         stalkAt(SX[si], SY[si], ang, L, bend, seed, t);
         const beta = lerp(ins0, ins1, t) + v * 0.12 * rnd2(ss, 1700 + i * 41 + k);
-        const size = nodeSize * 0.85 * (1 - grad * t * 0.8) * (1 + v * 0.12 * rnd2(ss, 1500 + i * 41 + k));
+        // Smaller toward the shoot's tip, and (Base shrink) toward its base too: each side shoot
+        // is small at both ends (redwood).
+        const size = (1 - grad * fi) * 0.85 * (1 - grad * t * 0.8) * (1 - baseShrink * (1 - smooth(0, 0.45, t)))
+          * (1 + v * 0.12 * rnd2(ss, 1500 + i * 41 + k));
         np = queuePlace(np, (i * 5 + k * 3) % nLeaf, EX, EY, ang + bend * t, i, 2, (k % 2 ? -1 : 1) * beta, size, pres * (k === sideN - 1 ? fracS : 1), placeKey(i, 5, k));
       }
     }

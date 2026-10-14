@@ -41,7 +41,7 @@ const GEOM_KEYS = [
   'arrangement', 'nodes', 'divergence', 'decussate', 'whorlCount', 'internode', 'internodeTaper', 'bareStem',
   'frontReach', 'thorns', 'thornAngle', 'thornPairs', 'foreshorten', 'perNode', 'bundleSpread', 'sheath', 'baseShrink', 'pegs',
   'spurs', 'spurEvery', 'spurLeaves', 'spurFan', 'spurLength', 'spurAngle',
-  'sideShoots', 'sideEvery', 'sideLength', 'sideAngle', 'sideNodes',
+  'sideShoots', 'sideEvery', 'sideLength', 'sideAngle', 'sideNodes', 'leaderScales',
   'insertion', 'tipInsertion', 'sizeGradient', 'stemWidth', 'stemTaper', 'stemCurve', 'stemDroop', 'zigzag', 'stemWander', 'spreadOut',
   'terminal', 'budType', 'budSize', 'budStem', 'leafVariety',
   'fruit', 'fruitNodes', 'fruitEvery', 'fruitTip', 'fruitCount', 'fruitSize', 'fruitLength', 'fruitPeduncle', 'fruitBudScales', 'fruitStalk', 'fruitHang', 'fruitSpread',
@@ -528,8 +528,16 @@ export default function create({ canvas, P, model, degrade }) {
     for (let i = 0; i < keys.length; i++) if (P[keys[i]] && P[keys[i]].value !== vals[keys[i]]) return false;
     return true;
   }
+  /**
+   * A preset's name as you'd say it: the menu's index form turned back round ('Oak, Holm' → 'Holm
+   * oak', "Cherry, Japanese 'Kanzan'" → "Japanese cherry 'Kanzan'"); one-word names as they are.
+   */
+  function spoken(name) {
+    const m = /^([^,]+), ([^']+?)( '.*')?$/.exec(name);
+    return m ? m[2] + ' ' + m[1].toLowerCase() + (m[3] || '') : name;
+  }
   function showLabel() {
-    label.textContent = labelName;
+    label.textContent = spoken(labelName);
     label.style.color = P.penColour.value;
     label.style.opacity = '0.7';
     labelShown = true;

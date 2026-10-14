@@ -9,6 +9,10 @@ export default {
   // The page opens on a random preset, then cycles on through the rest, in a loop that keeps
   // each morph small (tour.js), until the settings pane opens.
   autoplay: { hold: 1, sequence: tour() },
-  // The cover holds on each species, then morphs to the next, and back to the first.
-  capture: { presets: { sequence: ['Oak, English', 'Aspen', 'Eucalyptus'], hold: 1 }, crf: 31 },
+  // The cover holds on each species, then morphs to the next, and back to the first: an order
+  // that keeps each morph small.
+  capture: {
+    presets: { sequence: ['Oak, Holm', 'Pine, Scots', 'Laburnum', 'Ginkgo', 'Birch, Silver', 'Holly'], hold: 1 },
+    crf: 31,
+  },
 };

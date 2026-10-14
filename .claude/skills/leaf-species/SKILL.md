@@ -5,7 +5,7 @@ description: Add, edit or rename a species preset in the Leaf glimmer (src/sketc
 
 # Leaf species presets
 
-Read `src/sketches/leaf/NOTES.md` (Species presets, Fruit and flowers) and `TODO.md` (trees the engine can't draw yet, and why) first. If the tree needs something the engine has no control for, it belongs in `TODO.md`, not in a half-right preset: Hawthorn, Tulip tree and others were cut because they didn't read as themselves.
+Read `src/sketches/leaf/NOTES.md` (Species presets, Fruit and flowers, Trees Leaf can't draw) first. If the tree needs something the engine has no control for, build the part (`glimmers-elements`) or add it to Trees Leaf can't draw, not a half-right preset: Monkey puzzle, Lawson cypress and others were cut because they didn't read as themselves.
 
 ## Naming: horticultural conventions
 
@@ -23,7 +23,7 @@ Preset names are what a tree guide's index would print.
 ### Renaming a preset
 
 - Update `manifest.js`: `capture.presets.sequence` (`check.mjs` errors if it names a missing preset).
-- Update every mention of the old name in `NOTES.md` and `TODO.md`. In docs, write inverted names in backticks (`` `Oak, English` ``) so lists stay readable.
+- Update every mention of the old name in `NOTES.md`. In docs, write inverted names in backticks (`` `Oak, English` ``) so lists stay readable.
 - Then move the block to its new alphabetical place.
 - The kit doesn't save preset names, so renames break nobody's settings.
 
@@ -62,5 +62,5 @@ Preset names are what a tree guide's index would print.
 1. `node scripts/check.mjs leaf` should report 0 errors.
 2. Look at it: `node scripts/capture.mjs leaf --still <scratchpad>/x.png --preset 'Oak, English' --size 800x800 --dpr 2`, then read the PNG. Crop in on fruit, buds and margins at `--dpr 4`, because details that matter are small. Compare it with the tree, not just with the other presets.
 3. Morph to it from a very different preset and check that nothing jumps.
-4. Update `NOTES.md` (the count of presets, which ones are in autumn colour, anything new about fruit) and `TODO.md` if this unlocks or retires an entry.
+4. Update `NOTES.md`: the count of presets, which ones are in autumn colour, anything new about fruit, and Trees Leaf can't draw if this retires an entry.
 5. If the preset is in the cover sequence, offer to recapture the cover (`publish-glimmer`).

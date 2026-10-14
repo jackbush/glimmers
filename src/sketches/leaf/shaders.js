@@ -149,6 +149,9 @@ void main() {
     // Which half is shaded, bleeding unevenly across the midrib.
     float bleed = across + field(v_lp * 1.4, 2.0) * u_shadeBlend * 0.8;
     float shaded = 1.0 - smoothstep(-u_shadeBlend * 0.5, u_shadeBlend * 0.5, bleed);
+    // Ridge: a keeled needle has two flat faces meeting at a hard edge down the middle, so its
+    // shade breaks crisply at the midrib (spruce's four-sided needles), not in a soft bleed.
+    if (v_kind == 0 && u_ridge > 0.0) shaded = mix(shaded, clamp(0.5 - across / max(fwidth(across), 1e-4), 0.0, 1.0), u_ridge);
     // Gloss: a fruit's highlight on its lit side, a patch reserved from the wash with a crisp
     // edge that wanders like the wash's own (Halo jitter), growing with Gloss. across runs −1…1
     // over the width, along 0…1 over the length, so ×2 makes it round on a round fruit.
