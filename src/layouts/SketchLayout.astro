@@ -123,10 +123,16 @@ const { title, appTitle, background, image, imageAlt } = Astro.props;
     position: fixed; top: 0; right: 0; bottom: 0; z-index: 2; width: var(--pane-right);
     display: flex; flex-direction: column; color: var(--ink); background: var(--panel);
     border-left: 1px solid var(--line); font: 11px/1.4 var(--mono);
-    transform: translateX(102%); transition: transform .28s var(--ease);
+    transform: translateX(102%);
+    /* Closed, it's hidden once it has slid out, not just moved off screen: iOS Safari tints its
+       toolbar from what's drawn behind it, and a dark sheet parked just past the bottom edge
+       left the bar black after closing. Opening shows it at once, then it slides in. */
+    visibility: hidden; transition: transform .28s var(--ease), visibility 0s linear .28s;
   }
   /* Space toggles data-ui (on = buttons shown); the cog toggles data-pane. */
-  body[data-ui="on"][data-pane="open"] #panel { transform: none; }
+  body[data-ui="on"][data-pane="open"] #panel {
+    transform: none; visibility: visible; transition: transform .28s var(--ease), visibility 0s;
+  }
   body[data-ui="off"] .disc, body[data-ui="off"] #panel { display: none; }
   /* Phones: a bottom sheet over the lower two thirds of the visible screen. */
   @media (max-width: 699px) {
