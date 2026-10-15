@@ -236,7 +236,10 @@ const float BEHIND = ${BEHIND};
 // leave a visible kink (a band) at each one. The curve arrives at c5 flat, so past x = 1 the
 // colour carries on without a seam.
 vec3 ramp(float x, vec3 c0, vec3 c1, vec3 c2, vec3 c3, vec3 c4, vec3 c5) {
-  vec3 k[6] = vec3[6](c0, c1, c2, c3, c4, c5);
+  // Filled one by one: some Android GLSL compilers give an array constructor (vec3[6](…)) no
+  // precision and refuse to compile it.
+  vec3 k[6];
+  k[0] = c0; k[1] = c1; k[2] = c2; k[3] = c3; k[4] = c4; k[5] = c5;
   float s = clamp(x, 0.0, 1.0) * 5.0;
   int i = min(int(s), 4);
   float t = s - float(i), t2 = t * t, t3 = t2 * t;
