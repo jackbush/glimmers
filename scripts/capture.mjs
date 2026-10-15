@@ -17,7 +17,8 @@
 // --size is the CSS size of the frame (the index shows covers at 16:10, up to 840px wide);
 // --dpr 2 renders it at retina resolution. --start skips into the animation first.
 // --still writes a single PNG frame (at --start) instead of a cover: share images, icons.
-// --set overrides a param for this capture (repeatable), e.g. --set orbRadius=0.7.
+// --set overrides a param for this capture (repeatable), e.g. --set orbRadius=0.7; it wins over the
+// manifest's `capture.set`. `capture.pointer` parks a mouse on the frame for the clip (hover effects).
 // --preset lands on one of the sketch's presets instead of the manifest's sequence (a still of
 // any species, say), before --set applies.
 // A manifest `capture.presets` ({ sequence, hold }) morphs through the sketch's presets instead:
@@ -35,7 +36,7 @@ const { args, opt, has } = cli(['--seconds', '--start', '--fps', '--size', '--dp
 const still = opt('--still', null);
 // --set key=value, repeatable. Numbers and true/false are converted; anything else stays a string.
 const argv = process.argv.slice(2);
-const overrides = argv.flatMap((a, i) => (a === '--set' ? [argv[i + 1]] : [])).map((kv) => {
+const cliOverrides = argv.flatMap((a, i) => (a === '--set' ? [argv[i + 1]] : [])).map((kv) => {
   const [k, v] = kv.split('=');
   return [k, v === 'true' ? true : v === 'false' ? false : Number.isFinite(Number(v)) ? Number(v) : v];
 });
@@ -55,6 +56,8 @@ if (spawnSync('ffmpeg', ['-version']).status !== 0) {
 const { default: manifest } = await import(join(dir, 'manifest.js'));
 const { presetHold, ...captureDefaults } = MANIFEST_DEFAULTS.capture;
 const preset = { ...captureDefaults, animate: {}, ...(manifest.capture || {}) };
+// Params held for the clip: the manifest's `set`, then --set on the command line.
+const overrides = [...Object.entries(preset.set || {}).filter(([k]) => !cliOverrides.some(([c]) => c === k)), ...cliOverrides];
 // A preset sequence (manifest capture.presets): hold each, morph to the next, loop.
 const only = opt('--preset', null);
 const seq = only ? [only] : preset.presets?.sequence || [];
@@ -99,6 +102,8 @@ try {
     await chrome.evaluate(`window.__glimmer.preset(${JSON.stringify(seq[0])}, 0); for (let i = 0; i < ${Math.round(3 * fps)}; i++) window.__glimmer.step(${1 / fps})`);
   }
   for (const [k, v] of overrides) await chrome.evaluate(`window.__glimmer.set(${JSON.stringify(k)}, ${JSON.stringify(v)})`);
+  // A mouse parked on the frame (manifest capture.pointer), for sketches that respond to hovering.
+  if (preset.pointer) await chrome.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: preset.pointer[0] * W, y: preset.pointer[1] * H });
 
   // Skip ahead at the capture timestep, so physics-style sketches see the same dt as in the clip.
   const skip = Math.round(start * fps);
@@ -153,7 +158,7 @@ const stillPreset = preset.share || seq[0];
 function renderStill(file, size, sdpr) {
   const self = spawnSync('node', [new URL(import.meta.url).pathname, slug, '--still', file, '--size', size, '--dpr', String(sdpr),
     '--start', String(start), ...(opt('--url', null) ? ['--url', opt('--url', null)] : []),
-    ...(stillPreset ? ['--preset', stillPreset] : []), ...overrides.flatMap(([k, v]) => ['--set', `${k}=${v}`])],
+    ...(stillPreset ? ['--preset', stillPreset] : []), ...cliOverrides.flatMap(([k, v]) => ['--set', `${k}=${v}`])],
     { stdio: ['ignore', 'ignore', 'inherit'], env: { ...process.env, GLIMMERS_BUILT: '1' } }); // built already
   if (self.status !== 0) throw new Error('still capture failed: ' + file);
 }

@@ -78,7 +78,7 @@ export function buildLoops(segs, count) {
     count: ref.length,
     /** Loop n's vertices are start[n] … start[n + 1] − 1. */
     start: Int32Array.from(start),
-    /** A segment offset of loop n's constellation, for its index, culture, rank and centre. */
+    /** A segment offset of loop n's constellation, for its index, culture and centre. */
     ref: Int32Array.from(ref),
     verts: Float32Array.from(verts),
     /** Scratch: the vertices on screen, canvas px. */
@@ -111,11 +111,11 @@ const ends = new Float32Array(4);
 function pick(P, f, segs, count, loops, x, y, px) {
   const reach = P.hoverReach.value * px;
   if (!(reach > 0) || x !== x) return -1;
-  const culture = f.f_culture[0], rank = f.f_culture[1], overlap = P.traceOverlap.value;
+  const culture = f.f_culture[0], overlap = P.traceOverlap.value;
   let best = -1, bestD = reach * reach;
   for (let i = 0; i < count; i++) {
     const o = i * L.stride;
-    if (segs[o + L.culture] !== culture || segs[o + L.rank] > rank) continue;
+    if (segs[o + L.culture] !== culture) continue;
     showing(P, f, segs, o);
     const grown = clamp((show[0] - segs[o + L.order] * (1 - overlap)) / overlap, 0, 1);
     if (grown * show[1] < VISIBLE) continue;
@@ -129,7 +129,7 @@ function pick(P, f, segs, count, loops, x, y, px) {
   if (best >= 0) return best;
   for (let n = 0; n < loops.count; n++) {
     const o = loops.ref[n];
-    if (segs[o + L.culture] !== culture || segs[o + L.rank] > rank) continue;
+    if (segs[o + L.culture] !== culture) continue;
     showing(P, f, segs, o);
     if (show[0] < TRACED || show[1] < VISIBLE) continue;
     const a = loops.start[n], b = loops.start[n + 1], s = loops.screen;

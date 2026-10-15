@@ -61,10 +61,9 @@ for (let i = 0; i < SEG_N; i++) {
   eqVector(v(0), v(1), segAttrs, o + L.from);
   eqVector(v(2), v(3), segAttrs, o + L.to);
   eqVector(v(4), v(5), segAttrs, o + L.centre);
-  segAttrs[o + L.rank] = raw(6);
-  segAttrs[o + L.order] = v(7);
-  segAttrs[o + L.index] = raw(8);
-  segAttrs[o + L.culture] = raw(9);
+  segAttrs[o + L.order] = v(6);
+  segAttrs[o + L.index] = raw(7);
+  segAttrs[o + L.culture] = raw(8);
 }
 // Every enclosed shape of every constellation, for hovering inside one.
 const loops = buildLoops(segAttrs, SEG_N);
@@ -137,7 +136,7 @@ export default function create({ canvas, P, model, degrade }) {
 
     // In SEG_LAYOUT's order. The attribute locations are fixed in the GLSL, so the flare pass
     // draws from this vertex array too.
-    lineVao = attribs(passLines.prog, segAttrs, [['a_from', 3], ['a_to', 3], ['a_centre', 3], ['a_rank', 1], ['a_order', 1], ['a_index', 1], ['a_culture', 1]], 1);
+    lineVao = attribs(passLines.prog, segAttrs, [['a_from', 3], ['a_to', 3], ['a_centre', 3], ['a_order', 1], ['a_index', 1], ['a_culture', 1]], 1);
     starVao = attribs(passStars.prog, starAttrs, [['a_eq', 3], ['a_mag', 1], ['a_col', 3]], 0);
     emptyVao = gl.createVertexArray();
 
@@ -275,7 +274,7 @@ export default function create({ canvas, P, model, degrade }) {
       }
       label.show(hover.update(P, frameVals, segAttrs, SEG_N, loops, pointer, rt, rdt, pxRatio));
       // A tap's name rides on the tapped point of the sky.
-      if (hover.anchored) label.move(hover.anchor[0] / pxRatio, (h - hover.anchor[1]) / pxRatio);
+      if (hover.anchored) label.move(hover.anchor[0] / pxRatio, (h - hover.anchor[1]) / pxRatio, true);
 
       // Light: lines, stars and meteors added together.
       gl.bindFramebuffer(gl.FRAMEBUFFER, lightFbo);

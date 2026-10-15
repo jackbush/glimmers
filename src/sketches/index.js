@@ -14,9 +14,7 @@ export default {
   sketches: [
     'blackstar',
     'sprig',
+    'atlas-nights',
     'orb',
-    'constellations',
-    'cubeland',
-    // 'mindflow',
   ],
 };

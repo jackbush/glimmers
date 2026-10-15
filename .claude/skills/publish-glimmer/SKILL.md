@@ -46,6 +46,7 @@ The cover is `cover.mp4` + `cover.jpg` in the sketch folder, plus `share.jpg` (t
 - Look at the cover: extract the first and middle frames (`ffmpeg -i cover.mp4 -vf "select='eq(n,0)+eq(n,90)',scale=840:-2,tile=1x2" -frames:v 1 <scratchpad>/cover.png`) and read the PNG. An empty or black frame usually means the sketch needs a `capture.start` so something has happened before recording.
 - **Size:** report it. Over **3MB**, warn, and suggest a higher `capture.crf` (grain and noise are the usual cause; Blackstar uses 29) or fewer `seconds`. Don't change the manifest without asking.
 - **Motion:** if the sketch's interest comes from params the viewer would change (Mindflow's brain data), sweep them with `capture.animate: { key: [from, to] }`, which goes from → to → from over the clip, eased. Use `pingpong: false` with it, since the sweep already loops.
+- **Cover-only settings:** `capture.set: { key: value }` holds params for the clip and its stills without touching the defaults (e.g. a faster loop); `capture.pointer: [x, y]` parks a mouse on the frame (shares of width and height) for sketches with hover effects. Atlas Nights uses both.
 - **Loop:** ping-pong (forwards then backwards) is the default. If the motion looks wrong reversed (falling, flowing one way), suggest `pingpong: false` with a `start` in the steady state, as Cubeland does.
 
 ## 5. Static performance scan

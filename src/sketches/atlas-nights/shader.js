@@ -63,10 +63,9 @@ const LINE_SEGMENT = `
 layout(location = 0) in vec3 a_from;
 layout(location = 1) in vec3 a_to;
 layout(location = 2) in vec3 a_centre;
-layout(location = 3) in float a_rank;
-layout(location = 4) in float a_order;
-layout(location = 5) in float a_index;
-layout(location = 6) in float a_culture;
+layout(location = 3) in float a_order;
+layout(location = 4) in float a_index;
+layout(location = 5) in float a_culture;
 // The drawn part of this segment in canvas px (s → e, stopping Gap short of the stars), its
 // fade and its hover highlight. False when nothing of it shows.
 bool lineSegment(out vec2 s, out vec2 e, out float fade, out float hover) {
@@ -77,7 +76,7 @@ bool lineSegment(out vec2 s, out vec2 e, out float fade, out float hover) {
   hover = (abs(a_index - f_hover.x) < 0.5 ? f_hover.y : 0.0) + (abs(a_index - f_hover.z) < 0.5 ? f_hover.w : 0.0);
   // Segments grow in drawing order, each over a window of traceOverlap of the progress.
   float grown = clamp((progress - a_order * (1.0 - u_traceOverlap)) / u_traceOverlap, 0.0, 1.0);
-  if (abs(a_culture - f_culture.x) > 0.5 || a_rank > f_culture.y + 0.5 || grown <= 0.0 || fade <= 0.0 || min(ca.z, cb.z) < BEHIND) return false;
+  if (abs(a_culture - f_culture) > 0.5 || grown <= 0.0 || fade <= 0.0 || min(ca.z, cb.z) < BEHIND) return false;
   vec2 p0 = project(ca), p1 = project(cb);
   float len = length(p1 - p0);
   vec2 dir = (p1 - p0) / max(len, 1e-3);
@@ -88,10 +87,10 @@ bool lineSegment(out vec2 s, out vec2 e, out float fade, out float hover) {
 }`;
 
 /** Where each field sits in a segment's attributes (sketch.js builds them; hover.js reads them). */
-export const SEG_LAYOUT = { stride: 13, from: 0, to: 3, centre: 6, rank: 9, order: 10, index: 11, culture: 12 };
+export const SEG_LAYOUT = { stride: 12, from: 0, to: 3, centre: 6, order: 9, index: 10, culture: 11 };
 
-// Sky culture menu label → [culture index in sky.js, highest rank drawn], looked up per frame.
-const CULTURE_OF = new Map(SKY_CULTURES.map((c) => [c.label, [CULTURES.indexOf(c.culture), c.rank]]));
+// Sky culture menu label → its index in sky.js's CULTURES, looked up per frame.
+const CULTURE_OF = new Map(SKY_CULTURES.map((c) => [c.label, CULTURES.indexOf(c.culture)]));
 
 export default {
   maxMeteors: MAX_METEORS,
@@ -113,7 +112,7 @@ export default {
     f_glow: 2,        // the twilight gradient's length and its top's altitude now, degrees
     f_lines: 2,       // dusk gate on tracing in, dawn gate on fading (0–1 each)
     f_hover: 4,       // hovered constellation's index and highlight (0–1), then the one easing out (index −1 = none)
-    f_culture: 2,     // the sky culture drawn (index in sky.js CULTURES) and the highest rank drawn
+    f_culture: 1,     // the sky culture drawn (index in sky.js CULTURES)
     f_meteor: [MAX_METEORS * METEOR_FIELDS],
   },
 
@@ -135,9 +134,7 @@ export default {
     f.f_sky[1] = Math.PI + sunHour; // azimuth: south at the peak, west after
     f.f_sky[2] = P.nightLimit.value + (P.twilightLimit.value - P.nightLimit.value) * tw;
 
-    const culture = CULTURE_OF.get(P.skyCulture.value); // a select only ever holds one of its options
-    f.f_culture[0] = culture[0];
-    f.f_culture[1] = culture[1];
+    f.f_culture[0] = CULTURE_OF.get(P.skyCulture.value); // a select only ever holds one of its options
 
     const gate = 1 - smoothstep(0, P.lineTwilight.value, tw);
     f.f_lines[0] = phase >= 0 ? gate : 1; // dusk: constellations wait for the dark to trace in
@@ -299,8 +296,8 @@ void main() {
   // flaring; the two sides choose separately, so flares aren't mirrored. A flare's outline is
   // noise in the line's own coordinates (along it, away from it) streaming outward, cut off at
   // a height that rises with the section's flare, so its edge is ragged. A hovered
-  // constellation blends to its own set of all these (the Hover group), and holds its sections
-  // steady.
+  // constellation has its own set of all these (the Hover group) and holds its sections steady;
+  // the two looks are drawn whole and cross-faded as the hover comes and goes.
   flareVert: `
 ${LINE_SEGMENT}
 out vec2 v_pos;    // canvas px: along the segment from its start, and across it (signed)
@@ -327,36 +324,43 @@ in float v_alpha;
 in float v_hover;
 in float v_seed;
 out vec4 outColor;
-// How much section "cell" of one edge is flaring, 0–1. It flickers in time slots (on with
-// chance "share", a bump in time that's zero at each slot change, offset per section so they
-// don't switch together); a hovered line picks its sections once and holds them.
-float sectionFlare(float cell, float share, float seed) {
+// How much section "cell" of one edge is flaring, 0–1. Unhovered, it flickers in time slots (on
+// with chance "share", a bump in time that's zero at each slot change, offset per section so
+// they don't switch together); hovered, the line picks its sections once and holds them.
+float sectionFlare(float cell, float share, float seed, bool hovered) {
+  if (hovered) return step(hash(vec3(cell, seed, 7.0)), share);
   float tt = u_realTime * u_flareSpeed + hash(vec3(cell, seed, 3.0));
-  float flicker = step(hash(vec3(cell, floor(tt), seed)), share) * sin(PI * fract(tt));
-  float steady = step(hash(vec3(cell, seed, 7.0)), share);
-  return mix(flicker, steady, v_hover);
+  return step(hash(vec3(cell, floor(tt), seed)), share) * sin(PI * fract(tt));
+}
+// One look of an edge's flare at (along, dist), CSS px, 0–1: sections along the line, then
+// ragged tongues: two octaves of noise in line space, stretched outward (so it streaks into
+// tongues) and streaming outward over time, reaching as far as the section's flare × noise
+// (as a share of reach), so the edge is jagged.
+float flareLook(float along, float dist, float len, float seed, bool hovered,
+                float share, float section, float scale, float stretch, float rise, float softness, float reach) {
+  float u = along / max(section, 1.0) + seed;
+  float cell = floor(u);
+  // Blended section to section, eased out at the line's ends.
+  float env = mix(sectionFlare(cell, share, seed, hovered), sectionFlare(cell + 1.0, share, seed, hovered), smoothstep(0.0, 1.0, fract(u)));
+  float ends = min(20.0, 0.25 * len);
+  env *= smoothstep(0.0, ends, along) * smoothstep(0.0, ends, len - along);
+  vec3 p = vec3(along, (dist - u_realTime * rise) / max(stretch, 0.1), seed * 0.37) / max(scale, 1.0);
+  float n = 0.5 + 0.5 * (0.65 * snoise(p) + 0.35 * snoise(p * 2.3 + 11.0));
+  float x = dist / max(reach, 1e-3);
+  return smoothstep(0.0, max(softness, 1e-3), env * n - x) * (1.0 - 0.6 * x);
 }
 void main() {
   // In CSS px: where along the line, how far off it, and which edge.
   float along = v_pos.x / f_px, dist = abs(v_pos.y) / f_px, len = v_len / f_px;
   float seed = v_seed + (v_pos.y < 0.0 ? 211.0 : 0.0);
-  float u = along / max(mix(u_flareSection, u_hoverFlareSection, v_hover), 1.0) + seed;
-  float cell = floor(u);
-  float share = mix(u_flareShare, u_hoverFlareShare, v_hover);
-  // This edge's flare along the line, blended section to section, eased out at the ends.
-  float env = mix(sectionFlare(cell, share, seed), sectionFlare(cell + 1.0, share, seed), smoothstep(0.0, 1.0, fract(u)));
-  float ends = min(20.0, 0.25 * len);
-  env *= smoothstep(0.0, ends, along) * smoothstep(0.0, ends, len - along);
-
-  // Ragged tongues: two octaves of noise in line space, stretched outward (so it streaks into
-  // tongues) and streaming outward over time. The tongue reaches as far as env × noise (as a
-  // share of reach), so its edge is jagged.
-  float rise = mix(u_flareRise, u_hoverFlareRise, v_hover), stretch = mix(u_flareStretch, u_hoverFlareStretch, v_hover);
-  vec3 p = vec3(along, (dist - u_realTime * rise) / max(stretch, 0.1), seed * 0.37) / max(mix(u_flareScale, u_hoverFlareScale, v_hover), 1.0);
-  float n = 0.5 + 0.5 * (0.65 * snoise(p) + 0.35 * snoise(p * 2.3 + 11.0));
-  float x = dist / max(mix(u_flareReach, u_hoverFlareReach, v_hover), 1e-3);
-  float tongue = smoothstep(0.0, max(mix(u_flareSoftness, u_hoverFlareSoftness, v_hover), 1e-3), env * n - x) * (1.0 - 0.6 * x);
-  outColor = vec4(mix(u_flare, u_hoverFlare, v_hover) * tongue * v_alpha, 0.0, 0.0, 0.0);
+  // The unhovered and hovered looks are drawn whole and cross-faded. Blending their settings
+  // instead slides the section boundaries and races the noise (rise scales the clock), which
+  // shows as a moving interference pattern through a slow fade.
+  float plain = v_hover < 1.0 ? u_flare * flareLook(along, dist, len, seed, false,
+    u_flareShare, u_flareSection, u_flareScale, u_flareStretch, u_flareRise, u_flareSoftness, u_flareReach) : 0.0;
+  float lit = v_hover > 0.0 ? u_hoverFlare * flareLook(along, dist, len, seed, true,
+    u_hoverFlareShare, u_hoverFlareSection, u_hoverFlareScale, u_hoverFlareStretch, u_hoverFlareRise, u_hoverFlareSoftness, u_hoverFlareReach) : 0.0;
+  outColor = vec4(mix(plain, lit, v_hover) * v_alpha, 0.0, 0.0, 0.0);
 }`,
 
   // One point per star. Its magnitude is dimmed by the air it shines through (more near the

@@ -6,7 +6,9 @@
 // tap's name rides along with the sky (one transform per frame then).
 
 import { NAMES } from './sky.js';
+import { SKY_CULTURES } from './cultures.js';
 
+const SERIF = '"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif';
 const CURSOR = 21; // CSS px square, about the size of the system crosshair; hotspot in the middle
 
 /**
@@ -32,11 +34,30 @@ function crosshair(colour, opacity, scale) {
  * @param {Record<string, any>} P
  * @param {{ version: number }} model
  */
+// Native names in a culture's own hand: its font, loaded the first time it's needed (until it
+// arrives, and for cultures without one, the label's own serif shows).
+/** @type {Map<string, string>} menu label → CSS font-family */
+const families = new Map();
+function nativeFont(label) {
+  if (!families.has(label)) {
+    const c = SKY_CULTURES.find((x) => x.label === label);
+    let family = ''; // inherit the label's serif
+    if (c && c.font) {
+      const face = new FontFace(c.font.family, 'url(' + c.font.url + ')');
+      document.fonts.add(face);
+      face.load().catch(() => {}); // a font that fails to load leaves the fallback
+      family = '"' + c.font.family + '", ' + SERIF;
+    }
+    families.set(label, family);
+  }
+  return families.get(label);
+}
+
 export function createLabel(canvas, P, model) {
   const el = document.createElement('div');
   el.setAttribute('aria-hidden', 'true'); // a hover flourish; the names aren't content
   el.style.cssText = 'position:fixed;left:0;top:0;pointer-events:none;white-space:nowrap;opacity:0;' +
-    'font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;font-style:italic;line-height:1;';
+    'font-family:' + SERIF + ';font-style:italic;line-height:1;';
   const nativeEl = document.createElement('bdi');
   nativeEl.style.fontStyle = 'normal';
   const nameEl = document.createElement('span');
@@ -55,10 +76,15 @@ export function createLabel(canvas, P, model) {
     canvas.style.cursor = 'image-set(' + one + ' 1x, ' + two + ' 2x)' + hot;
   }
   return {
-    /** Put the name beside (x, y), CSS px from the canvas's top left: the pointer, or a tapped point. */
-    move(x, y) {
+    /**
+     * Put the name beside (x, y), CSS px from the canvas's top left: below and right of the
+     * pointer, or below and left of a tapped point (`left`), clear of the finger on the right.
+     */
+    move(x, y, left = false) {
       const off = P.labelOffset.value;
-      el.style.transform = 'translate(' + (x + off) + 'px,' + (y + off) + 'px)';
+      el.style.transform = left
+        ? 'translate(calc(' + (x - off) + 'px - 100%),' + (y + off) + 'px)'
+        : 'translate(' + (x + off) + 'px,' + (y + off) + 'px)';
     },
     /** Show constellation `index` (−1 hides it). Called every frame; writes only on change. */
     show(index) {
@@ -84,6 +110,7 @@ export function createLabel(canvas, P, model) {
         // right-to-left run doesn't reorder the brackets; then the translation in brackets.
         const [name, native] = NAMES[index];
         if (native) {
+          nativeEl.style.fontFamily = nativeFont(P.skyCulture.value);
           nativeEl.textContent = native;
           nameEl.textContent = ' (' + name + ')';
         } else {

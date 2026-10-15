@@ -1,19 +1,18 @@
-// Atlas Nights — the sky cultures the Constellations dropdown offers, in menu order. Each names a
-// culture in sky.js's CULTURES, and for the western one how many of its 88 to draw (by rank).
-//
-// The Arabic sets are the traditions with a history in Morocco: the lunar mansions (manāzil)
-// that the Maghreb's farming calendar ran on; al-Ṣūfī's 10th-century Book of the Fixed Stars,
-// the star map of Islamic astronomy (and of the astrolabes made in Fez and Marrakech); and the
-// Bedouin asterisms the Arab tribes carried west. They come from Stellarium's sky cultures,
-// by Khalid al-Ajaji (CC BY-ND 4.0), unaltered. The Tuareg set is the Saharan Amazigh sky
-// Henri Duveyrier recorded from the Kel Ajjer in 1864: his names and stars, our lines.
+// Atlas Nights — the sky cultures the Constellations dropdown offers, in menu order, each naming
+// a culture in sky.js's CULTURES and, where the culture has its own hand, the font its native
+// names are set in. Where each comes from, and how it was put together, is in SKY-CULTURES.md.
+
+// Font URLs are written out in full so the bundler sees and ships the files.
+const font = (family, url) => ({ family, url: url.href });
 
 export const SKY_CULTURES = [
-  { label: 'Western: main', culture: 'western', rank: 1 },
-  { label: 'Western: more', culture: 'western', rank: 2 },
-  { label: 'Western: all 88', culture: 'western', rank: 3 },
-  { label: 'Arabic: lunar mansions', culture: 'arabic_lunar_stations', rank: 1 },
-  { label: 'Arabic: al-Ṣūfī', culture: 'arabic_al-sufi', rank: 1 },
-  { label: 'Arabic: Bedouin', culture: 'arabic_ancient', rank: 1 },
-  { label: 'Amazigh: Tuareg', culture: 'tuareg', rank: 1 },
+  { label: 'Bedouin', culture: 'arabic_ancient' },
+  // Tuareg Tifinagh in its Ghat letterforms, near where Duveyrier's informants lived (Noto, OFL).
+  { label: 'Tuareg', culture: 'tuareg', font: font('Noto Sans Tifinagh Ghat', new URL('./fonts/NotoSansTifinaghGhat-Regular.ttf', import.meta.url)) },
+  // Maghribi script: Youssef Jabri's Rabat (Maghribi Mabsout), "may be used freely"; shipped as
+  // downloaded, unmodified, as its licence asks.
+  { label: 'Maghrebi', culture: 'arabic_lunar_stations', font: font('Rabat', new URL('./fonts/Rabat.otf', import.meta.url)) },
+  { label: 'Arabic', culture: 'arabic_al-sufi' },
+  { label: 'Greek', culture: 'greek' },
+  { label: 'Western', culture: 'western' },
 ];

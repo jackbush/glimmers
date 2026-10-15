@@ -17,11 +17,11 @@ export default [
   {
     group: 'Night',
     params: [
-      { key: 'nightLength', label: 'Loop (s)', value: 96, min: 20, max: 300, step: 1, uniform: false, desc: 'Seconds for one whole day and night. The sky turns once per loop.' },
+      { key: 'nightLength', label: 'Loop (s)', value: 120, min: 20, max: 300, step: 1, uniform: false, desc: 'Seconds for one whole day and night. The sky turns once per loop.' },
       { key: 'startPhase', label: 'Start', value: 0, min: 0, max: 1, step: 0.005, uniform: false, desc: 'Where the loop starts: 0 = the brightest twilight, 0.5 = the dead of night.' },
       { key: 'dragSpan', label: 'Drag span', value: 0.25, min: 0.02, max: 1, step: 0.01, uniform: false, desc: 'Dragging across the sky turns time: one screen width is this share of a loop (right = forward). Mostly vertical drags do nothing.' },
-      { key: 'month', label: 'Month', value: 6.3, min: 1, max: 12.99, step: 0.1, uniform: false, desc: 'Time of year: which stars fill the night. 12.5 = mid-December.' },
-      { key: 'twilightShare', label: 'Twilight share', value: 0.22, min: 0.05, max: 0.6, step: 0.005, uniform: false, desc: 'Share of the loop with any light in the sky. The rest is full night.' },
+      { key: 'month', label: 'Month', value: 2.5, min: 1, max: 12.99, step: 0.1, uniform: false, desc: 'Time of year: which stars fill the night. 12.5 = mid-December.' },
+      { key: 'twilightShare', label: 'Twilight share', value: 0.375, min: 0.05, max: 0.6, step: 0.005, uniform: false, desc: 'Share of the loop with any light in the sky. The rest is full night.' },
     ],
   },
   {
@@ -29,7 +29,7 @@ export default [
     params: [
       { key: 'fov', label: 'Field of view', value: 84, min: 30, max: 120, step: 1, uniform: false, desc: 'How much sky fits top to bottom.' },
       { key: 'minWidth', label: 'Min width', value: 55, min: 20, max: 120, step: 1, uniform: false, desc: 'The narrowest view across, in degrees. Phones in portrait zoom out to keep it.' },
-      { key: 'horizon', label: 'Horizon height', value: 0.02, min: 0, max: 0.4, step: 0.005, uniform: false, desc: 'Where the southern horizon sits, as a share of the screen height from the bottom.' },
+      { key: 'horizon', label: 'Horizon height', value: 0.055, min: 0, max: 0.4, step: 0.005, uniform: false, desc: 'Where the southern horizon sits, as a share of the screen height from the bottom.' },
     ],
   },
   {
@@ -78,7 +78,7 @@ export default [
   {
     group: 'Constellations',
     params: [
-      { key: 'skyCulture', label: 'Sky culture', type: 'select', uniform: false, value: SKY_CULTURES[0].label, options: SKY_CULTURES.map((c) => c.label), desc: 'Whose constellations to draw. Western: the 88 of modern star charts (Greek in origin), from the main few to all. Arabic, the traditions with a history in Morocco: the lunar mansions the farming calendar ran on, al-Ṣūfī\'s 10th-century star book, and the older Bedouin asterisms (Stellarium\'s sky cultures, by Khalid al-Ajaji, CC BY-ND 4.0). Amazigh: the Tuareg sky Henri Duveyrier recorded in 1864.' },
+      { key: 'skyCulture', label: 'Sky culture', type: 'select', uniform: false, value: 'Bedouin', options: SKY_CULTURES.map((c) => c.label), desc: 'Whose constellations to draw: Bedouin (the old Arabian desert sky), Tuareg (as recorded in 1864), Maghrebi (the lunar mansions of the farming calendar), Arabic (al-Ṣūfī\'s 10th-century star book), Greek (Ptolemy\'s 48), Western (the IAU\'s 88). Sources and credits: SKY-CULTURES.md.' },
       { key: 'lineWidth', label: 'Width', value: 0.8, min: 0.25, max: 4, step: 0.05, desc: 'Width of the bright core of each line.' },
       { key: 'lineOpacity', label: 'Opacity', value: 0.36, min: 0, max: 1, step: 0.01, desc: 'How strongly the swirl shows through each line\'s core.' },
       { key: 'lineGlowWidth', label: 'Glow width', value: 5, min: 0, max: 16, step: 0.1, desc: 'Width of the dim glow around each line.' },
@@ -89,7 +89,7 @@ export default [
       { key: 'traceOverlap', label: 'Trace overlap', value: 0.02, min: 0.02, max: 1, step: 0.01, desc: 'How many lines grow at once as a constellation traces in: low = one after another.' },
       { key: 'fadeStart', label: 'Start fading', value: 4.5, min: -12, max: 12, step: 0.1, desc: 'Hour angle where a setting constellation starts to fade.' },
       { key: 'fadeEnd', label: 'Gone', value: 9, min: -12, max: 12, step: 0.1, desc: 'Hour angle where it has faded out.' },
-      { key: 'lineTwilight', label: 'Dark enough', value: 0.3, min: 0.01, max: 1, step: 0.01, uniform: false, desc: 'Lines trace in at dusk once the twilight drops below this, and fade at dawn as it passes it (0 = full dark, 1 = brightest).' },
+      { key: 'lineTwilight', label: 'Dark enough', value: 0.74, min: 0.01, max: 1, step: 0.01, uniform: false, desc: 'Lines trace in at dusk once the twilight drops below this, and fade at dawn as it passes it (0 = full dark, 1 = brightest).' },
     ],
   },
   {
@@ -135,24 +135,24 @@ export default [
       { key: 'hoverFlare', label: 'Leaks', value: 1.5, min: 0, max: 8, step: 0.01, desc: 'Brightness of the light leaking off a hovered constellation\'s lines, held steady. 0 = none.', when: { key: 'hoverReach', not: [0] } },
       { key: 'hoverFlareReach', label: 'Leak reach', value: 60, min: 1, max: 150, step: 0.5, desc: 'How far the longest flares reach off a hovered constellation\'s lines.', when: { key: 'hoverFlare', not: [0] } },
       { key: 'hoverFlareShare', label: 'Leak share', value: 0.85, min: 0, max: 1, step: 0.01, desc: 'How much of a hovered constellation\'s lines flare.', when: { key: 'hoverFlare', not: [0] } },
-      { key: 'hoverFlareSection', label: 'Leak section', value: 240, min: 5, max: 400, step: 1, desc: 'Length of the sections that flare on a hovered constellation: high = long unbroken runs.', when: { key: 'hoverFlare', not: [0] } },
-      { key: 'hoverFlareScale', label: 'Leak detail', value: 8, min: 1, max: 60, step: 0.5, desc: 'Size of the ragged detail in a hovered flare\'s outline: lower = more jagged.', when: { key: 'hoverFlare', not: [0] } },
-      { key: 'hoverFlareStretch', label: 'Leak stretch', value: 6.5, min: 0.5, max: 10, step: 0.1, desc: 'How drawn out hovered flares are away from the line: high = long thin tongues, 1 = blotches.', when: { key: 'hoverFlare', not: [0] } },
-      { key: 'hoverFlareRise', label: 'Leak rise', value: 46, min: 0, max: 100, step: 0.5, desc: 'How fast hovered flares stream outward (px per second).', when: { key: 'hoverFlare', not: [0] } },
-      { key: 'hoverFlareSoftness', label: 'Leak softness', value: 0.96, min: 0.01, max: 1, step: 0.01, desc: 'How soft a hovered flare\'s edge is: low = crisp tongues, high = hazy.', when: { key: 'hoverFlare', not: [0] } },
+      { key: 'hoverFlareSection', label: 'Leak section', value: 298, min: 5, max: 400, step: 1, desc: 'Length of the sections that flare on a hovered constellation: high = long unbroken runs.', when: { key: 'hoverFlare', not: [0] } },
+      { key: 'hoverFlareScale', label: 'Leak detail', value: 17, min: 1, max: 60, step: 0.5, desc: 'Size of the ragged detail in a hovered flare\'s outline: lower = more jagged.', when: { key: 'hoverFlare', not: [0] } },
+      { key: 'hoverFlareStretch', label: 'Leak stretch', value: 9.1, min: 0.5, max: 10, step: 0.1, desc: 'How drawn out hovered flares are away from the line: high = long thin tongues, 1 = blotches.', when: { key: 'hoverFlare', not: [0] } },
+      { key: 'hoverFlareRise', label: 'Leak rise', value: 15.5, min: 0, max: 100, step: 0.5, desc: 'How fast hovered flares stream outward (px per second).', when: { key: 'hoverFlare', not: [0] } },
+      { key: 'hoverFlareSoftness', label: 'Leak softness', value: 1, min: 0.01, max: 1, step: 0.01, desc: 'How soft a hovered flare\'s edge is: low = crisp tongues, high = hazy.', when: { key: 'hoverFlare', not: [0] } },
       { key: 'labelOpacity', label: 'Name', value: 0.92, min: 0, max: 1, step: 0.01, uniform: false, desc: 'Opacity of the name label. 0 = no label.', when: { key: 'hoverReach', not: [0] } },
       { key: 'labelSize', label: 'Name size', value: 14, min: 9, max: 32, step: 0.5, uniform: false, desc: 'Font size of the name.', when: { key: 'labelOpacity', not: [0] } },
       { key: 'labelBackground', label: 'Lozenge', type: 'color', value: '#000000', desc: 'Colour of the lozenge behind the name.', uniform: false, when: { key: 'labelOpacity', not: [0] } },
-      { key: 'labelOffset', label: 'Name offset', value: 7, min: 0, max: 60, step: 1, uniform: false, desc: 'How far below and right of the pointer the name sits.', when: { key: 'labelOpacity', not: [0] } },
+      { key: 'labelOffset', label: 'Name offset', value: 7, min: 0, max: 60, step: 1, uniform: false, desc: 'How far the name sits below the pointer, and right of it (left of a tapped point, clear of the finger).', when: { key: 'labelOpacity', not: [0] } },
     ],
   },
   {
     group: 'Shooting stars',
     params: [
-      { key: 'meteorRate', label: 'Per loop', value: 1.2, min: 0, max: 20, step: 0.1, uniform: false, desc: 'Shooting stars per loop, on average. Many loops have none.' },
+      { key: 'meteorRate', label: 'Per loop', value: 1.1, min: 0, max: 20, step: 0.1, uniform: false, desc: 'Shooting stars per loop, on average. Many loops have none.' },
       { key: 'meteorTime', label: 'Duration (s)', value: 0.65, min: 0.1, max: 3, step: 0.05, uniform: false, desc: 'How long each one lasts.', when: { key: 'meteorRate', not: [0] } },
       { key: 'meteorLength', label: 'Length', value: 156, min: 20, max: 600, step: 1, uniform: false, desc: 'How far it travels.', when: { key: 'meteorRate', not: [0] } },
-      { key: 'meteorTail', label: 'Tail', value: 0.88, min: 0.05, max: 1, step: 0.01, uniform: false, desc: 'Length of the glowing trail, as a share of how far it travels.', when: { key: 'meteorRate', not: [0] } },
+      { key: 'meteorTail', label: 'Tail', value: 0.62, min: 0.05, max: 1, step: 0.01, uniform: false, desc: 'Length of the glowing trail, as a share of how far it travels.', when: { key: 'meteorRate', not: [0] } },
       { key: 'meteorWidth', label: 'Width', value: 0.8, min: 0.25, max: 6, step: 0.05, desc: 'Width of the trail.', when: { key: 'meteorRate', not: [0] } },
       { key: 'meteorBrightness', label: 'Brightness', value: 0.95, min: 0, max: 4, step: 0.01, desc: 'Brightness of the head.', when: { key: 'meteorRate', not: [0] } },
       { key: 'meteorColour', label: 'Colour', type: 'color', value: '#e6efff', desc: 'Trail colour.', when: { key: 'meteorRate', not: [0] } },

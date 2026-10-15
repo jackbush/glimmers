@@ -35,6 +35,13 @@ export const manifestSchema = z
         fps: z.number().positive(),
         crf: z.number().int().min(0).max(51),
         pingpong: z.boolean(),
+        /** Params held at these values for the clip and its stills (`--set` overrides them). */
+        set: z.record(z.string(), z.union([z.number(), z.string(), z.boolean()])),
+        /**
+         * Park a mouse here for the clip, as a share of the frame ([0.5, 0.5] = the middle), for
+         * sketches that respond to hovering. The cursor itself isn't recorded.
+         */
+        pointer: z.tuple([z.number().min(0).max(1), z.number().min(0).max(1)]),
         /** Params to sweep during the clip: from → to and back, eased, over the whole clip. */
         animate: z.record(z.string(), z.tuple([z.number(), z.number()])),
         /**

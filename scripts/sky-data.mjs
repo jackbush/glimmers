@@ -62,8 +62,9 @@ stars.forEach((s, i) => starData.set([q(s.ra, 0, 360), q(s.dec, -90, 90), q(s.ma
 // Several sky cultures, each a list of constellations (a name, its native name if any, and
 // polylines of RA/Dec points in drawing order).
 //
-// - western: d3-celestial's 88 (BSD-3), with its rank (1 major … 3 faint); constellations
-//   that never rise at LATITUDE are dropped.
+// - western: d3-celestial's 88 (BSD-3), the IAU's modern constellations.
+// - greek: the same lines for the 48 Ptolemy catalogued in the Almagest (Argo as its modern
+//   parts, Carina, Puppis and Vela).
 // - The Arabic sky cultures from Stellarium (by Khalid al-Ajaji, CC BY-ND 4.0): stars given
 //   by Hipparcos number, placed from d3-celestial's star list or, for stars fainter than it
 //   goes, the Hipparcos catalogue on VizieR. These are kept whole and unaltered (the licence
@@ -75,17 +76,22 @@ const SC = 'https://raw.githubusercontent.com/Stellarium/stellarium-skycultures/
 const STELLARIUM = ['arabic_lunar_stations', 'arabic_al-sufi', 'arabic_ancient'];
 const license = (await get(D3 + 'LICENSE')).toString('utf8').trim();
 
-/** @type {{ id: string, constellations: { name: string, native: string, rank: number, polys: number[][][] }[] }[]} */
+// Ptolemy's 48, as IAU abbreviations.
+const PTOLEMY = ('And Aql Aqr Ara Ari Aur Boo CMa CMi Cnc Cap Car Cas Cen Cep Cet CrA CrB Crt Crv Cyg Del Dra Equ Eri '
+  + 'Gem Her Hya Leo Lep Lib Lup Lyr Oph Ori Peg Per PsA Psc Pup Sge Sco Ser Sgr Tau Tri UMa UMi Vel Vir').split(' ');
+
+/** @type {{ id: string, constellations: { name: string, native: string, polys: number[][][] }[] }[]} */
 const cultures = [];
 {
   const lines = JSON.parse((await get(D3 + 'data/constellations.lines.json')).toString('utf8'));
   const nameOf = Object.fromEntries(JSON.parse((await get(D3 + 'data/constellations.json')).toString('utf8')).features.map((f) => [f.id, f.properties.name]));
-  cultures.push({
-    id: 'western',
-    constellations: lines.features
-      .filter((f) => Math.max(...f.geometry.coordinates.flat().map((p) => p[1])) >= LATITUDE - 90)
-      .map((f) => ({ name: nameOf[f.id], native: '', rank: Number(f.properties.rank), polys: f.geometry.coordinates.map((poly) => poly.map(([lon, lat]) => [(lon + 360) % 360, lat])) })),
-  });
+  const constellation = (f) => ({ id: f.id, name: nameOf[f.id], native: '', polys: f.geometry.coordinates.map((poly) => poly.map(([lon, lat]) => [(lon + 360) % 360, lat])) });
+  const greek = lines.features.filter((f) => PTOLEMY.includes(f.id));
+  // Serpens comes in two parts (head and tail), so count names, not features.
+  const found = new Set(greek.map((f) => f.id)).size;
+  if (found !== PTOLEMY.length) throw new Error('Expected ' + PTOLEMY.length + ' of Ptolemy\'s in d3-celestial, found ' + found);
+  cultures.push({ id: 'greek', constellations: greek.map(constellation) });
+  cultures.push({ id: 'western', constellations: lines.features.map(constellation) });
 }
 {
   const hip = new Map(JSON.parse((await get(D3 + 'data/stars.6.json')).toString('utf8')).features.map((f) => [f.id, [(f.geometry.coordinates[0] + 360) % 360, f.geometry.coordinates[1]]]));
@@ -122,17 +128,17 @@ const cultures = [];
   for (const [id, d] of raw) {
     cultures.push({
       id,
-      constellations: d.constellations.map((c) => ({ name: c.common_name.english, native: c.common_name.native || '', rank: 1, polys: c.lines.map((l) => l.map((h) => hip.get(h))) })),
+      constellations: d.constellations.map((c) => ({ name: c.common_name.english, native: c.common_name.native || '', polys: c.lines.map((l) => l.map((h) => hip.get(h))) })),
     });
   }
   cultures.push({
     id: TUAREG.id,
-    constellations: tuareg.map((c) => ({ name: c.name, native: c.native, rank: 1, polys: c.hips.map((l) => l.map((h) => hip.get(h))) })),
+    constellations: tuareg.map((c) => ({ name: c.name, native: c.native, polys: c.hips.map((l) => l.map((h) => hip.get(h))) })),
   });
 }
 
-// Per segment: RA/Dec of both ends, the constellation's centre, its rank (1 = major), the
-// segment's place in its drawing order (0–1), the constellation's index in `names` and its
+// Per segment: RA/Dec of both ends, the constellation's centre, the segment's place in its
+// drawing order (0–1), the constellation's index in `names` and its
 // culture's index in `cultures`.
 const segs = [];
 const names = [];
@@ -151,19 +157,19 @@ cultures.forEach((culture, ci) => {
     let k = 0;
     for (const poly of c.polys) {
       // A single star: a zero-length segment, which draws nothing but can be hovered.
-      if (poly.length === 1) segs.push([poly[0][0], poly[0][1], poly[0][0], poly[0][1], cra, cdec, c.rank, 0, names.length, ci]);
+      if (poly.length === 1) segs.push([poly[0][0], poly[0][1], poly[0][0], poly[0][1], cra, cdec, 0, names.length, ci]);
       for (let i = 0; i + 1 < poly.length; i++, k++) {
-        segs.push([poly[i][0], poly[i][1], poly[i + 1][0], poly[i + 1][1], cra, cdec, c.rank, n > 1 ? k / (n - 1) : 0, names.length, ci]);
+        segs.push([poly[i][0], poly[i][1], poly[i + 1][0], poly[i + 1][1], cra, cdec, n > 1 ? k / (n - 1) : 0, names.length, ci]);
       }
     }
     names.push(c.native ? [c.name, c.native] : [c.name]);
   }
 });
-const SEG_FIELDS = 10;
+const SEG_FIELDS = 9;
 const segData = new Uint16Array(segs.length * SEG_FIELDS);
 segs.forEach((s, i) => segData.set([
   q(s[0], 0, 360), q(s[1], -90, 90), q(s[2], 0, 360), q(s[3], -90, 90),
-  q(s[4], 0, 360), q(s[5], -90, 90), s[6], q(s[7], 0, 1), s[8], s[9],
+  q(s[4], 0, 360), q(s[5], -90, 90), q(s[6], 0, 1), s[7], s[8],
 ], i * SEG_FIELDS));
 
 // ---------------------------------------------------------------- ridge
@@ -223,13 +229,13 @@ export const STARS = decode('${b64(starData)}');
 export const STAR_RANGES = [[0, 360], [-90, 90], [-2, 8], [-0.5, 2.5]];
 
 /**
- * Per segment: RA, Dec of each end; RA, Dec of the constellation's centre; its rank (1 major,
- * 2, 3 faint, as is; 1 for every non-western one); the segment's place in the constellation's
- * drawing order (0–1); the constellation's index in NAMES; and its culture's index in CULTURES.
+ * Per segment: RA, Dec of each end; RA, Dec of the constellation's centre; the segment's place in
+ * the constellation's drawing order (0–1); the constellation's index in NAMES; and its culture's
+ * index in CULTURES. A single named star is a segment from it to itself.
  */
 export const SEGMENTS = decode('${b64(segData)}');
 /** [lo, hi] for each SEGMENTS field, in order (null = stored as is). */
-export const SEGMENT_RANGES = [[0, 360], [-90, 90], [0, 360], [-90, 90], [0, 360], [-90, 90], null, [0, 1], null, null];
+export const SEGMENT_RANGES = [[0, 360], [-90, 90], [0, 360], [-90, 90], [0, 360], [-90, 90], [0, 1], null, null];
 
 /** Each constellation's name, then its native name if the culture gives one. */
 export const NAMES = ${JSON.stringify(names)};
