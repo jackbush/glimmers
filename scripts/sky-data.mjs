@@ -6,7 +6,8 @@
 // - Stars: the Yale Bright Star Catalogue, 5th ed. (every star to about magnitude 6.5), J2000
 //   positions, V magnitude and B-V colour index. Stars that never rise at the sketch's latitude
 //   are left out.
-// - Constellation lines: d3-celestial (BSD-3; its notice is copied into sky.js). Each line is a
+// - Constellation lines, in several sky cultures: d3-celestial's western 88 (BSD-3) and three
+//   Arabic ones from Stellarium (CC BY-ND 4.0; notices copied into sky.js). Each line is a
 //   polyline of RA/Dec points, kept in drawing order so a constellation can trace itself in.
 // - Ridge: the skyline traced from the reference photo (the user's own, from the Atlas): for
 //   each column, how far the dark silhouette reaches up from the bottom, as a fraction of the
@@ -56,41 +57,86 @@ const starData = new Uint16Array(stars.length * 4);
 stars.forEach((s, i) => starData.set([q(s.ra, 0, 360), q(s.dec, -90, 90), q(s.mag, -2, 8), q(s.bv, -0.5, 2.5)], i * 4));
 
 // ---------------------------------------------------------------- constellation lines
+// Several sky cultures, each a list of constellations (a name, its native name if any, and
+// polylines of RA/Dec points in drawing order).
+//
+// - western: d3-celestial's 88 (BSD-3), with its rank (1 major … 3 faint); constellations
+//   that never rise at LATITUDE are dropped.
+// - The Arabic sky cultures from Stellarium (by Khalid al-Ajaji, CC BY-ND 4.0): stars given
+//   by Hipparcos number, placed from d3-celestial's star list or, for stars fainter than it
+//   goes, the Hipparcos catalogue on VizieR. These are kept whole and unaltered (the licence
+//   allows no derivatives): every constellation, every line, only converted to coordinates.
 const D3 = 'https://raw.githubusercontent.com/ofrohn/d3-celestial/master/';
-const lines = JSON.parse((await get(D3 + 'data/constellations.lines.json')).toString('utf8'));
-const nameOf = Object.fromEntries(JSON.parse((await get(D3 + 'data/constellations.json')).toString('utf8')).features.map((f) => [f.id, f.properties.name]));
+const SC = 'https://raw.githubusercontent.com/Stellarium/stellarium-skycultures/master/';
+const STELLARIUM = ['arabic_lunar_stations', 'arabic_al-sufi', 'arabic_ancient'];
 const license = (await get(D3 + 'LICENSE')).toString('utf8').trim();
+
+/** @type {{ id: string, constellations: { name: string, native: string, rank: number, polys: number[][][] }[] }[]} */
+const cultures = [];
+{
+  const lines = JSON.parse((await get(D3 + 'data/constellations.lines.json')).toString('utf8'));
+  const nameOf = Object.fromEntries(JSON.parse((await get(D3 + 'data/constellations.json')).toString('utf8')).features.map((f) => [f.id, f.properties.name]));
+  cultures.push({
+    id: 'western',
+    constellations: lines.features
+      .filter((f) => Math.max(...f.geometry.coordinates.flat().map((p) => p[1])) >= LATITUDE - 90)
+      .map((f) => ({ name: nameOf[f.id], native: '', rank: Number(f.properties.rank), polys: f.geometry.coordinates.map((poly) => poly.map(([lon, lat]) => [(lon + 360) % 360, lat])) })),
+  });
+}
+{
+  const hip = new Map(JSON.parse((await get(D3 + 'data/stars.6.json')).toString('utf8')).features.map((f) => [f.id, [(f.geometry.coordinates[0] + 360) % 360, f.geometry.coordinates[1]]]));
+  const raw = [];
+  for (const id of STELLARIUM) raw.push([id, JSON.parse((await get(SC + id + '/index.json')).toString('utf8'))]);
+  const missing = [...new Set(raw.flatMap(([, d]) => d.constellations.flatMap((c) => c.lines.flat())).filter((h) => !hip.has(h)))];
+  if (missing.length) {
+    const tsv = (await get('https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/239/hip_main&-out=HIP,_RA.icrs,_DE.icrs&-out.max=9999&HIP=' + missing.join(','))).toString('utf8');
+    for (const row of tsv.split('\n')) {
+      const [h, ra, dec] = row.trim().split(/\t/).map(Number);
+      if (Number.isFinite(h) && Number.isFinite(ra) && Number.isFinite(dec)) hip.set(h, [ra, dec]);
+    }
+    const still = missing.filter((h) => !hip.has(h));
+    if (still.length) throw new Error('No position for Hipparcos ' + still.join(', ') + ' (the licence forbids dropping their lines)');
+  }
+  for (const [id, d] of raw) {
+    cultures.push({
+      id,
+      constellations: d.constellations.map((c) => ({ name: c.common_name.english, native: c.common_name.native || '', rank: 1, polys: c.lines.map((l) => l.map((h) => hip.get(h))) })),
+    });
+  }
+}
+
 // Per segment: RA/Dec of both ends, the constellation's centre, its rank (1 = major), the
-// segment's place in its drawing order (0–1) and the constellation's index in `names`.
+// segment's place in its drawing order (0–1), the constellation's index in `names` and its
+// culture's index in `cultures`.
 const segs = [];
 const names = [];
-for (const f of lines.features) {
-  const polys = f.geometry.coordinates;
-  const pts = polys.flat();
-  // Centre: the mean direction of the constellation's points.
-  let x = 0, y = 0, z = 0;
-  for (const [lon, lat] of pts) {
-    const a = (lon * Math.PI) / 180, d = (lat * Math.PI) / 180;
-    x += Math.cos(d) * Math.cos(a); y += Math.cos(d) * Math.sin(a); z += Math.sin(d);
-  }
-  const cra = ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
-  const cdec = (Math.atan2(z, Math.hypot(x, y)) * 180) / Math.PI;
-  if (Math.max(...pts.map((p) => p[1])) < LATITUDE - 90) continue;
-  const n = polys.reduce((s, p) => s + p.length - 1, 0);
-  let k = 0;
-  for (const poly of polys) {
-    for (let i = 0; i + 1 < poly.length; i++, k++) {
-      const [ra0, dec0] = poly[i], [ra1, dec1] = poly[i + 1];
-      segs.push([(ra0 + 360) % 360, dec0, (ra1 + 360) % 360, dec1, cra, cdec, Number(f.properties.rank), n > 1 ? k / (n - 1) : 0, names.length]);
+cultures.forEach((culture, ci) => {
+  for (const c of culture.constellations) {
+    const pts = c.polys.flat();
+    // Centre: the mean direction of the constellation's points.
+    let x = 0, y = 0, z = 0;
+    for (const [lon, lat] of pts) {
+      const a = (lon * Math.PI) / 180, d = (lat * Math.PI) / 180;
+      x += Math.cos(d) * Math.cos(a); y += Math.cos(d) * Math.sin(a); z += Math.sin(d);
     }
+    const cra = ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+    const cdec = (Math.atan2(z, Math.hypot(x, y)) * 180) / Math.PI;
+    const n = c.polys.reduce((s, p) => s + p.length - 1, 0);
+    let k = 0;
+    for (const poly of c.polys) {
+      for (let i = 0; i + 1 < poly.length; i++, k++) {
+        segs.push([poly[i][0], poly[i][1], poly[i + 1][0], poly[i + 1][1], cra, cdec, c.rank, n > 1 ? k / (n - 1) : 0, names.length, ci]);
+      }
+    }
+    names.push(c.native ? [c.name, c.native] : [c.name]);
   }
-  names.push(nameOf[f.id]);
-}
-const segData = new Uint16Array(segs.length * 9);
+});
+const SEG_FIELDS = 10;
+const segData = new Uint16Array(segs.length * SEG_FIELDS);
 segs.forEach((s, i) => segData.set([
   q(s[0], 0, 360), q(s[1], -90, 90), q(s[2], 0, 360), q(s[3], -90, 90),
-  q(s[4], 0, 360), q(s[5], -90, 90), s[6], q(s[7], 0, 1), s[8],
-], i * 9));
+  q(s[4], 0, 360), q(s[5], -90, 90), s[6], q(s[7], 0, 1), s[8], s[9],
+], i * SEG_FIELDS));
 
 // ---------------------------------------------------------------- ridge
 const W = 2000;
@@ -123,9 +169,15 @@ const out = `// Generated by scripts/sky-data.mjs. Don't edit: rerun it.
 //
 // Stars: Yale Bright Star Catalogue, 5th revised ed. (Hoffleit & Warren, 1991), ${stars.length} stars
 // that rise at latitude ${LATITUDE}°, brightest first.
-// Constellation lines (${names.length} constellations, ${segs.length} segments): d3-celestial, under this licence:
+// Constellation lines (${names.length} constellations, ${segs.length} segments, in ${cultures.length} sky cultures):
+// - western: d3-celestial, under this licence:
 //
-${license.split('\n').map((l) => ('// ' + l).trimEnd()).join('\n')}
+${license.split('\n').map((l) => ('//   ' + l).trimEnd()).join('\n')}
+//
+// - ${STELLARIUM.join(', ')}: from Stellarium's sky cultures
+//   (https://github.com/Stellarium/stellarium-skycultures), by Khalid al-Ajaji, licensed CC BY-ND 4.0
+//   (https://creativecommons.org/licenses/by-nd/4.0/). Included whole and unaltered: only
+//   converted from Hipparcos numbers to coordinates (d3-celestial's star list, else Hipparcos via VizieR).
 //
 // Ridge: traced from the reference photo, IMG_1171 (the Atlas at dusk).
 
@@ -142,15 +194,18 @@ export const STAR_RANGES = [[0, 360], [-90, 90], [-2, 8], [-0.5, 2.5]];
 
 /**
  * Per segment: RA, Dec of each end; RA, Dec of the constellation's centre; its rank (1 major,
- * 2, 3 faint, as is); the segment's place in the constellation's drawing order (0–1); and the
- * constellation's index in NAMES (as is).
+ * 2, 3 faint, as is; 1 for every non-western one); the segment's place in the constellation's
+ * drawing order (0–1); the constellation's index in NAMES; and its culture's index in CULTURES.
  */
 export const SEGMENTS = decode('${b64(segData)}');
 /** [lo, hi] for each SEGMENTS field, in order (null = stored as is). */
-export const SEGMENT_RANGES = [[0, 360], [-90, 90], [0, 360], [-90, 90], [0, 360], [-90, 90], null, [0, 1], null];
+export const SEGMENT_RANGES = [[0, 360], [-90, 90], [0, 360], [-90, 90], [0, 360], [-90, 90], null, [0, 1], null, null];
 
-/** Constellation names (Latin, as on star charts), indexed by SEGMENTS' last field. */
+/** Each constellation's name, then its native name if the culture gives one. */
 export const NAMES = ${JSON.stringify(names)};
+
+/** The sky cultures' ids, in SEGMENTS' culture order (see cultures.js for what they're called). */
+export const CULTURES = ${JSON.stringify(cultures.map((c) => c.id))};
 
 /** The skyline left to right, ${RIDGE_SAMPLES} samples, as a fraction of the photo's width (× RIDGE_MAX). */
 export const RIDGE = decode('${b64(ridge)}');

@@ -4,6 +4,7 @@ export default {
   year: 2026,
   // The night sky fills most of the screen, so the browser bars take its colour.
   pageColour: 'nightSky',
+  startPaused: false,
   // Film grain defeats video compression, so the cover trades a little grain for size.
   capture: { crf: 29 },
 };

@@ -25,6 +25,8 @@ export const manifestSchema = z
      * prefers-reduced-motion. Nothing it applies is saved.
      */
     autoplay: z.object({ hold: z.number().min(0).optional(), sequence: z.array(z.string()).min(1).optional() }).strict().optional(),
+    /** Open with scene time paused (the play button shows Play). Ignored by captures. */
+    startPaused: z.boolean().optional(),
     /** Defaults for scripts/capture.mjs, so re-captures match. */
     capture: z
       .object({

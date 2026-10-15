@@ -27,7 +27,7 @@ An undulating black orb with a burning halo on a wobbling yellow gradient, with 
 
 **Coordinates:** `q` is centred, aspect-correct, with screen height = 1 (so x spans ±aspect/2), and +y up. `fuv` is the matching 0–1 coordinate for sampling fields. `fc` is `gl_FragCoord` in canvas pixels; multiply pixel sizes by `f_px` (canvas px per CSS px) so they stay stable when adaptive quality changes resolution.
 
-**Shared GLSL helpers (`common`):** `snoise(vec3)` returns -1..1, `fbm3` is 3 octaves, `ringOffset` is the orb outline, and `encode`/`decode` pack values for the passes. `hash(vec3)` (0..1 per integer cell), `filmDust` and `filmGrain` come from the shared film layer, `src/kit/film.js`, which also supplies the Grain & damage params. On the CPU there are `noise1(x)` and `hash2(a, b)`.
+**Shared GLSL helpers (`common`):** `snoise(vec3)` returns -1..1 and `fbm3` is 3 octaves (both from `src/kit/noise.js`), `ringOffset` is the orb outline, and `encode`/`decode` pack values for the passes. `hash(vec3)` (0..1 per integer cell), `filmDust` and `filmGrain` come from the shared film layer, `src/kit/film.js`, which also supplies the Grain & damage params. On the CPU there are `noise1(x)` and `hash2(a, b)`.
 
 ## Adding a visual element
 

@@ -52,7 +52,7 @@ const { title, appTitle, background, image, imageAlt } = Astro.props;
     </div>
     <div id="controls"></div>
     <div class="state">
-      <div class="changes"><span id="status"></span> <button id="reset">[reset]</button></div>
+      <div class="changes"><input type="checkbox" id="show-changes" checked hidden title="Show the changes. Untick to compare with the defaults." aria-label="Show the changes"> <span id="status"></span> <button id="reset">[reset]</button></div>
       <button id="copy">Copy changes</button>
     </div>
   </aside>
@@ -176,6 +176,14 @@ const { title, appTitle, background, image, imageAlt } = Astro.props;
   .row.changed .lbl { color: var(--ink); }
   .row.changed .lbl::after { content: " •"; color: var(--accent); }
 
+  .track { position: relative; display: block; }
+  .track .home { position: absolute; top: 4px; width: 1px; height: 10px; margin-left: -0.5px; background: var(--ink-dim); opacity: 0.6; pointer-events: none; }
+  .track .home[hidden], .track .rerange[hidden] { display: none; }
+  .rerange { position: absolute; right: 0; top: -9px; padding: 0 2px; border: 0; background: none; color: var(--ink-dim); font: 10px/1 var(--mono); cursor: pointer; }
+  .rerange.at-min { right: auto; left: 0; }
+  .rerange:hover { color: var(--ink); }
+  #controls.bypassed { opacity: 0.45; pointer-events: none; }
+  #show-changes { margin: 0 4px 0 0; vertical-align: -2px; accent-color: var(--accent); }
   input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 18px; background: transparent; margin: 0; }
   input[type=range]::-webkit-slider-runnable-track { height: 2px; background: rgba(255, 255, 255, 0.2); }
   input[type=range]::-moz-range-track { height: 2px; background: rgba(255, 255, 255, 0.2); }

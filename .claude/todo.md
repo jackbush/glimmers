@@ -71,6 +71,7 @@ Params: night length (default ~75s, tune by eye), twilight share and peak, ramp 
 - [x] Interruptions: Speed changes, pause, seed and param edits mid-reveal, and resize. Nothing should jump or stick.
 
 ### 5. Later
+- [ ] Remove `startPaused: true` from `atlas-nights/manifest.js` (temporary, for tuning the twilight) before publishing.
 - [ ] Milky Way band along the galactic plane, in the sky pass at ¼ resolution.
 - [ ] `publish-glimmer`: index, cover capture (start in early twilight, as the first stars come out), perf scan.
 

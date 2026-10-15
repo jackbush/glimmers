@@ -133,6 +133,7 @@ export function run(slug: string, { manifest, params, presets, sketch }: SketchM
     playBtn.setAttribute('aria-label', loop.paused ? 'Play' : 'Pause');
   }
   playBtn.addEventListener('click', () => { loop.paused = !loop.paused; syncPlay(); });
+  if (manifest.startPaused && !capture) loop.paused = true;
   syncPlay();
 
   // The first preset lands before the sketch starts, so it opens on it rather than morphing in.

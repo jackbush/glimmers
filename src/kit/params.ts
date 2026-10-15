@@ -2,7 +2,10 @@
 //
 // Overrides survive reloads, but are dropped automatically once the code's defaults change
 // (e.g. after a pasted state has been baked into params.js): they're signed with a hash of
-// every default.
+// every default. Slider ranges re-centred in the pane are saved with them.
+//
+// Bypass shows each param's base (default or preset value) in place of the edits, for
+// before/after comparison; the edits are held, and still count and copy as changes.
 
 import type { Group, Model, Param, ParamValue, Presets } from './types';
 
@@ -12,13 +15,21 @@ export interface ParamStore extends Model {
   setValue(p: Param, v: unknown): void;
   /** Differs from its base: the default, or the last applied preset's value. */
   isChanged(p: Param): boolean;
+  /** The user's value: the live value, or the held edit while bypassed. */
+  edited(p: Param): ParamValue;
+  /** True while the bases are showing in place of the edits. */
+  readonly bypassed: boolean;
+  /** Show the bases (true) or put the edits back (false). */
+  setBypass(on: boolean): void;
+  /** A range param's slider range, for this browser (saved with the overrides). */
+  setRange(p: Param, min: number, max: number): void;
   /** The preset last applied ('' if none since the defaults). */
   readonly preset: string;
   /** False while the param's `when` (or an ancestor's) doesn't hold. */
   isShown(p: Param): boolean;
   /** Changed params that are shown. */
   changedCount(): number;
-  /** Every param back to its default (and every base), ending any preset morph. */
+  /** Every param back to its default (and every base and range), ending any preset morph and any bypass. */
   resetAll(): void;
   /** Persist the current overrides (debounced). */
   scheduleSave(): void;
@@ -96,6 +107,8 @@ export function createModel(schema: Group[], storageKey: string | null, presets?
         rgb: new Float32Array(3),
         parent: null,
         depth: 0,
+        codeMin: def.min,
+        codeMax: def.max,
       };
       if (def.when) {
         const parent = live.find((q) => q.key === def.when!.key);
@@ -114,6 +127,9 @@ export function createModel(schema: Group[], storageKey: string | null, presets?
   const sig = signature(params);
   let saveTimer = 0;
   let preset = '';
+  // Bypass: the edits held aside while the bases show.
+  let held: Map<Param, ParamValue> | null = null;
+  const edited = (p: Param): ParamValue => (held && held.has(p) ? held.get(p)! : p.value);
 
   // Preset morph: numbers and colours glide from where they were to the preset's values.
   interface Glide { p: Param; from: number; to: number; rgbFrom?: number[]; rgbTo?: number[] }
@@ -132,14 +148,34 @@ export function createModel(schema: Group[], storageKey: string | null, presets?
     groups,
     get version() { return version; },
     setValue(p, v) {
+      store.setBypass(false); // an edit is made on top of the edits, never lost under a bypass
       if (glides.length) glides = glides.filter((g) => g.p !== p);
       assign(p, v);
     },
     get preset() { return preset; },
-    isChanged: (p) => p.value !== p.base,
+    isChanged: (p) => edited(p) !== p.base,
+    edited,
+    get bypassed() { return !!held; },
+    setBypass(on) {
+      if (on === !!held) return;
+      if (on) {
+        glides = [];
+        held = new Map();
+        for (const p of params) if (p.value !== p.base) { held.set(p, p.value); assign(p, p.base); }
+      } else {
+        const back = held!;
+        held = null;
+        for (const [p, v] of back) assign(p, v);
+      }
+    },
+    setRange(p, min, max) {
+      p.min = min;
+      p.max = max;
+      version++;
+    },
     isShown(p) {
       for (let q: Param | null = p; q && q.when; q = q.parent) {
-        const v = q.parent!.value, w = q.when;
+        const v = edited(q.parent!), w = q.when; // the user's value, also while bypassed
         if (w.is && !w.is.includes(v)) return false;
         if (w.not && w.not.includes(v)) return false;
       }
@@ -147,13 +183,19 @@ export function createModel(schema: Group[], storageKey: string | null, presets?
     },
     changedCount() {
       let n = 0;
-      for (const p of params) if (p.value !== p.base && store.isShown(p)) n++;
+      for (const p of params) if (edited(p) !== p.base && store.isShown(p)) n++;
       return n;
     },
     resetAll() {
       glides = [];
       preset = '';
-      for (const p of params) { p.base = p.default; assign(p, p.default); }
+      held = null;
+      for (const p of params) {
+        p.base = p.default;
+        p.min = p.codeMin;
+        p.max = p.codeMax;
+        assign(p, p.default);
+      }
     },
     scheduleSave() {
       if (!storageKey) return;
@@ -162,17 +204,20 @@ export function createModel(schema: Group[], storageKey: string | null, presets?
         try {
           const values: Record<string, ParamValue> = {};
           const bases: Record<string, ParamValue> = {};
+          const ranges: Record<string, [number, number]> = {};
           for (const p of params) {
-            if (p.value !== p.default) values[p.key] = p.value;
+            if (edited(p) !== p.default) values[p.key] = edited(p);
             if (p.base !== p.default) bases[p.key] = p.base;
+            if (p.min !== p.codeMin || p.max !== p.codeMax) ranges[p.key] = [p.min!, p.max!];
           }
-          localStorage.setItem(storageKey, JSON.stringify({ sig, values, bases, preset }));
+          localStorage.setItem(storageKey, JSON.stringify({ sig, values, bases, ranges, preset }));
         } catch { /* storage unavailable */ }
       }, 250);
     },
     applyPreset(name, seconds, glideNumbers = true) {
       const values = presets?.[name];
       if (!values) return;
+      store.setBypass(false);
       // Its params are clean at its values; the rest keep their bases (so what an earlier preset
       // set and this one doesn't still counts as unchanged, and a user's edit as changed).
       preset = name;
@@ -222,6 +267,10 @@ export function createModel(schema: Group[], storageKey: string | null, presets?
       if (saved && saved.sig === sig) {
         for (const k in saved.values) if (byKey[k]) assign(byKey[k], saved.values[k]);
         for (const k in saved.bases || {}) if (byKey[k]) byKey[k].base = coerce(byKey[k], saved.bases[k]);
+        for (const k in saved.ranges || {}) {
+          const r = saved.ranges[k];
+          if (byKey[k] && Array.isArray(r) && Number.isFinite(r[0]) && Number.isFinite(r[1]) && r[0] < r[1]) [byKey[k].min, byKey[k].max] = r;
+        }
         if (typeof saved.preset === 'string' && presets?.[saved.preset]) preset = saved.preset;
       }
     } catch { /* storage unavailable — run on defaults */ }

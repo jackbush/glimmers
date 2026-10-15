@@ -59,6 +59,9 @@ export interface Param extends ParamDef {
   depth: number;
   /** Colour params only: the value as 0–1 floats, updated in place on every edit. */
   rgb: Float32Array;
+  /** Range params: params.js's min and max. `min`/`max` can differ after a re-range in the pane. */
+  codeMin?: number;
+  codeMax?: number;
 }
 
 export interface Model {

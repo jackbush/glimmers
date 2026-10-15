@@ -9,9 +9,15 @@
 // pause, seeking and captures can't leave a line stuck half-drawn.
 //
 // Passes:
-//   1. lines, stars, meteors → a float "light" target at canvas size, added together.
-//   2. composite (full res): sky colour per pixel (from its altitude and azimuth) + the light
-//      target → ridge silhouette → vignette → exposure → dust → grain.
+//   1. lines, stars, meteors → a float "light" target at canvas size, added together. Stars
+//      and meteors add colour (rgb); lines add a mask (alpha), plus white where a hovered line
+//      is lightened.
+//   2. flare (½ resolution): how much light leaks off the lines, from the same segments.
+//   3. fields (¼ resolution): the swirl, a slowly churning mass of the twilight colours. All
+//      the noise lives here.
+//   4. composite (full res): sky colour per pixel (from its altitude and azimuth) → the light
+//      target, with the swirl showing through the line mask → light leaks (the flare, coloured
+//      by the swirl) → ridge silhouette → vignette → exposure → dust → grain.
 //
 // Geometry: equatorial unit vectors (from RA/Dec) go to camera space through f_eq2cam, then a
 // pinhole (gnomonic) projection, like the reference photo's lens: great circles come out
@@ -28,8 +34,10 @@
 //   u_realTime  wall-clock seconds (twinkle and the film layer keep running while paused)
 
 import { FILM_GLSL } from '../../kit/film.js';
+import { NOISE_GLSL } from '../../kit/noise.js';
 import { hash2 } from '../../kit/random.js';
-import { LATITUDE } from './sky.js';
+import { CULTURES, LATITUDE } from './sky.js';
+import { SKY_CULTURES } from './cultures.js';
 
 const TAU = Math.PI * 2;
 const DEG = Math.PI / 180;
@@ -49,16 +57,54 @@ function rise(a, b, x) { return smoothstep(0, 1, (x - a) / Math.max(b - a, 1e-4)
 const HOVER_VISIBLE = 0.25;
 const BEHIND = 0.02; // camera z below this counts as behind the view (shared with the GLSL)
 
+// The constellation-line instance attributes and their geometry, shared by the lines and the
+// flare passes (fixed locations, so one vertex array serves both). Tracing in and fading out
+// follow the hour angle of the constellation's centre, gated by the twilight at dusk and dawn;
+// hover() repeats this on the CPU, so keep the two in step.
+const LINE_SEGMENT = `
+layout(location = 0) in vec3 a_from;
+layout(location = 1) in vec3 a_to;
+layout(location = 2) in vec3 a_centre;
+layout(location = 3) in float a_rank;
+layout(location = 4) in float a_order;
+layout(location = 5) in float a_index;
+layout(location = 6) in float a_culture;
+// The drawn part of this segment in canvas px (s → e, stopping Gap short of the stars), its
+// fade and its hover highlight. False when nothing of it shows.
+bool lineSegment(out vec2 s, out vec2 e, out float fade, out float hover) {
+  vec3 ca = f_eq2cam * a_from, cb = f_eq2cam * a_to;
+  float h = wrapPi(f_lst - atan(a_centre.y, a_centre.x)) * (12.0 / PI); // hours, − east
+  float progress = min(rise(u_drawStart, u_drawEnd, h), f_lines.x);
+  fade = (1.0 - rise(u_fadeStart, u_fadeEnd, h)) * f_lines.y;
+  hover = (abs(a_index - f_hover.x) < 0.5 ? f_hover.y : 0.0) + (abs(a_index - f_hover.z) < 0.5 ? f_hover.w : 0.0);
+  // Segments grow in drawing order, each over a window of traceOverlap of the progress.
+  float grown = clamp((progress - a_order * (1.0 - u_traceOverlap)) / u_traceOverlap, 0.0, 1.0);
+  if (abs(a_culture - f_culture.x) > 0.5 || a_rank > f_culture.y + 0.5 || grown <= 0.0 || fade <= 0.0 || min(ca.z, cb.z) < BEHIND) return false;
+  vec2 p0 = project(ca), p1 = project(cb);
+  float len = length(p1 - p0);
+  vec2 dir = (p1 - p0) / max(len, 1e-3);
+  float gap = min(u_lineGap * f_px, 0.45 * len);
+  s = p0 + dir * gap;
+  e = s + dir * (len - 2.0 * gap) * grown;
+  return true;
+}`;
+
 /** Where each field sits in a segment's attributes (sketch.js builds them; hover() reads them). */
-export const SEG_LAYOUT = { stride: 12, from: 0, to: 3, centre: 6, rank: 9, order: 10, index: 11 };
+export const SEG_LAYOUT = { stride: 13, from: 0, to: 3, centre: 6, rank: 9, order: 10, index: 11, culture: 12 };
+
+// Sky culture menu label → [culture index in sky.js, highest rank drawn], looked up per frame.
+const CULTURE_OF = new Map(SKY_CULTURES.map((c) => [c.label, [CULTURES.indexOf(c.culture), c.rank]]));
 
 export default {
   maxMeteors: MAX_METEORS,
+  fieldsDivisor: 4,
+  flareDivisor: 2,
 
   // name → component count (1–4 → float…vec4, 9 → mat3) or [length] for a float array.
   frameUniforms: {
     f_px: 1,          // canvas px per CSS px (keeps sizes stable when resolution changes)
     f_frame: 1,       // film frame index
+    f_seed: 1,        // Seed, for which sections of the lines flare
     f_eq2cam: 9,      // equatorial unit vector → camera space
     f_up: 3,          // equatorial unit vector · f_up = sine of altitude
     f_lst: 1,         // local sidereal time (radians): a star's hour angle is f_lst − its RA
@@ -66,8 +112,10 @@ export default {
     f_k: 1,           // projection scale: canvas px per unit of tan(angle off the view centre)
     f_tilt: 2,        // cos, sin of how far the view looks up from the horizon
     f_sky: 3,         // twilight (0 night … 1 brightest), sun azimuth (radians from north), faintest magnitude shown
+    f_glow: 2,        // the twilight gradient's length and its top's altitude now, degrees
     f_lines: 2,       // dusk gate on tracing in, dawn gate on fading (0–1 each)
     f_hover: 4,       // hovered constellation's index and highlight (0–1), then the one easing out (index −1 = none)
+    f_culture: 2,     // the sky culture drawn (index in sky.js CULTURES) and the highest rank drawn
     f_meteor: [MAX_METEORS * METEOR_FIELDS],
   },
 
@@ -75,6 +123,7 @@ export default {
   perFrame(P, t, rt, width, height, px, f) {
     f.f_px[0] = px;
     f.f_frame[0] = Math.floor(rt * P.filmFps.value);
+    f.f_seed[0] = P.seed.value;
 
     // The loop: phase 0 is the brightest twilight (the sun due south, just below the horizon),
     // ±0.5 is the dead of night. After 0 is dusk (the sun moving west), before it is dawn.
@@ -87,6 +136,10 @@ export default {
     f.f_sky[0] = tw;
     f.f_sky[1] = Math.PI + sunHour; // azimuth: south at the peak, west after
     f.f_sky[2] = P.nightLimit.value + (P.twilightLimit.value - P.nightLimit.value) * tw;
+
+    const culture = CULTURE_OF.get(P.skyCulture.value); // a select only ever holds one of its options
+    f.f_culture[0] = culture[0];
+    f.f_culture[1] = culture[1];
 
     const gate = 1 - smoothstep(0, P.lineTwilight.value, tw);
     f.f_lines[0] = phase >= 0 ? gate : 1; // dusk: constellations wait for the dark to trace in
@@ -109,6 +162,12 @@ export default {
     f.f_k[0] = k;
     f.f_tilt[0] = ct;
     f.f_tilt[1] = st;
+
+    // Twilight gradient: at Glow height 1 its top reaches the top edge of the view. It sets by
+    // sliding down (its top goes from there to the horizon with the twilight), not by fading.
+    const topAlt = (tilt + Math.atan((0.5 * height) / k)) / DEG;
+    f.f_glow[0] = P.glowHeight.value * topAlt;
+    f.f_glow[1] = tw * f.f_glow[0];
 
     // Equatorial → horizon (north, east, up) for latitude φ and sidereal time θ, then into the
     // camera: x = west, z = south tilted up by `tilt`, y = up tilted back.
@@ -182,7 +241,7 @@ export default {
       let bestD = reach * reach;
       for (let i = 0; i < count; i++) {
         const o = i * L.stride;
-        if (segs[o + L.rank] > P.lineRank.value + 0.5) continue;
+        if (segs[o + L.culture] !== f.f_culture[0] || segs[o + L.rank] > f.f_culture[1]) continue;
         // Mirrors linesVert: hour angle → progress and fade → how much of this segment shows.
         let h = lst - Math.atan2(segs[o + L.centre + 1], segs[o + L.centre]);
         h = (h - TAU * Math.floor((h + Math.PI) / TAU)) * (12 / Math.PI);
@@ -229,6 +288,20 @@ ${FILM_GLSL}
 // Camera-space direction → canvas px (pinhole). Directions with z below BEHIND are culled.
 vec2 project(vec3 c) { return f_center + c.xy * (f_k / max(c.z, 1e-3)); }
 const float BEHIND = ${BEHIND};
+// Twilight colours along x = 0–1: horizon, low, middle, high, deep, then c5 (the sky uses the
+// night), evenly spaced, joined by a smooth (Catmull-Rom) curve: straight blends between stops
+// leave a visible kink (a band) at each one. The curve arrives at c5 flat, so past x = 1 the
+// colour carries on without a seam.
+vec3 ramp(float x, vec3 c0, vec3 c1, vec3 c2, vec3 c3, vec3 c4, vec3 c5) {
+  vec3 k[6] = vec3[6](c0, c1, c2, c3, c4, c5);
+  float s = clamp(x, 0.0, 1.0) * 5.0;
+  int i = min(int(s), 4);
+  float t = s - float(i), t2 = t * t, t3 = t2 * t;
+  vec3 b = k[i], c = k[i + 1];
+  vec3 mb = 0.5 * (c - k[max(i - 1, 0)]);
+  vec3 mc = i == 4 ? vec3(0.0) : 0.5 * (k[min(i + 2, 5)] - b);
+  return max((2.0 * t3 - 3.0 * t2 + 1.0) * b + (t3 - 2.0 * t2 + t) * mb + (-2.0 * t3 + 3.0 * t2) * c + (t3 - t2) * mc, 0.0);
+}
 // Canvas px → clip space, in the current target.
 vec4 clip(vec2 p) { return vec4(p / u_res * 2.0 - 1.0, 0.0, 1.0); }
 const vec4 HIDDEN = vec4(2.0, 2.0, 2.0, 1.0);
@@ -241,39 +314,19 @@ float quadSide(int i) { return (i == 2 || i == 4 || i == 5) ? 1.0 : -1.0; }
 `,
 
   // ---------------------------------------------------------------- pass 1: light
-  // One instance per constellation segment. Tracing in and fading out are set by the hour
-  // angle of the constellation's centre, gated by the twilight at dusk and dawn (hover()
-  // repeats this on the CPU to find what the pointer is over). The hovered constellation, and
-  // the one it's easing away from, are highlighted by f_hover.
+  // One instance per constellation segment (geometry in LINE_SEGMENT). The hovered
+  // constellation, and the one it's easing away from, are highlighted by f_hover.
   linesVert: `
-in vec3 a_from;
-in vec3 a_to;
-in vec3 a_centre;
-in float a_rank;
-in float a_order;
-in float a_index;
+${LINE_SEGMENT}
 out float v_across;
 out float v_alpha;
 out float v_hover;
 void main() {
-  vec3 ca = f_eq2cam * a_from, cb = f_eq2cam * a_to;
-  float h = wrapPi(f_lst - atan(a_centre.y, a_centre.x)) * (12.0 / PI); // hours, − east
-  float progress = min(rise(u_drawStart, u_drawEnd, h), f_lines.x);
-  float fade = (1.0 - rise(u_fadeStart, u_fadeEnd, h)) * f_lines.y;
-  // Segments grow in drawing order, each over a window of traceOverlap of the progress.
-  float grown = clamp((progress - a_order * (1.0 - u_traceOverlap)) / u_traceOverlap, 0.0, 1.0);
-  if (a_rank > u_lineRank + 0.5 || grown <= 0.0 || fade <= 0.0 || min(ca.z, cb.z) < BEHIND) { gl_Position = HIDDEN; return; }
-
-  vec2 p0 = project(ca), p1 = project(cb);
-  float len = length(p1 - p0);
-  vec2 dir = (p1 - p0) / max(len, 1e-3);
-  float gap = min(u_lineGap * f_px, 0.45 * len);
-  vec2 s = p0 + dir * gap, e = s + dir * (len - 2.0 * gap) * grown;
+  vec2 s, e;
+  if (!lineSegment(s, e, v_alpha, v_hover)) { gl_Position = HIDDEN; return; }
+  vec2 dir = normalize(e - s + vec2(1e-6, 0.0));
   float halfW = (0.5 * u_lineWidth + 1.5 * max(u_lineGlowWidth, u_hoverGlowWidth)) * f_px + 1.0;
-  float side = quadSide(gl_VertexID);
-  v_across = side * halfW;
-  v_alpha = fade;
-  v_hover = (abs(a_index - f_hover.x) < 0.5 ? f_hover.y : 0.0) + (abs(a_index - f_hover.z) < 0.5 ? f_hover.w : 0.0);
+  v_across = quadSide(gl_VertexID) * halfW;
   gl_Position = clip(mix(s, e, quadAlong(gl_VertexID)) + vec2(-dir.y, dir.x) * v_across);
 }`,
   linesFrag: `
@@ -286,9 +339,78 @@ void main() {
   float core = clamp(0.5 * w + 0.5 - d, 0.0, 1.0) * min(w, 1.0);
   float gw = 0.5 * mix(u_lineGlowWidth, u_hoverGlowWidth, v_hover) * f_px;
   float glow = gw > 0.0 ? exp(-(d * d) / (gw * gw)) : 0.0;
-  vec3 colour = mix(u_lineColour, mix(u_lineColour, vec3(1.0), u_hoverLighten), v_hover);
   float opacity = mix(u_lineOpacity, u_hoverOpacity, v_hover), glowAmount = mix(u_lineGlow, u_hoverGlow, v_hover);
-  outColor = vec4(colour * (core * opacity + glow * glowAmount) * v_alpha, 1.0);
+  float mask = (core * opacity + glow * glowAmount) * v_alpha * u_swirlMask; // no mask, no lines
+  // The swirl shows through the mask (alpha); a hovered line is part white (rgb) instead.
+  float white = u_hoverLighten * v_hover;
+  outColor = vec4(vec3(mask * white), mask * (1.0 - white));
+}`,
+
+  // ---------------------------------------------------------------- pass 2: flare
+  // Light leaks off the edges of the lines, like solar flares, into a ½-resolution target.
+  // Each side of each segment is cut into sections Section long, and each section flares on and
+  // off at random (a bump in time), on with chance Share, so about that share of each edge is
+  // flaring; the two sides choose separately, so flares aren't mirrored. A flare's outline is
+  // noise in the line's own coordinates (along it, away from it) streaming outward, cut off at
+  // a height that rises with the section's flare, so its edge is ragged. A hovered
+  // constellation blends to its own set of all these (the Hover group), and holds its sections
+  // steady.
+  flareVert: `
+${LINE_SEGMENT}
+out vec2 v_pos;    // canvas px: along the segment from its start, and across it (signed)
+out float v_len;   // segment length, canvas px
+out float v_alpha;
+out float v_hover;
+out float v_seed;
+void main() {
+  vec2 s, e;
+  if (!lineSegment(s, e, v_alpha, v_hover)) { gl_Position = HIDDEN; return; }
+  v_len = length(e - s);
+  vec2 dir = (e - s) / max(v_len, 1e-3);
+  float reach = max(u_flareReach, u_hoverFlareReach) * f_px + 2.0;
+  v_pos = vec2(v_len * quadAlong(gl_VertexID), quadSide(gl_VertexID) * reach);
+  v_seed = float(gl_InstanceID) * 61.7 + f_seed * 13.0;
+  vec2 p = s + dir * v_pos.x + vec2(-dir.y, dir.x) * v_pos.y;
+  gl_Position = vec4(p / u_screen * 2.0 - 1.0, 0.0, 1.0); // canvas px into the small target
+}`,
+  flareFrag: `
+${NOISE_GLSL}
+in vec2 v_pos;
+in float v_len;
+in float v_alpha;
+in float v_hover;
+in float v_seed;
+out vec4 outColor;
+// How much section "cell" of one edge is flaring, 0–1. It flickers in time slots (on with
+// chance "share", a bump in time that's zero at each slot change, offset per section so they
+// don't switch together); a hovered line picks its sections once and holds them.
+float sectionFlare(float cell, float share, float seed) {
+  float tt = u_realTime * u_flareSpeed + hash(vec3(cell, seed, 3.0));
+  float flicker = step(hash(vec3(cell, floor(tt), seed)), share) * sin(PI * fract(tt));
+  float steady = step(hash(vec3(cell, seed, 7.0)), share);
+  return mix(flicker, steady, v_hover);
+}
+void main() {
+  // In CSS px: where along the line, how far off it, and which edge.
+  float along = v_pos.x / f_px, dist = abs(v_pos.y) / f_px, len = v_len / f_px;
+  float seed = v_seed + (v_pos.y < 0.0 ? 211.0 : 0.0);
+  float u = along / max(mix(u_flareSection, u_hoverFlareSection, v_hover), 1.0) + seed;
+  float cell = floor(u);
+  float share = mix(u_flareShare, u_hoverFlareShare, v_hover);
+  // This edge's flare along the line, blended section to section, eased out at the ends.
+  float env = mix(sectionFlare(cell, share, seed), sectionFlare(cell + 1.0, share, seed), smoothstep(0.0, 1.0, fract(u)));
+  float ends = min(20.0, 0.25 * len);
+  env *= smoothstep(0.0, ends, along) * smoothstep(0.0, ends, len - along);
+
+  // Ragged tongues: two octaves of noise in line space, stretched outward (so it streaks into
+  // tongues) and streaming outward over time. The tongue reaches as far as env × noise (as a
+  // share of reach), so its edge is jagged.
+  float rise = mix(u_flareRise, u_hoverFlareRise, v_hover), stretch = mix(u_flareStretch, u_hoverFlareStretch, v_hover);
+  vec3 p = vec3(along, (dist - u_realTime * rise) / max(stretch, 0.1), seed * 0.37) / max(mix(u_flareScale, u_hoverFlareScale, v_hover), 1.0);
+  float n = 0.5 + 0.5 * (0.65 * snoise(p) + 0.35 * snoise(p * 2.3 + 11.0));
+  float x = dist / max(mix(u_flareReach, u_hoverFlareReach, v_hover), 1e-3);
+  float tongue = smoothstep(0.0, max(mix(u_flareSoftness, u_hoverFlareSoftness, v_hover), 1e-3), env * n - x) * (1.0 - 0.6 * x);
+  outColor = vec4(mix(u_flare, u_hoverFlare, v_hover) * tongue * v_alpha, 0.0, 0.0, 0.0);
 }`,
 
   // One point per star. Its magnitude is dimmed by the air it shines through (more near the
@@ -345,7 +467,7 @@ void main() {
   float d = length(gl_PointCoord - 0.5) * v_size;
   float core = v_core * exp(-0.5 * d * d / (v_sigma * v_sigma));
   float halo = v_halo * exp(-3.0 * d / max(v_haloR, 1e-3)) * (1.0 - smoothstep(0.8, 1.0, 2.0 * d / v_size));
-  outColor = vec4(v_tint * (core + halo), 1.0);
+  outColor = vec4(v_tint * (core + halo), 0.0); // alpha is the line mask
 }`,
 
   // One instance per meteor slot: a streak from the tail to the head, brightest at the head.
@@ -372,22 +494,44 @@ out vec4 outColor;
 void main() {
   float w = 0.5 * u_meteorWidth * f_px;
   float i = v_alpha * u_meteorBrightness * pow(v_along, 1.5) * exp(-(v_across * v_across) / (w * w));
-  outColor = vec4(u_meteorColour * i, 1.0);
+  outColor = vec4(u_meteorColour * i, 0.0); // alpha is the line mask
 }`,
 
-  // ---------------------------------------------------------------- pass 2: composite
+  // ---------------------------------------------------------------- pass 3: fields
+  // The swirl: domain-warped noise on the sky itself (each pixel's equatorial direction, so it
+  // turns with the stars and the lines don't slide through it), churning on scene time, mapped
+  // through the twilight ramps (horizon to high: 0.6 of the way along, never deep or night),
+  // warm or cool by a second, broader noise, then saturated.
+  fields: `
+${NOISE_GLSL}
+out vec4 outColor;
+void main() {
+  // This pixel's direction (camera space, then equatorial: the matrix is a rotation, so its
+  // transpose undoes it), scaled so Scale counts swirls per screen height as before.
+  vec2 fc = gl_FragCoord.xy * (u_screen / u_res);
+  vec3 eq = transpose(f_eq2cam) * normalize(vec3((fc - f_center) / f_k, 1.0));
+  vec3 p = eq * (u_swirlScale * f_k / u_screen.y);
+  // Churn: the warp and the field drift through the noise in different directions over time.
+  float t = u_time * u_swirlSpeed;
+  vec3 w = vec3(fbm3(p + vec3(0.0, 0.0, t)), fbm3(p + vec3(5.2, 1.3, 9.7 - t)), fbm3(p + vec3(-3.7, 8.1 + t, 2.9)));
+  float n = fbm3(p + u_swirlWarp * w + vec3(0.7 * t, 3.1, 0.0));
+  float x = clamp(0.5 + 0.5 * n * u_swirlContrast, 0.0, 1.0);
+  // Warm or cool by region, with a narrow blend: averaging the two ramps gives grey.
+  float warmth = smoothstep(-0.12, 0.12, snoise(0.5 * p + u_swirlWarp * w.yzx + vec3(0.0, 17.0, 0.5 * t)) + u_swirlWarmth);
+  vec3 warm = ramp(0.6 * x, u_warmHorizon, u_warmLow, u_warmMid, u_warmHigh, u_warmDeep, u_warmDeep);
+  vec3 cool = ramp(0.6 * x, u_coolHorizon, u_coolLow, u_coolMid, u_coolHigh, u_coolDeep, u_coolDeep);
+  vec3 col = mix(cool, warm, warmth);
+  col = max(mix(vec3(dot(col, vec3(0.299, 0.587, 0.114))), col, u_swirlSaturation), 0.0);
+  outColor = vec4(min(col, 1.0), 1.0);
+}`,
+
+  // ---------------------------------------------------------------- pass 4: composite
   composite: `
 uniform sampler2D u_light;
 uniform sampler2D u_ridge;
+uniform sampler2D u_fields;
+uniform sampler2D u_flareMap;
 out vec4 outColor;
-
-// Twilight colours up the sky: horizon, low, middle, high, then the night colour at x = 1.
-vec3 ramp(float x, vec3 c0, vec3 c1, vec3 c2, vec3 c3, vec3 c4) {
-  if (x < 0.18) return mix(c0, c1, x / 0.18);
-  if (x < 0.42) return mix(c1, c2, (x - 0.18) / 0.24);
-  if (x < 0.68) return mix(c2, c3, (x - 0.42) / 0.26);
-  return mix(c3, c4, clamp((x - 0.68) / 0.32, 0.0, 1.0));
-}
 
 void main() {
   vec2 fc = gl_FragCoord.xy;
@@ -399,18 +543,36 @@ void main() {
   float alt = degrees(asin(clamp(up, -1.0, 1.0)));
   float az = atan(-c.x, north); // from north through east; due south = ±PI
 
-  // --- sky: night (with airglow low down), and over it the twilight: warm toward the sun,
-  // cool away from it, sinking toward the horizon as it fades
-  float tw = f_sky.x;
-  vec3 night = mix(u_nightHorizon, u_nightSky, smoothstep(0.0, max(u_airglowHeight, 1e-3), alt));
+  // --- sky: night (with airglow low down), and under it the twilight gradient: warm toward
+  // the sun, cool away from it. The gradient keeps its shape and sets: its top (where it meets
+  // the night) slides from Glow height down below the horizon as the light goes (f_glow).
+  // Its height is the altitude straight up the middle of the screen at this pixel's row, so
+  // the bands lie level, as in the photo: true altitude curves up toward the edges of a wide
+  // view, which bowled the gradient. (Stars, lines and the ridge stay on the true sky.)
+  vec3 mid = normalize(vec3(0.0, (fc.y - f_center.y) / f_k, 1.0));
+  float level = degrees(asin(clamp(f_tilt.y * mid.z + f_tilt.x * mid.y, -1.0, 1.0)));
+  vec3 night = mix(u_nightHorizon, u_nightSky, smoothstep(0.0, max(u_airglowHeight, 1e-3), level));
   float sunward = exp(-pow(wrapPi(az - f_sky.y) / radians(u_glowWidth), 2.0));
-  float x = max(alt, 0.0) / (u_glowHeight * mix(1.0 - u_glowSink, 1.0, tw));
-  vec3 warm = ramp(x, u_warmHorizon, u_warmLow, u_warmMid, u_warmHigh, night);
-  vec3 cool = ramp(x, u_coolHorizon, u_coolLow, u_coolMid, u_coolHigh, night);
-  vec3 col = mix(night, mix(cool, warm, sunward), tw);
+  float x = (max(level, 0.0) - f_glow.y) / max(f_glow.x, 1e-3) + 1.0;
+  // Midpoint: Schlick's bias puts the ramp's halfway point at glowMid, packing the low colours
+  // toward the horizon (slope (1 − m) / m at the bottom) and stretching the high ones, smoothly.
+  float m = 1.0 - u_glowMid;
+  x = clamp(x, 0.0, 1.0);
+  x = x / ((1.0 / m - 2.0) * (1.0 - x) + 1.0);
+  vec3 warm = ramp(x, u_warmHorizon, u_warmLow, u_warmMid, u_warmHigh, u_warmDeep, night);
+  vec3 cool = ramp(x, u_coolHorizon, u_coolLow, u_coolMid, u_coolHigh, u_coolDeep, night);
+  vec3 col = mix(cool, warm, sunward);
 
-  // --- light: stars, constellation lines, shooting stars
-  col += texelFetch(u_light, ivec2(fc), 0).rgb;
+  // --- light: stars and shooting stars, and the swirl through the constellation lines. With
+  // Mask off the swirl covers the sky instead, behind the stars (the lines draw nothing).
+  vec4 light = texelFetch(u_light, ivec2(fc), 0);
+  vec3 swirl = textureLod(u_fields, fc / u_res, 0.0).rgb * u_swirlBrightness;
+  col = mix(swirl, col, u_swirlMask);
+  col += light.rgb + swirl * light.a;
+
+  // --- light leaks: the swirl's colours flaring out of the lines. 1 − e^−x saturates toward
+  // the swirl's own brightness, so a big flare stays coloured instead of clipping to white.
+  col += swirl * (1.0 - exp(-textureLod(u_flareMap, fc / u_res, 0.0).r));
 
   // --- ridge: the skyline traced from the photo, left to right = east to west
   float ridge = textureLod(u_ridge, vec2(wrapPi(az - PI) / radians(u_ridgeSpan) + 0.5, 0.5), 0.0).r * u_ridgeSpan * u_ridgeScale;

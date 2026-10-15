@@ -7,7 +7,7 @@ description: Put a finished glimmer on the home page — register it in the inde
 
 Input: a sketch folder that works (usually from `new-glimmer`). Output: the sketch on the home page with a current cover, plus a report of everything found.
 
-This skill **reports and asks; it never rewrites the sketch on its own.** It edits only `src/sketches/index.js`, the cover files, and the benchmark table in the sketch's `NOTES.md`. Performance findings are warnings for the owner to decide on.
+This skill **reports and asks; it never rewrites the sketch on its own.** It edits only `src/sketches/index.js`, the cover files, and the benchmark table in the sketch's `NOTES.md`, plus whatever the owner chooses in step 3's zero-params question. Performance findings are warnings for the owner to decide on.
 
 ## 1. Register it on the home page
 
@@ -29,6 +29,13 @@ node scripts/check.mjs <slug>
 ```
 
 Expect `0 errors`. Report each warning: unused params, missing tooltips, labels over 18 characters.
+
+**Params set to zero.** List every range param in `params.js` whose default is 0 (and, for a bool that switches a feature on, `false`), with its group and label, plus the params hidden under it (`when: { key, not: [0] }` dependents), since a zero there usually means a whole feature ships switched off. Ignore params where 0 is an ordinary setting rather than "off" (an angle, an offset, a position like Start). Then ask the owner, for each (or all at once):
+
+- **Cut it:** remove the feature for simplicity, following the `glimmers-elements` skill's *Removing an element or param* (code, params, dependents, then `check.mjs`); or
+- **Keep it, noted:** add a line to the sketch's `NOTES.md` saying it's off by default and kept on purpose (e.g. "Vignette: 0 by default; kept for covers that need a darker frame").
+
+Don't do either without an answer.
 
 ## 4. The cover
 
@@ -77,7 +84,7 @@ Expect 0 errors from both. Then `npm run preview` and confirm the sketch shows a
 
 - Whether the sketch went into the index, was already there, or is waiting on where it should go.
 - Cover: recaptured or current, its size, and any warning.
-- Check warnings from step 3.
+- Check warnings from step 3, and the params at zero with what the owner chose for each.
 - Performance findings from step 5, most serious first, as warnings, not fixes.
 - The fps numbers and how they compare with the last run.
 - That it goes live on the next push to `main`, if nothing above blocks it.

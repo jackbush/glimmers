@@ -1,6 +1,9 @@
-// The settings pane: one row per param, generated from params.js, plus the changes line,
-// Reset and Copy changes. Copy produces a state blob the glimmers-state skill bakes into
-// params.js.
+// The settings pane: one row per param, generated from params.js, plus the changes line
+// (with its show-changes checkbox), Reset and Copy changes. Copy produces a state blob the
+// glimmers-state skill bakes into params.js.
+//
+// Sliders mark their home (the base value) once moved off it, and offer to re-centre their
+// range on the value when it's pinned at an end.
 
 import type { ParamStore } from './params';
 import type { Param, Presets } from './types';
@@ -46,6 +49,7 @@ export function buildPanel({ slug, store, onEdited, presets, onPreset }: PanelOp
   const copyBtn = document.getElementById('copy') as HTMLButtonElement;
   const resetBtn = document.getElementById('reset') as HTMLButtonElement;
   const statusEl = document.getElementById('status')!;
+  const showBox = document.getElementById('show-changes') as HTMLInputElement;
   const rows: { p: Param; wrap: HTMLElement; sync(): void }[] = [];
 
   function buildRow(p: Param): HTMLElement {
@@ -54,7 +58,7 @@ export function buildPanel({ slug, store, onEdited, presets, onPreset }: PanelOp
     const label = el('label', 'lbl', '- '.repeat(p.depth) + p.label);
     const id = 'p-' + p.key;
     label.htmlFor = id;
-    label.title = (p.desc ? p.desc + '\n' : '') + 'key: ' + p.key + ' · default: ' + p.default + '\nDouble-click to reset (to the preset\'s value, if one set it).';
+    label.title = (p.desc ? p.desc + '\n' : '') + 'key: ' + p.key + ' · default: ' + p.default;
     // Labels stay linked to their control for accessibility, but a click on one must not activate it
     // (that opened the colour picker / toggled checkboxes); double-click is reserved for reset.
     label.addEventListener('click', (e) => e.preventDefault());
@@ -90,12 +94,41 @@ export function buildPanel({ slug, store, onEdited, presets, onPreset }: PanelOp
       wrap.append(pick, hex);
       sync = () => { pick.value = String(p.value); hex.value = String(p.value); mark(); };
     } else {
+      const track = el('span', 'track');
       const range = el('input');
       range.type = 'range';
       range.id = id;
-      range.min = String(p.min);
-      range.max = String(p.max);
       range.step = String(p.step);
+      // Home: where the base value sits, shown once the value leaves it. Not interactive.
+      const home = el('i', 'home');
+      home.setAttribute('aria-hidden', 'true');
+      // Pinned at an end: re-centre the range on the value. Not for sliders that end at 1 or 100
+      // (shares and percentages, whose ends mean something), nor at a 0 floor (an amount can't
+      // go below none).
+      const rerange = el('button', 'rerange', '↔');
+      rerange.type = 'button';
+      rerange.title = 'Re-centre this slider\'s range on its value (this browser only; Copy changes carries it).';
+      const fixedEnds = p.codeMin! >= 0 && (p.codeMax === 1 || p.codeMax === 100);
+      rerange.addEventListener('click', () => {
+        const w = p.max! - p.min!, v = Number(p.value);
+        let lo = v - w / 2, hi = v + w / 2;
+        if (p.codeMin! >= 0 && lo < 0) { lo = 0; hi = w; }
+        store.setRange(p, Number(lo.toFixed(p.decimals)), Number(hi.toFixed(p.decimals)));
+        sync();
+        onEdited();
+      });
+      track.append(range, home, rerange);
+      const place = () => {
+        range.min = String(p.min);
+        range.max = String(p.max);
+        const lo = p.min!, hi = p.max!, b = Number(p.base), v = Number(p.value);
+        home.hidden = !store.isChanged(p) || b < lo || b > hi;
+        // The thumb is 10px wide, so its centre runs from 5px to the width − 5px.
+        home.style.left = 'calc(5px + (100% - 10px) * ' + ((b - lo) / (hi - lo)) + ')';
+        const atMin = v <= lo && lo !== 0, atMax = v >= hi;
+        rerange.hidden = fixedEnds || store.bypassed || !(atMin || atMax);
+        rerange.classList.toggle('at-min', atMin);
+      };
       const num = el('input', 'num');
       num.type = 'number';
       num.step = String(p.step);
@@ -104,10 +137,10 @@ export function buildPanel({ slug, store, onEdited, presets, onPreset }: PanelOp
       if (p.min != null && p.min >= 0) num.inputMode = Number.isInteger(p.step) ? 'numeric' : 'decimal';
       noSuggestions(num);
       // The number box deliberately has no min/max: type past the slider range if you need to.
-      range.addEventListener('input', () => { store.setValue(p, range.value); num.value = String(p.value); mark(); onEdited(); });
+      range.addEventListener('input', () => { store.setValue(p, range.value); num.value = String(p.value); mark(); place(); onEdited(); });
       num.addEventListener('change', () => { store.setValue(p, num.value); sync(); onEdited(); });
-      wrap.append(range, num);
-      sync = () => { range.value = String(p.value); num.value = String(p.value); mark(); };
+      wrap.append(track, num);
+      sync = () => { place(); range.value = String(p.value); num.value = String(p.value); mark(); };
     }
     wrap.title = p.desc || '';
     sync();
@@ -150,14 +183,30 @@ export function buildPanel({ slug, store, onEdited, presets, onPreset }: PanelOp
       const n = store.changedCount();
       statusEl.textContent = n === 0 ? 'No changes' : n + (n === 1 ? ' change' : ' changes');
       resetBtn.hidden = n === 0;
+      showBox.hidden = n === 0;
+      showBox.checked = !store.bypassed;
+      controls.classList.toggle('bypassed', store.bypassed);
     },
   };
 
+  // ---- show changes: untick to see the bases (defaults or preset) in place of the edits, for
+  // before/after comparison. The edits are held; the controls rest until it's ticked again.
+  showBox.addEventListener('change', () => {
+    store.setBypass(!showBox.checked);
+    panel.syncAll();
+    onEdited();
+  });
+
   // ---- copy state
   function buildState(): string {
-    const changed: Record<string, { from: unknown; to: unknown }> = {};
     // Edits since the preset (if one was applied): `from` is its value, or the default.
-    for (const p of store.params) if (store.isChanged(p) && store.isShown(p)) changed[p.key] = { from: p.base, to: p.value };
+    const changed: Record<string, { from: unknown; to: unknown; range?: [number, number] }> = {};
+    for (const p of store.params) {
+      if (!store.isChanged(p) || !store.isShown(p)) continue;
+      changed[p.key] = { from: p.base, to: store.edited(p) };
+      // A slider re-centred in the pane: bake its new range too.
+      if (p.min !== p.codeMin || p.max !== p.codeMax) changed[p.key].range = [p.min!, p.max!];
+    }
     return JSON.stringify({ glimmers: STATE_TAG, sketch: slug, ...(store.preset ? { preset: store.preset } : {}), changed }, null, 2);
   }
   async function writeClipboard(text: string): Promise<boolean> {

@@ -2,8 +2,8 @@
 //
 // Nothing in here is design-specific: it loads the sky data into buffers, reads the shaders
 // and perFrame() from shader.js, and uploads every param without `uniform: false` as
-// `u_<key>`. Lines, stars and meteors are added into a float "light" target; the composite
-// pass draws the sky and puts the light over it. The frame loop allocates nothing.
+// `u_<key>`. Lines, stars and meteors are added into a float "light" target, the flare and
+// the swirl are drawn at lower resolution, and the composite pass draws the sky and puts both over it. The frame loop allocates nothing.
 
 import SHADER, { SEG_LAYOUT } from './shader.js';
 import { createLabel } from './label.js';
@@ -11,7 +11,7 @@ import { RIDGE, RIDGE_MAX, SEGMENTS, SEGMENT_RANGES, STARS, STAR_RANGES, unpack 
 import { FULLSCREEN_VERT, frameUniforms, program, shaderHeader, shaderParams, uploadFrame, uploadParams } from '../../kit/gl.js';
 
 const DEG = Math.PI / 180;
-const UNIT_LIGHT = 0, UNIT_RIDGE = 1;
+const UNIT_LIGHT = 0, UNIT_RIDGE = 1, UNIT_FIELDS = 2, UNIT_FLARE = 3;
 
 /** RA, Dec in degrees → equatorial unit vector, written at out[o…o+2]. */
 function eqVector(ra, dec, out, o) {
@@ -62,6 +62,7 @@ for (let i = 0; i < SEG_N; i++) {
   segAttrs[o + L.rank] = raw(6);
   segAttrs[o + L.order] = v(7);
   segAttrs[o + L.index] = raw(8);
+  segAttrs[o + L.culture] = raw(9);
 }
 // The skyline as altitude ÷ ridge span (its heights as a share of the photo's width).
 const ridgeHeights = Float32Array.from(RIDGE, (h) => (h / 65535) * RIDGE_MAX);
@@ -77,9 +78,11 @@ export default function create({ canvas, P, model, degrade }) {
   const uniformParams = shaderParams(model.params);
   const { vals: frameVals, list: frameList } = frameUniforms(SHADER.frameUniforms);
 
-  let ready = false, passLines = null, passStars = null, passMeteors = null, passComposite = null;
+  let ready = false, passLines = null, passStars = null, passMeteors = null, passFlare = null, passFields = null, passComposite = null;
   let lineVao = null, starVao = null, emptyVao = null;
   let lightTex = null, lightFbo = null, lightW = 0, lightH = 0, lightFormat = 0, lightType = 0;
+  let fieldsTex = null, fieldsFbo = null, fieldsW = 0, fieldsH = 0;
+  let flareTex = null, flareFbo = null, flareW = 0, flareH = 0;
   let pxRatio = 1;
 
   /** `vert` null = the fullscreen triangle; otherwise both stages get the shared header. */
@@ -119,13 +122,18 @@ export default function create({ canvas, P, model, degrade }) {
     passLines = buildPass('lines', SHADER.linesVert, SHADER.linesFrag);
     passStars = buildPass('stars', SHADER.starsVert, SHADER.starsFrag);
     passMeteors = buildPass('meteors', SHADER.meteorVert, SHADER.meteorFrag);
+    passFlare = buildPass('flare', SHADER.flareVert, SHADER.flareFrag);
+    passFields = buildPass('fields', null, SHADER.fields);
     passComposite = buildPass('composite', null, SHADER.composite);
     gl.useProgram(passComposite.prog);
     gl.uniform1i(gl.getUniformLocation(passComposite.prog, 'u_light'), UNIT_LIGHT);
     gl.uniform1i(gl.getUniformLocation(passComposite.prog, 'u_ridge'), UNIT_RIDGE);
+    gl.uniform1i(gl.getUniformLocation(passComposite.prog, 'u_fields'), UNIT_FIELDS);
+    gl.uniform1i(gl.getUniformLocation(passComposite.prog, 'u_flareMap'), UNIT_FLARE);
 
-    // In SEG_LAYOUT's order.
-    lineVao = attribs(passLines.prog, segAttrs, [['a_from', 3], ['a_to', 3], ['a_centre', 3], ['a_rank', 1], ['a_order', 1], ['a_index', 1]], 1);
+    // In SEG_LAYOUT's order. The attribute locations are fixed in the GLSL, so the flare pass
+    // draws from this vertex array too.
+    lineVao = attribs(passLines.prog, segAttrs, [['a_from', 3], ['a_to', 3], ['a_centre', 3], ['a_rank', 1], ['a_order', 1], ['a_index', 1], ['a_culture', 1]], 1);
     starVao = attribs(passStars.prog, starAttrs, [['a_eq', 3], ['a_mag', 1], ['a_col', 3]], 0);
     emptyVao = gl.createVertexArray();
 
@@ -150,8 +158,48 @@ export default function create({ canvas, P, model, degrade }) {
     lightFormat = gl.getExtension('EXT_color_buffer_float') ? gl.RGBA16F : gl.RGBA8;
     lightType = lightFormat === gl.RGBA16F ? gl.HALF_FLOAT : gl.UNSIGNED_BYTE;
     lightW = lightH = 0;
-    sizeLight();
+
+    // Swirl and flare: low resolution, smooth enough to upscale linearly.
+    fieldsTex = smoothTexture(UNIT_FIELDS);
+    fieldsFbo = gl.createFramebuffer();
+    flareTex = smoothTexture(UNIT_FLARE);
+    flareFbo = gl.createFramebuffer();
+    fieldsW = fieldsH = flareW = flareH = 0;
+    sizeTargets();
     ready = true;
+  }
+  function sizeTargets() {
+    sizeLight();
+    const fw = Math.max(1, Math.ceil(canvas.width / SHADER.fieldsDivisor)), fh = Math.max(1, Math.ceil(canvas.height / SHADER.fieldsDivisor));
+    if (fw !== fieldsW || fh !== fieldsH) {
+      fieldsW = fw;
+      fieldsH = fh;
+      gl.activeTexture(gl.TEXTURE0 + UNIT_FIELDS);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, fw, fh, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fieldsFbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, fieldsTex, 0);
+    }
+    const rw = Math.max(1, Math.ceil(canvas.width / SHADER.flareDivisor)), rh = Math.max(1, Math.ceil(canvas.height / SHADER.flareDivisor));
+    if (rw !== flareW || rh !== flareH) {
+      flareW = rw;
+      flareH = rh;
+      // Flare adds up past 1 where lines cross, so it takes the light target's format.
+      gl.activeTexture(gl.TEXTURE0 + UNIT_FLARE);
+      gl.texImage2D(gl.TEXTURE_2D, 0, lightFormat, rw, rh, 0, gl.RGBA, lightType, null);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, flareFbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, flareTex, 0);
+    }
+  }
+  /** A linearly filtered, edge-clamped texture on its own unit. */
+  function smoothTexture(unit) {
+    gl.activeTexture(gl.TEXTURE0 + unit);
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    return tex;
   }
   function sizeLight() {
     const w = canvas.width, h = canvas.height;
@@ -185,10 +233,10 @@ export default function create({ canvas, P, model, degrade }) {
   }
 
   // Pointer, in CSS px from the canvas's top left (NaN = none). A mouse leaving clears it; a
-  // touch keeps its spot, so a tap names a constellation until the next tap.
+  // touch keeps its spot, so a tap names a constellation until the next tap. The label also
+  // draws the cursor.
   const label = createLabel(canvas, P, model);
   let pointerX = NaN, pointerY = NaN;
-  canvas.style.cursor = 'crosshair';
   const point = (/** @type {PointerEvent} */ e) => {
     pointerX = e.offsetX;
     pointerY = e.offsetY;
@@ -203,8 +251,8 @@ export default function create({ canvas, P, model, degrade }) {
   canvas.addEventListener('webglcontextlost', (e) => {
     e.preventDefault();
     ready = false;
-    passLines = passStars = passMeteors = passComposite = null;
-    lineVao = starVao = emptyVao = lightTex = lightFbo = null;
+    passLines = passStars = passMeteors = passFlare = passFields = passComposite = null;
+    lineVao = starVao = emptyVao = lightTex = lightFbo = fieldsTex = fieldsFbo = flareTex = flareFbo = null;
     degrade(0.6); // come back lighter
   });
   canvas.addEventListener('webglcontextrestored', buildAll);
@@ -214,7 +262,7 @@ export default function create({ canvas, P, model, degrade }) {
   return {
     resize(_w, _h, px) {
       pxRatio = px;
-      if (ready) sizeLight();
+      if (ready) sizeTargets();
     },
     frame(t, _dt, rt, rdt) {
       if (!ready) return;
@@ -240,7 +288,22 @@ export default function create({ canvas, P, model, degrade }) {
       usePass(passMeteors, w, h);
       gl.bindVertexArray(emptyVao);
       gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, SHADER.maxMeteors);
+
+      // Flare: light leaking off the lines, at half resolution (its edges are crisp).
+      gl.bindFramebuffer(gl.FRAMEBUFFER, flareFbo);
+      gl.viewport(0, 0, flareW, flareH);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      usePass(passFlare, flareW, flareH);
+      gl.bindVertexArray(lineVao);
+      gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, SEG_N);
       gl.disable(gl.BLEND);
+
+      // Fields: the swirl, at low resolution.
+      gl.bindVertexArray(emptyVao);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fieldsFbo);
+      gl.viewport(0, 0, fieldsW, fieldsH);
+      usePass(passFields, fieldsW, fieldsH);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
 
       // Composite to the canvas.
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);

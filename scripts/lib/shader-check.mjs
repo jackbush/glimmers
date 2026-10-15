@@ -1,7 +1,8 @@
 // Params ↔ GLSL ↔ CPU checks for the WebGL sketches, called from a sketch's own check.mjs.
 // Every param without `uniform: false` must be used as u_<key> in a shader; every CPU-only
 // param must be read somewhere (P.<key> in the CPU source, or by the kit); every u_* and f_*
-// the shaders use must exist, and every f_* must be written (f.<name>) by the CPU source.
+// the shaders use must exist, and every f_* must be written (f.<name>) by the CPU source. No
+// param's uniform may share a name with one the engine sets itself.
 
 import { STANDARD_KEYS } from '../../src/kit/standard.js';
 
@@ -14,6 +15,9 @@ import { STANDARD_KEYS } from '../../src/kit/standard.js';
 export function checkShader({ params, errors, warnings }, { glsl, cpuSrc, frameNames, builtins }) {
   const keys = new Set(params.map((p) => p.key));
   const builtin = new Set(builtins);
+  for (const p of params) {
+    if (builtin.has('u_' + p.key)) errors.push(`${p.key}: u_${p.key} is also one of the engine's own uniforms`);
+  }
   for (const p of params) {
     if (p.uniform === false) {
       if (!STANDARD_KEYS.includes(p.key) && !new RegExp(`\\bP\\.${p.key}\\b`).test(cpuSrc)) {

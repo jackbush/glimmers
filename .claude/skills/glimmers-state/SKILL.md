@@ -20,7 +20,7 @@ The settings pane's **Copy changes** button produces this:
 
 - `sketch` is the folder: every default lives in `src/sketches/<sketch>/params.js`.
 - Old blobs may carry `paused`: it isn't a param any more (it's the play/pause button), so skip it and say so.
-- `changed` holds every param that differs from its base at the moment of copying. The base is the code default, unless the blob has a `preset`: then it's that preset's value for the params the preset sets (the default for the rest). `from` is the base the user's page was running. `to` is what they want.
+- `changed` holds every param that differs from its base at the moment of copying. An entry may also carry `range: [min, max]`: the user re-centred that slider in the pane (the ↔ button). The base is the code default, unless the blob has a `preset`: then it's that preset's value for the params the preset sets (the default for the rest). `from` is the base the user's page was running. `to` is what they want.
 - A blob with `"preset": "Name"` was copied while that preset was applied: the user tweaked the preset. Changes to keys the preset sets belong in that preset's entry in `presets` (params.js); changes to other keys (Finish, playback) go to the defaults as usual. If it's unclear whether they meant to change the preset or the defaults, ask.
 - The user's intent, if any, is in the chat message around the blob.
 - Old Blackstar blobs (`"blackstar": "blackstar/state@1"`, no `sketch`) are for `blackstar`. Their keys still apply.
@@ -36,10 +36,11 @@ The settings pane's **Copy changes** button produces this:
 2. **Reconcile each entry in `changed`:**
    - **Key exists, `from` equals the current default:** set the value to `to`.
    - **Key exists, `from` differs from the current default:** the code changed after the user copied. Still apply `to`, since that's what they saw and liked, but list it in your reply as "default had moved: X → (now) Y → applied Z".
-   - **`to` is outside `min`/`max`:** the user typed past the slider range in the number box. Apply it and widen `min`/`max` so the slider covers it with some headroom (round to a clean number). Mention that you widened it.
+   - **Entry has `range`:** set the param's `min`/`max` to it (rounded to clean numbers that still contain `to`, and the default, with some headroom). Mention the new range.
+   - **`to` is outside `min`/`max`** (and no `range`): the user typed past the slider range in the number box. Apply it and widen `min`/`max` so the slider covers it with some headroom (round to a clean number). Mention that you widened it.
    - **Key doesn't exist:** the param was renamed or removed. Check `git log -p -S'<key>' -- src/sketches/<sketch>/params.js` for a rename. If one is obvious, apply the value to the new key and say so; otherwise report the key as skipped.
    - **Formats:** colours are lowercase `#rrggbb`. Numbers keep the param's `step` precision, so never write `0.30000000000000004`. Bools are `true`/`false`.
-3. **Change nothing else in `params.js`.** Keep each param's position, label, desc and formatting, and edit only the value (plus `min`/`max` when widening).
+3. **Change nothing else in `params.js`.** Keep each param's position, label, desc and formatting, and edit only the value (plus `min`/`max` when widening or applying a `range`).
 4. **Act on the accompanying message.** Phrases like "a bit hotter" or "slower" usually map to existing params, so adjust them and say which ones and by how much. If it asks for a new visual element, behaviour, or a removal, follow the `glimmers-elements` skill. If it's ambiguous, apply the numeric changes first and then ask about it. Don't stall the whole update on it.
 5. **Verify:** run `node scripts/check.mjs <sketch>`. It must report 0 errors.
 6. **Cover:** if the change is visible in the first few seconds, the cover is now out of date. Say so, and offer to run `node scripts/capture.mjs <sketch>`.

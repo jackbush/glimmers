@@ -9,9 +9,9 @@ import { checkShader } from '../../../scripts/lib/shader-check.mjs';
 export default async function check(ctx) {
   const S = (await import(pathToFileURL(join(ctx.dir, 'shader.js')).href)).default;
   checkShader(ctx, {
-    glsl: [S.common, S.linesVert, S.linesFrag, S.starsVert, S.starsFrag, S.meteorVert, S.meteorFrag, S.composite].join('\n'),
+    glsl: [S.common, S.linesVert, S.linesFrag, S.starsVert, S.starsFrag, S.meteorVert, S.meteorFrag, S.flareVert, S.flareFrag, S.fields, S.composite].join('\n'),
     cpuSrc: ['shader.js', 'label.js'].map((f) => readFileSync(join(ctx.dir, f), 'utf8')).join('\n'), // perFrame(), hover(), the label
     frameNames: Object.keys(S.frameUniforms),
-    builtins: ['u_res', 'u_screen', 'u_time', 'u_realTime', 'u_light', 'u_ridge'],
+    builtins: ['u_res', 'u_screen', 'u_time', 'u_realTime', 'u_light', 'u_ridge', 'u_fields', 'u_flareMap'],
   });
 }
