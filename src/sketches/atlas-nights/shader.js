@@ -39,7 +39,7 @@ import { hash2 } from '../../kit/random.js';
 import { CULTURES, LATITUDE } from './sky.js';
 import { SKY_CULTURES } from './cultures.js';
 
-const TAU = Math.PI * 2;
+export const TAU = Math.PI * 2;
 const DEG = Math.PI / 180;
 const MAX_METEORS = 2; // one per time slot, and a slot is longer than a meteor, so ≤ 2 overlap
 const METEOR_FIELDS = 6; // head x, y, direction x, y, tail length (canvas px), brightness
@@ -49,18 +49,16 @@ const METEOR_SLOT = 3;
 const RADIANT = [112 * DEG, 33 * DEG];
 const RADIANT_EQ = [Math.cos(RADIANT[1]) * Math.cos(RADIANT[0]), Math.cos(RADIANT[1]) * Math.sin(RADIANT[0]), Math.sin(RADIANT[1])];
 
-function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+export function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
 function smoothstep(a, b, x) { const u = clamp((x - a) / (b - a), 0, 1); return u * u * (3 - 2 * u); }
 // Same as the GLSL rise(): 0 → 1 as x goes from a to b, eased; a step at a when a ≥ b.
-function rise(a, b, x) { return smoothstep(0, 1, (x - a) / Math.max(b - a, 1e-4)); }
-// A segment counts for hovering once this much of it is showing (grown × fade).
-const HOVER_VISIBLE = 0.25;
-const BEHIND = 0.02; // camera z below this counts as behind the view (shared with the GLSL)
+export function rise(a, b, x) { return smoothstep(0, 1, (x - a) / Math.max(b - a, 1e-4)); }
+export const BEHIND = 0.02; // camera z below this counts as behind the view (shared with the GLSL)
 
 // The constellation-line instance attributes and their geometry, shared by the lines and the
 // flare passes (fixed locations, so one vertex array serves both). Tracing in and fading out
 // follow the hour angle of the constellation's centre, gated by the twilight at dusk and dawn;
-// hover() repeats this on the CPU, so keep the two in step.
+// hover.js repeats this on the CPU (showing()), so keep the two in step.
 const LINE_SEGMENT = `
 layout(location = 0) in vec3 a_from;
 layout(location = 1) in vec3 a_to;
@@ -89,7 +87,7 @@ bool lineSegment(out vec2 s, out vec2 e, out float fade, out float hover) {
   return true;
 }`;
 
-/** Where each field sits in a segment's attributes (sketch.js builds them; hover() reads them). */
+/** Where each field sits in a segment's attributes (sketch.js builds them; hover.js reads them). */
 export const SEG_LAYOUT = { stride: 13, from: 0, to: 3, centre: 6, rank: 9, order: 10, index: 11, culture: 12 };
 
 // Sky culture menu label → [culture index in sky.js, highest rank drawn], looked up per frame.
@@ -224,58 +222,6 @@ export default {
       mt[o + 4] = Math.min(travel * q, travel * P.meteorTail.value);
       mt[o + 5] = Math.pow(Math.sin(Math.PI * q), 0.7) * (1 - tw);
     }
-  },
-
-  /**
-   * Which constellation the pointer is over, eased into f_hover. Call after perFrame() (it
-   * reads the frame's matrix and gates). x, y are canvas px with y up, or NaN when there's no
-   * pointer. The nearest showing line within Hover reach wins. Returns its index, or −1.
-   * Must not allocate.
-   */
-  hover(P, f, segs, count, x, y, rdt, px) {
-    let best = -1;
-    const reach = P.hoverReach.value * px;
-    if (reach > 0 && x === x) {
-      const m = f.f_eq2cam, lst = f.f_lst[0], k = f.f_k[0], cx = f.f_center[0], cy = f.f_center[1];
-      const L = SEG_LAYOUT, overlap = P.traceOverlap.value;
-      let bestD = reach * reach;
-      for (let i = 0; i < count; i++) {
-        const o = i * L.stride;
-        if (segs[o + L.culture] !== f.f_culture[0] || segs[o + L.rank] > f.f_culture[1]) continue;
-        // Mirrors linesVert: hour angle → progress and fade → how much of this segment shows.
-        let h = lst - Math.atan2(segs[o + L.centre + 1], segs[o + L.centre]);
-        h = (h - TAU * Math.floor((h + Math.PI) / TAU)) * (12 / Math.PI);
-        const progress = Math.min(rise(P.drawStart.value, P.drawEnd.value, h), f.f_lines[0]);
-        const fade = (1 - rise(P.fadeStart.value, P.fadeEnd.value, h)) * f.f_lines[1];
-        const grown = clamp((progress - segs[o + L.order] * (1 - overlap)) / overlap, 0, 1);
-        if (grown * fade < HOVER_VISIBLE) continue;
-        const a = o + L.from, b = o + L.to;
-        const az = m[2] * segs[a] + m[5] * segs[a + 1] + m[8] * segs[a + 2];
-        const bz = m[2] * segs[b] + m[5] * segs[b + 1] + m[8] * segs[b + 2];
-        if (az < BEHIND || bz < BEHIND) continue;
-        const ax = cx + (k / az) * (m[0] * segs[a] + m[3] * segs[a + 1] + m[6] * segs[a + 2]);
-        const ay = cy + (k / az) * (m[1] * segs[a] + m[4] * segs[a + 1] + m[7] * segs[a + 2]);
-        const ex = ax + grown * (cx + (k / bz) * (m[0] * segs[b] + m[3] * segs[b + 1] + m[6] * segs[b + 2]) - ax);
-        const ey = ay + grown * (cy + (k / bz) * (m[1] * segs[b] + m[4] * segs[b + 1] + m[7] * segs[b + 2]) - ay);
-        // Distance² from the pointer to the drawn part of the segment.
-        const dx = ex - ax, dy = ey - ay;
-        const u = clamp(((x - ax) * dx + (y - ay) * dy) / Math.max(dx * dx + dy * dy, 1e-6), 0, 1);
-        const qx = ax + u * dx - x, qy = ay + u * dy - y, d = qx * qx + qy * qy;
-        if (d < bestD) { bestD = d; best = segs[o + L.index]; }
-      }
-    }
-    // Ease: the new one rises while the previous one falls, each over Hover fade.
-    const hv = f.f_hover, step = rdt / Math.max(P.hoverFade.value, 1e-3);
-    if (best !== hv[0]) {
-      const amount = best === hv[2] ? hv[3] : 0; // back to the one easing out: pick up where it is
-      hv[2] = hv[0];
-      hv[3] = hv[1];
-      hv[0] = best;
-      hv[1] = amount;
-    }
-    hv[1] = best < 0 ? 0 : Math.min(1, hv[1] + step);
-    hv[3] = Math.max(0, hv[3] - step);
-    return best;
   },
 
   // Prepended (after uniform declarations) to every shader.

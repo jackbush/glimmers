@@ -5,7 +5,8 @@
 // that the Maghreb's farming calendar ran on; al-Ṣūfī's 10th-century Book of the Fixed Stars,
 // the star map of Islamic astronomy (and of the astrolabes made in Fez and Marrakech); and the
 // Bedouin asterisms the Arab tribes carried west. They come from Stellarium's sky cultures,
-// by Khalid al-Ajaji (CC BY-ND 4.0), unaltered.
+// by Khalid al-Ajaji (CC BY-ND 4.0), unaltered. The Tuareg set is the Saharan Amazigh sky
+// Henri Duveyrier recorded from the Kel Ajjer in 1864: his names and stars, our lines.
 
 export const SKY_CULTURES = [
   { label: 'Western: main', culture: 'western', rank: 1 },
@@ -14,4 +15,5 @@ export const SKY_CULTURES = [
   { label: 'Arabic: lunar mansions', culture: 'arabic_lunar_stations', rank: 1 },
   { label: 'Arabic: al-Ṣūfī', culture: 'arabic_al-sufi', rank: 1 },
   { label: 'Arabic: Bedouin', culture: 'arabic_ancient', rank: 1 },
+  { label: 'Amazigh: Tuareg', culture: 'tuareg', rank: 1 },
 ];

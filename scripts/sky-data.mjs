@@ -6,8 +6,9 @@
 // - Stars: the Yale Bright Star Catalogue, 5th ed. (every star to about magnitude 6.5), J2000
 //   positions, V magnitude and B-V colour index. Stars that never rise at the sketch's latitude
 //   are left out.
-// - Constellation lines, in several sky cultures: d3-celestial's western 88 (BSD-3) and three
-//   Arabic ones from Stellarium (CC BY-ND 4.0; notices copied into sky.js). Each line is a
+// - Constellation lines, in several sky cultures: d3-celestial's western 88 (BSD-3), three
+//   Arabic ones from Stellarium (CC BY-ND 4.0; notices copied into sky.js), and the Tuareg
+//   names and stars Duveyrier recorded in 1864 (sky-tuareg.mjs). Each line is a
 //   polyline of RA/Dec points, kept in drawing order so a constellation can trace itself in.
 // - Ridge: the skyline traced from the reference photo (the user's own, from the Atlas): for
 //   each column, how far the dark silhouette reaches up from the bottom, as a fraction of the
@@ -20,6 +21,7 @@ import { spawnSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { cli } from './lib/chrome.mjs';
+import TUAREG from './sky-tuareg.mjs';
 
 const { opt } = cli(['--photo']);
 const photo = opt('--photo', null);
@@ -66,6 +68,8 @@ stars.forEach((s, i) => starData.set([q(s.ra, 0, 360), q(s.dec, -90, 90), q(s.ma
 //   by Hipparcos number, placed from d3-celestial's star list or, for stars fainter than it
 //   goes, the Hipparcos catalogue on VizieR. These are kept whole and unaltered (the licence
 //   allows no derivatives): every constellation, every line, only converted to coordinates.
+// - tuareg: Duveyrier's 1864 names and stars, our lines (sky-tuareg.mjs); stars named by Bayer
+//   letter or proper name, resolved through d3-celestial's star names.
 const D3 = 'https://raw.githubusercontent.com/ofrohn/d3-celestial/master/';
 const SC = 'https://raw.githubusercontent.com/Stellarium/stellarium-skycultures/master/';
 const STELLARIUM = ['arabic_lunar_stations', 'arabic_al-sufi', 'arabic_ancient'];
@@ -87,7 +91,25 @@ const cultures = [];
   const hip = new Map(JSON.parse((await get(D3 + 'data/stars.6.json')).toString('utf8')).features.map((f) => [f.id, [(f.geometry.coordinates[0] + 360) % 360, f.geometry.coordinates[1]]]));
   const raw = [];
   for (const id of STELLARIUM) raw.push([id, JSON.parse((await get(SC + id + '/index.json')).toString('utf8'))]);
-  const missing = [...new Set(raw.flatMap(([, d]) => d.constellations.flatMap((c) => c.lines.flat())).filter((h) => !hip.has(h)))];
+  // Tuareg: "α Ori" or "Alcyone" → Hipparcos number.
+  const starNames = JSON.parse((await get(D3 + 'data/starnames.json')).toString('utf8'));
+  const hipOf = new Map();
+  for (const [h, n] of Object.entries(starNames)) {
+    if (n.bayer) {
+      hipOf.set(n.bayer + ' ' + n.c, Number(h)); // "ζ2 Sco": a double's component, as written
+      const plain = n.bayer.replace(/[0-9]+$/, '') + ' ' + n.c; // "β Sco": its first listed component
+      if (!hipOf.has(plain)) hipOf.set(plain, Number(h));
+    }
+    if (n.name) hipOf.set(n.name, Number(h));
+  }
+  const tuareg = TUAREG.constellations.map((c) => ({
+    ...c,
+    hips: c.lines.map((l) => l.map((star) => {
+      if (!hipOf.has(star)) throw new Error('sky-tuareg.mjs: no star called ' + star);
+      return hipOf.get(star);
+    })),
+  }));
+  const missing = [...new Set([...raw.flatMap(([, d]) => d.constellations.flatMap((c) => c.lines.flat())), ...tuareg.flatMap((c) => c.hips.flat())].filter((h) => !hip.has(h)))];
   if (missing.length) {
     const tsv = (await get('https://vizier.cds.unistra.fr/viz-bin/asu-tsv?-source=I/239/hip_main&-out=HIP,_RA.icrs,_DE.icrs&-out.max=9999&HIP=' + missing.join(','))).toString('utf8');
     for (const row of tsv.split('\n')) {
@@ -103,6 +125,10 @@ const cultures = [];
       constellations: d.constellations.map((c) => ({ name: c.common_name.english, native: c.common_name.native || '', rank: 1, polys: c.lines.map((l) => l.map((h) => hip.get(h))) })),
     });
   }
+  cultures.push({
+    id: TUAREG.id,
+    constellations: tuareg.map((c) => ({ name: c.name, native: c.native, rank: 1, polys: c.hips.map((l) => l.map((h) => hip.get(h))) })),
+  });
 }
 
 // Per segment: RA/Dec of both ends, the constellation's centre, its rank (1 = major), the
@@ -124,6 +150,8 @@ cultures.forEach((culture, ci) => {
     const n = c.polys.reduce((s, p) => s + p.length - 1, 0);
     let k = 0;
     for (const poly of c.polys) {
+      // A single star: a zero-length segment, which draws nothing but can be hovered.
+      if (poly.length === 1) segs.push([poly[0][0], poly[0][1], poly[0][0], poly[0][1], cra, cdec, c.rank, 0, names.length, ci]);
       for (let i = 0; i + 1 < poly.length; i++, k++) {
         segs.push([poly[i][0], poly[i][1], poly[i + 1][0], poly[i + 1][1], cra, cdec, c.rank, n > 1 ? k / (n - 1) : 0, names.length, ci]);
       }
@@ -178,6 +206,8 @@ ${license.split('\n').map((l) => ('//   ' + l).trimEnd()).join('\n')}
 //   (https://github.com/Stellarium/stellarium-skycultures), by Khalid al-Ajaji, licensed CC BY-ND 4.0
 //   (https://creativecommons.org/licenses/by-nd/4.0/). Included whole and unaltered: only
 //   converted from Hipparcos numbers to coordinates (d3-celestial's star list, else Hipparcos via VizieR).
+// - tuareg: names, meanings and stars from Henri Duveyrier, Les Touareg du Nord (Paris, 1864),
+//   pp. 423–426 (public domain); the lines joining each figure's stars are drawn for this sketch.
 //
 // Ridge: traced from the reference photo, IMG_1171 (the Atlas at dusk).
 

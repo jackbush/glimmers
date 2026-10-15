@@ -1,8 +1,9 @@
 // Atlas Nights — the constellation name that follows the pointer (italic serif on a dark
 // lozenge), and the crosshair cursor beside it, both in Text colour.
 //
-// The name is a DOM element over the canvas. The pointer handler moves it; the frame loop
-// touches the DOM only when the hovered constellation changes or a param does, never per frame.
+// The name is a DOM element over the canvas. The pointer handler moves it, and the frame loop
+// touches the DOM only when the hovered constellation changes or a param does, except while a
+// tap's name rides along with the sky (one transform per frame then).
 
 import { NAMES } from './sky.js';
 
@@ -36,6 +37,10 @@ export function createLabel(canvas, P, model) {
   el.setAttribute('aria-hidden', 'true'); // a hover flourish; the names aren't content
   el.style.cssText = 'position:fixed;left:0;top:0;pointer-events:none;white-space:nowrap;opacity:0;' +
     'font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;font-style:italic;line-height:1;';
+  const nativeEl = document.createElement('bdi');
+  nativeEl.style.fontStyle = 'normal';
+  const nameEl = document.createElement('span');
+  el.append(nativeEl, nameEl);
   canvas.after(el);
 
   let shown = -1, version = -1, cursorLook = '';
@@ -50,7 +55,7 @@ export function createLabel(canvas, P, model) {
     canvas.style.cursor = 'image-set(' + one + ' 1x, ' + two + ' 2x)' + hot;
   }
   return {
-    /** Follow the pointer (CSS px from the canvas's top left). Called from the pointer handler. */
+    /** Put the name beside (x, y), CSS px from the canvas's top left: the pointer, or a tapped point. */
     move(x, y) {
       const off = P.labelOffset.value;
       el.style.transform = 'translate(' + (x + off) + 'px,' + (y + off) + 'px)';
@@ -65,7 +70,6 @@ export function createLabel(canvas, P, model) {
         el.style.borderRadius = size + 'px';
         el.style.color = P.labelColour.value;
         el.style.background = P.labelBackground.value;
-        el.style.transition = 'opacity ' + P.hoverFade.value + 's';
         if (shown >= 0) el.style.opacity = String(P.labelOpacity.value);
         const look = P.labelColour.value + P.cursorOpacity.value;
         if (look !== cursorLook) {
@@ -76,9 +80,20 @@ export function createLabel(canvas, P, model) {
       if (index === shown) return;
       shown = index;
       if (index >= 0) {
-        el.textContent = NAMES[index].join(' · '); // the name, then the native name if there is one
+        // A native name comes first, upright (Arabic has no italic) and isolated so its
+        // right-to-left run doesn't reorder the brackets; then the translation in brackets.
+        const [name, native] = NAMES[index];
+        if (native) {
+          nativeEl.textContent = native;
+          nameEl.textContent = ' (' + name + ')';
+        } else {
+          nativeEl.textContent = '';
+          nameEl.textContent = name;
+        }
+        el.style.transition = 'opacity ' + P.hoverFade.value + 's';
         el.style.opacity = String(P.labelOpacity.value);
       } else {
+        el.style.transition = 'opacity ' + P.hoverFadeOut.value + 's';
         el.style.opacity = '0'; // keeps the last name while it fades
       }
     },

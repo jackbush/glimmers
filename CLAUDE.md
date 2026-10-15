@@ -10,7 +10,7 @@ A home for small browser sketches ("glimmers"): an index page of looping covers,
   - `scripts/check.mjs`: params ↔ code consistency. Run it after every change.
   - `scripts/bench.mjs`: real-GPU fps in headless Chrome.
   - `scripts/capture.mjs`: cover videos. Needs ffmpeg.
-  - `scripts/sky-data.mjs`: rebuilds Atlas Nights' star, constellation and ridge data. Needs network and ffmpeg.
+  - `scripts/sky-data.mjs`: rebuilds Atlas Nights' star, constellation and ridge data (its hand-made Tuareg set is `scripts/sky-tuareg.mjs`). Needs network and ffmpeg.
   - Both bench and capture rebuild the site and start `astro preview` themselves (or reuse one already serving this dist/; they refuse `astro dev`).
 - Site metadata: name and description live in `src/sketches/index.js`; `BaseLayout.astro` builds every page's title, share tags and icons from them. Titles are `Glimmers` on the index and `<Name> (<Year>) | Glimmers` on sketch pages; the home-screen name is `Glimmers` or the sketch's name. Each sketch page's link preview is its own `share.jpg` (made by `capture.mjs` with the cover); the index uses `public/share.jpg`. `scripts/site-images.mjs` renders that and the icons from Blackstar.
 - Skills: `new-glimmer` (scaffold), `glimmers-elements` (add/edit/remove elements and params), `glimmers-state` (apply pasted state blobs), `publish-glimmer` (index + cover + perf scan + benchmark), `sprig-species` (Sprig's tree presets: horticultural naming, colours, checking by eye).

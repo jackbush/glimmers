@@ -6,6 +6,8 @@
 // the swirl are drawn at lower resolution, and the composite pass draws the sky and puts both over it. The frame loop allocates nothing.
 
 import SHADER, { SEG_LAYOUT } from './shader.js';
+import { buildLoops, createHover } from './hover.js';
+import { createInput } from './input.js';
 import { createLabel } from './label.js';
 import { RIDGE, RIDGE_MAX, SEGMENTS, SEGMENT_RANGES, STARS, STAR_RANGES, unpack } from './sky.js';
 import { FULLSCREEN_VERT, frameUniforms, program, shaderHeader, shaderParams, uploadFrame, uploadParams } from '../../kit/gl.js';
@@ -64,6 +66,8 @@ for (let i = 0; i < SEG_N; i++) {
   segAttrs[o + L.index] = raw(8);
   segAttrs[o + L.culture] = raw(9);
 }
+// Every enclosed shape of every constellation, for hovering inside one.
+const loops = buildLoops(segAttrs, SEG_N);
 // The skyline as altitude ÷ ridge span (its heights as a share of the photo's width).
 const ridgeHeights = Float32Array.from(RIDGE, (h) => (h / 65535) * RIDGE_MAX);
 
@@ -232,21 +236,12 @@ export default function create({ canvas, P, model, degrade }) {
     uploadFrame(gl, pass.frameLocs, frameList);
   }
 
-  // Pointer, in CSS px from the canvas's top left (NaN = none). A mouse leaving clears it; a
-  // touch keeps its spot, so a tap names a constellation until the next tap. The label also
-  // draws the cursor.
+  // Pointer gestures (input.js: hover, tap, drag to scrub time), what they pick (hover.js), and
+  // the name and cursor (label.js). The pointer goes to hover.js in canvas px with y up.
   const label = createLabel(canvas, P, model);
-  let pointerX = NaN, pointerY = NaN;
-  const point = (/** @type {PointerEvent} */ e) => {
-    pointerX = e.offsetX;
-    pointerY = e.offsetY;
-    label.move(pointerX, pointerY);
-  };
-  canvas.addEventListener('pointermove', point);
-  canvas.addEventListener('pointerdown', point);
-  canvas.addEventListener('pointerleave', (e) => {
-    if (e.pointerType !== 'touch') pointerX = pointerY = NaN;
-  });
+  const input = createInput(canvas, P, label.move);
+  const hover = createHover();
+  const pointer = { x: NaN, y: NaN, tapped: false, tapX: 0, tapY: 0 };
 
   canvas.addEventListener('webglcontextlost', (e) => {
     e.preventDefault();
@@ -266,11 +261,21 @@ export default function create({ canvas, P, model, degrade }) {
     },
     frame(t, _dt, rt, rdt) {
       if (!ready) return;
-      sceneTime = t;
+      sceneTime = t + input.scrub;
       realTime = rt;
       const w = canvas.width, h = canvas.height;
-      SHADER.perFrame(P, t, rt, w, h, pxRatio, frameVals);
-      label.show(SHADER.hover(P, frameVals, segAttrs, SEG_N, pointerX * pxRatio, h - pointerY * pxRatio, rdt, pxRatio));
+      SHADER.perFrame(P, sceneTime, rt, w, h, pxRatio, frameVals);
+      pointer.x = input.x * pxRatio;
+      pointer.y = h - input.y * pxRatio;
+      if (input.tapped) {
+        input.tapped = false;
+        pointer.tapped = true;
+        pointer.tapX = input.tapX * pxRatio;
+        pointer.tapY = h - input.tapY * pxRatio;
+      }
+      label.show(hover.update(P, frameVals, segAttrs, SEG_N, loops, pointer, rt, rdt, pxRatio));
+      // A tap's name rides on the tapped point of the sky.
+      if (hover.anchored) label.move(hover.anchor[0] / pxRatio, (h - hover.anchor[1]) / pxRatio);
 
       // Light: lines, stars and meteors added together.
       gl.bindFramebuffer(gl.FRAMEBUFFER, lightFbo);

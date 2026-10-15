@@ -19,6 +19,7 @@ export default [
     params: [
       { key: 'nightLength', label: 'Loop (s)', value: 96, min: 20, max: 300, step: 1, uniform: false, desc: 'Seconds for one whole day and night. The sky turns once per loop.' },
       { key: 'startPhase', label: 'Start', value: 0, min: 0, max: 1, step: 0.005, uniform: false, desc: 'Where the loop starts: 0 = the brightest twilight, 0.5 = the dead of night.' },
+      { key: 'dragSpan', label: 'Drag span', value: 0.25, min: 0.02, max: 1, step: 0.01, uniform: false, desc: 'Dragging across the sky turns time: one screen width is this share of a loop (right = forward). Mostly vertical drags do nothing.' },
       { key: 'month', label: 'Month', value: 6.3, min: 1, max: 12.99, step: 0.1, uniform: false, desc: 'Time of year: which stars fill the night. 12.5 = mid-December.' },
       { key: 'twilightShare', label: 'Twilight share', value: 0.22, min: 0.05, max: 0.6, step: 0.005, uniform: false, desc: 'Share of the loop with any light in the sky. The rest is full night.' },
     ],
@@ -77,7 +78,7 @@ export default [
   {
     group: 'Constellations',
     params: [
-      { key: 'skyCulture', label: 'Sky culture', type: 'select', uniform: false, value: SKY_CULTURES[0].label, options: SKY_CULTURES.map((c) => c.label), desc: 'Whose constellations to draw. Western: the 88 of modern star charts (Greek in origin), from the main few to all. Arabic, the traditions with a history in Morocco: the lunar mansions the farming calendar ran on, al-Ṣūfī\'s 10th-century star book, and the older Bedouin asterisms (Stellarium\'s sky cultures, by Khalid al-Ajaji, CC BY-ND 4.0).' },
+      { key: 'skyCulture', label: 'Sky culture', type: 'select', uniform: false, value: SKY_CULTURES[0].label, options: SKY_CULTURES.map((c) => c.label), desc: 'Whose constellations to draw. Western: the 88 of modern star charts (Greek in origin), from the main few to all. Arabic, the traditions with a history in Morocco: the lunar mansions the farming calendar ran on, al-Ṣūfī\'s 10th-century star book, and the older Bedouin asterisms (Stellarium\'s sky cultures, by Khalid al-Ajaji, CC BY-ND 4.0). Amazigh: the Tuareg sky Henri Duveyrier recorded in 1864.' },
       { key: 'lineWidth', label: 'Width', value: 0.8, min: 0.25, max: 4, step: 0.05, desc: 'Width of the bright core of each line.' },
       { key: 'lineOpacity', label: 'Opacity', value: 0.36, min: 0, max: 1, step: 0.01, desc: 'How strongly the swirl shows through each line\'s core.' },
       { key: 'lineGlowWidth', label: 'Glow width', value: 5, min: 0, max: 16, step: 0.1, desc: 'Width of the dim glow around each line.' },
@@ -124,7 +125,9 @@ export default [
       { key: 'labelColour', label: 'Text colour', type: 'color', value: '#efe6d2', uniform: false, desc: 'Colour of the constellation names and of the crosshair cursor.' },
       { key: 'cursorOpacity', label: 'Cursor', value: 0.8, min: 0, max: 1, step: 0.01, uniform: false, desc: 'Opacity of the crosshair cursor over the sky. 0 = no cursor.' },
       { key: 'hoverReach', label: 'Reach', value: 36, min: 0, max: 150, step: 1, uniform: false, desc: 'How close the pointer must be to a constellation\'s lines to pick it out. 0 = off.' },
-      { key: 'hoverFade', label: 'Fade (s)', value: 0.3, min: 0, max: 2, step: 0.01, uniform: false, desc: 'How long the highlight and the name take to come and go.', when: { key: 'hoverReach', not: [0] } },
+      { key: 'hoverFade', label: 'Fade in (s)', value: 0.3, min: 0, max: 2, step: 0.01, uniform: false, desc: 'How long the highlight and the name take to come in.', when: { key: 'hoverReach', not: [0] } },
+      { key: 'hoverFadeOut', label: 'Fade out (s)', value: 2, min: 0, max: 6, step: 0.05, uniform: false, desc: 'How long the highlight and the name take to fade once the pointer leaves (or a tap\'s hold ends).', when: { key: 'hoverReach', not: [0] } },
+      { key: 'tapHold', label: 'Tap hold (s)', value: 1, min: 0, max: 6, step: 0.05, uniform: false, desc: 'Touch screens: how long a tapped constellation stays lit before it fades.', when: { key: 'hoverReach', not: [0] } },
       { key: 'hoverOpacity', label: 'Opacity', value: 0.8, min: 0, max: 1, step: 0.01, desc: 'Brightness of a highlighted line\'s core.', when: { key: 'hoverReach', not: [0] } },
       { key: 'hoverLighten', label: 'Lighten', value: 0.47, min: 0, max: 1, step: 0.01, desc: 'How far a highlighted line turns from the swirl\'s colours toward white.', when: { key: 'hoverReach', not: [0] } },
       { key: 'hoverGlowWidth', label: 'Glow width', value: 13.6, min: 0, max: 24, step: 0.1, desc: 'Width of the glow around a highlighted line.', when: { key: 'hoverReach', not: [0] } },
