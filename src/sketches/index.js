@@ -1,8 +1,10 @@
 /**
  * The site's own metadata, and which sketches appear on the home page.
  *
- * `sketches` sets the order: first in the list is first on the page. Comment a line out to
- * hide a sketch — its page still builds at its own URL, it just isn't linked from the index.
+ * `sketches` sets the order: first in the list is first on the page. `more` are live but not
+ * shown off: they're listed below the others only when the home page is opened with ?all (or
+ * #all). Comment a line out to hide a sketch entirely — its page still builds at its own URL,
+ * it just isn't linked from the index.
  */
 export default {
   /** The site's name: the home page title, the home-screen name, and " | Glimmers" on sketch pages. */
@@ -15,6 +17,12 @@ export default {
     'blackstar',
     'sprig',
     'atlas-nights',
+  ],
+
+  more: [
     'orb',
+    'constellations',
+    'cubeland',
+    'mindflow',
   ],
 };

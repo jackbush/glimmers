@@ -1,7 +1,7 @@
 ---
 import type { GetStaticPaths } from 'astro';
 import SketchLayout from '../layouts/SketchLayout.astro';
-import { getSite, getSketches, label, type SketchEntry } from '../lib/sketches';
+import { getSite, getSketches, type SketchEntry } from '../lib/sketches';
 import type { Group } from '../kit/types';
 
 interface Props {
@@ -24,11 +24,11 @@ const background = pageParam ? String(pageParam.value) : '#000';
 ---
 
 <SketchLayout
-  title={`${label(sketch)} | ${getSite().name}`}
+  title={`${sketch.name} | ${getSite().name}`}
   appTitle={sketch.name}
   background={background}
   image={sketch.cover.share}
-  imageAlt={sketch.cover.share ? `A still from ${label(sketch)}` : undefined}
+  imageAlt={sketch.cover.share ? `A still from ${sketch.name}` : undefined}
 >
   <script is:inline define:vars={{ slug: sketch.slug }}>document.body.dataset.slug = slug;</script>
 </SketchLayout>

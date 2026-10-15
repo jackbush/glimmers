@@ -10,7 +10,7 @@ import { manifestSchema } from '../kit/manifest-schema.js';
 const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 const homeSchema = z
-  .object({ name: z.string().trim().min(1), description: z.string().trim().min(1), sketches: z.array(z.string()) })
+  .object({ name: z.string().trim().min(1), description: z.string().trim().min(1), sketches: z.array(z.string()), more: z.array(z.string()) })
   .strict();
 
 export interface SketchEntry {
@@ -71,19 +71,14 @@ export function getSite(): { name: string; description: string } {
   return { name, description };
 }
 
-/** The sketches listed in src/sketches/index.js, in order. */
-export function getListed(): SketchEntry[] {
+/** The sketches in one of src/sketches/index.js's lists (`sketches`, or `more`), in order. */
+export function getListed(list: 'sketches' | 'more' = 'sketches'): SketchEntry[] {
   const all = getSketches();
-  return getHome().sketches.map((slug) => {
+  return getHome()[list].map((slug) => {
     const s = all.get(slug);
     if (!s) throw new Error(`src/sketches/index.js lists "${slug}", but there's no src/sketches/${slug}/manifest.js.`);
     return s;
   });
-}
-
-/** How a sketch is labelled everywhere: "Blackstar (2026)". */
-export function label(s: { name: string; year: number }): string {
-  return `${s.name} (${s.year})`;
 }
 
 /** Turns a site path into a URL under `base`: url('blackstar/') → '/glimmers/blackstar/'. */

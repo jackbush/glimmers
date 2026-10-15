@@ -11,7 +11,7 @@ This skill **reports and asks; it never rewrites the sketch on its own.** It edi
 
 ## 1. Register it on the home page
 
-Look for the slug in `sketches` in `src/sketches/index.js`:
+Look for the slug in `sketches` in `src/sketches/index.js` (the front page; `more` is for sketches that are live but only shown with `?all`, so publishing moves a slug from `more` to `sketches`):
 
 - **Commented out** (`// 'rain',`, how `new-glimmer` leaves it): uncomment it.
 - **Absent:** ask where it should go (first in the list is first on the page); default to the top.
@@ -19,7 +19,7 @@ Look for the slug in `sketches` in `src/sketches/index.js`:
 
 ## 2. Check the manifest
 
-- `name` and `year` are set. The name reads as a name: it's shown as "Name (Year)" in the caption and tab title.
+- `name` and `year` are set. The name reads as a name: it's the caption and the tab title (the year isn't shown at present).
 - If `pageColour` is set, it names a colour param (`scripts/check.mjs` errors otherwise).
 
 ## 3. Check the params

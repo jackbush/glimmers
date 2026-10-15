@@ -15,7 +15,8 @@ import { manifestSchema } from '../src/kit/manifest-schema.js';
 const root = new URL('../src/sketches/', import.meta.url).pathname;
 const only = process.argv.slice(2);
 const slugs = readdirSync(root).filter((d) => existsSync(join(root, d, 'manifest.js')) && (!only.length || only.includes(d)));
-const listed = (await import(pathToFileURL(join(root, 'index.js')).href)).default.sketches;
+const home = (await import(pathToFileURL(join(root, 'index.js')).href)).default;
+const listed = [...home.sketches, ...(home.more || [])];
 let totalErrors = 0;
 
 for (const slug of slugs) {

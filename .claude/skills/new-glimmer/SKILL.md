@@ -10,8 +10,8 @@ Output: a working, empty sketch at `src/sketches/<slug>/`, reachable at `/glimme
 ## 1. Pick the slug and name
 
 - **The folder name is the URL.** Lowercase letters, numbers and single hyphens (`orb`, `rain-2`). Anything else fails the build. Renaming later breaks links, so get it right now.
-- `name` is what people see, shown as "Name (Year)" in the index caption and the tab title. Ask the user if they haven't given one; don't invent a clever title.
-- `year` is the year the sketch was first made (this year for a new one; ask when bringing in an old sketch).
+- `name` is what people see, shown in the index caption and the tab title. Ask the user if they haven't given one; don't invent a clever title.
+- `year` is the year the sketch was first made (this year for a new one; ask when bringing in an old sketch). It isn't shown at present, but every manifest keeps it.
 
 ## 2. Pick the renderer
 

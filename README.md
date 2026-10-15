@@ -27,13 +27,13 @@ Each sketch is a folder in `src/sketches/`. **The folder name is the URL.**
 
 | File | Purpose |
 |---|---|
-| `manifest.js` | The name and year, the page colour, and the cover capture settings |
+| `manifest.js` | The name and year (the year isn't shown at present), the page colour, and the cover capture settings |
 | `params.js` | Every default value. The settings pane is generated from it |
 | `sketch.js` | `create({ canvas, P })` → `{ resize, frame }` |
 | `NOTES.md` | How the sketch works, its performance budget, and its benchmark history |
 | `cover.mp4`, `cover.jpg`, `share.jpg` | The index cover and the page's link-preview image, made by `scripts/capture.mjs` |
 
-`src/sketches/index.js` controls which sketches the index lists, and in what order. An unlisted sketch still builds at its own URL.
+`src/sketches/index.js` controls which sketches the index lists, and in what order. Its `more` list is live but kept off the front page: those show below the rest only at `/glimmers/?all` (or `#all`). An unlisted sketch still builds at its own URL.
 
 Claude skills do the routine work: `new-glimmer` scaffolds a sketch, `glimmers-elements` adds or changes things, `glimmers-state` applies pasted settings, and `publish-glimmer` puts a sketch on the index after checking its cover and performance.
 

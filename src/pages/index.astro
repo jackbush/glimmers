@@ -1,9 +1,12 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
-import { getListed, getSite, label, url } from '../lib/sketches';
+import { getListed, getSite, url } from '../lib/sketches';
 
 const site = getSite();
-const sketches = getListed();
+const lists = [
+  { sketches: getListed(), more: false },
+  { sketches: getListed('more'), more: true },
+];
 ---
 
 <BaseLayout title={site.name} appTitle={site.name}>
@@ -14,7 +17,8 @@ const sketches = getListed();
   </Fragment>
   <main>
     <h1>{site.name}</h1>
-    <ul>
+    {lists.map(({ sketches, more }) => (
+    <ul class:list={{ more }} hidden={more}>
       {sketches.map((s) => (
         <li>
           <a href={url(s.slug + '/')}>
@@ -28,15 +32,21 @@ const sketches = getListed();
             ) : (
               <span class="blank" />
             )}
-            <span class="name">{label(s)}</span>
+            <span class="name">{s.name}</span>
           </a>
         </li>
       ))}
     </ul>
+    ))}
   </main>
 </BaseLayout>
 
 <script>
+  // The second list (index.js `more`) shows only for ?all or #all.
+  if (/(^|[?&])all\b/.test(location.search.slice(1)) || location.hash === '#all') {
+    document.querySelectorAll<HTMLElement>('ul.more').forEach((ul) => (ul.hidden = false));
+  }
+
   // Only the covers on screen play; the rest sit on their poster frame. With reduced motion,
   // they all stay on the poster. Each video is invisible over its still (its first frame) until
   // it's actually playing, then fades in, so loading never shows a blank or a jump.
@@ -62,6 +72,8 @@ const sketches = getListed();
   }
   h1 { margin: 32px 0 24px; font: 400 72px/1 "Grenze Gotisch", serif; }
   ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 40px; }
+  ul[hidden] { display: none; }
+  ul.more { margin-top: 40px; padding-top: 40px; border-top: 1px solid var(--line); }
   a { display: block; color: inherit; text-decoration: none; }
   video, img, .blank, .cover { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: cover; background: #111; }
   .cover { position: relative; overflow: hidden; }
