@@ -16,8 +16,8 @@ export default [
   {
     group: 'Colours',
     params: [
-      { key: 'projectsPage', label: 'Projects page', type: 'color', value: '#f2ecdf', desc: 'The page colour in Projects. Its text is the inverse; flickers if that\'s below AA (4.5:1).' },
-      { key: 'rolesPage', label: 'Roles page', type: 'color', value: '#030e26', desc: 'The page colour in Roles. Its text is the inverse; flickers if that\'s below AA (4.5:1).' },
+      { key: 'projectsPage', label: 'Projects page', type: 'color', value: '#f3ead6', desc: 'The page colour in Projects. Its text is the inverse; flickers if that\'s below AA (4.5:1).' },
+      { key: 'rolesPage', label: 'Roles page', type: 'color', value: '#000210', desc: 'The page colour in Roles. Its text is the inverse; flickers if that\'s below AA (4.5:1).' },
       { key: 'minorOpacity', label: 'Minor opacity', value: 0.8, min: 0, max: 1, step: 0.01, uniform: false, desc: 'Body text: the page\'s inverse at this opacity over it. Flickers if that\'s below AA (4.5:1).' },
       { key: 'ruleOpacity', label: 'Rule opacity', value: 0.2, min: 0, max: 1, step: 0.01, uniform: false, desc: 'The lines between items: the page\'s inverse at this opacity over it.' },
     ],
