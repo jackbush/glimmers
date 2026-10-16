@@ -19,17 +19,17 @@ export default [
       { key: 'projectsPage', label: 'Projects page', type: 'color', value: '#f3ead6', desc: 'The page colour in Projects. Its text is the inverse; flickers if that\'s below AA (4.5:1).' },
       { key: 'rolesPage', label: 'Roles page', type: 'color', value: '#000210', desc: 'The page colour in Roles. Its text is the inverse; flickers if that\'s below AA (4.5:1).' },
       { key: 'minorOpacity', label: 'Minor opacity', value: 0.8, min: 0, max: 1, step: 0.01, uniform: false, desc: 'Body text: the page\'s inverse at this opacity over it. Flickers if that\'s below AA (4.5:1).' },
-      { key: 'ruleOpacity', label: 'Rule opacity', value: 0.2, min: 0, max: 1, step: 0.01, uniform: false, desc: 'The lines between items: the page\'s inverse at this opacity over it.' },
     ],
   },
   {
     group: 'Switch',
     params: [
       { key: 'startSize', label: 'Start size (px)', value: 1, min: 0, max: 400, step: 1, uniform: false, desc: 'Diameter of the new theme the moment you click, in CSS px.' },
-      { key: 'switchSpeed', label: 'Start speed', value: 0.15, min: 0, max: 2, step: 0.01, uniform: false, desc: 'How fast the new theme sets off from the click, in short sides per second.' },
-      { key: 'switchAccel', label: 'Acceleration', value: 3, min: 0.1, max: 20, step: 0.05, uniform: false, desc: 'How fast it speeds up (short sides per s²), until it has passed the whole screen.' },
-      { key: 'oldTextFade', label: 'Old text fade (s)', value: 0.3, min: 0, max: 2, step: 0.01, uniform: false, desc: 'How long the old list takes to fade out. The new one appears inside the switch as it spreads.' },
+      { key: 'switchSpeed', label: 'Start speed', value: 0.195, min: 0, max: 2, step: 0.005, uniform: false, desc: 'How fast the new theme sets off from the click, in short sides per second.' },
+      { key: 'switchAccel', label: 'Acceleration', value: 5.07, min: 0.1, max: 20, step: 0.01, uniform: false, desc: 'How fast it speeds up (short sides per s²), until it has passed the whole screen.' },
+      { key: 'oldTextFade', label: 'Old text fade (s)', value: 0.23, min: 0, max: 2, step: 0.01, uniform: false, desc: 'How long the old list takes to fade out. The new one appears inside the switch as it spreads.' },
       { key: 'interruptFade', label: 'Interrupt fade (s)', value: 0.05, min: 0, max: 1, step: 0.01, uniform: false, desc: 'Switching back mid-switch: how long the half-revealed list takes to fade out. Its switch keeps spreading.' },
+      { key: 'barsLead', label: 'Bars lead (s)', value: 0.15, min: 0, max: 1, step: 0.01, uniform: false, desc: 'The browser\'s bars take one flat colour, so they follow the page along the top edge: this many seconds before the switch covers it, they change.' },
     ],
   },
   {

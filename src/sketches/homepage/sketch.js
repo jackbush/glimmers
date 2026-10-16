@@ -82,6 +82,21 @@ export default function create({ canvas, P, model, degrade }) {
     page.switchTo(mode, r.left + r.width * demoRandom(), r.top + r.height * demoRandom());
   }
 
+  // The browser's bars take one flat colour (theme-color, and the page background in Safari), so
+  // they follow the page along the top edge, Bars lead before a switch covers it. The kit sets
+  // them to the Projects page on every edit, so they're set again then.
+  const themeMeta = document.querySelector('meta[name="theme-color"]');
+  let bars = -1, barsVersion = -1;
+  function setBars(/** @type {number} */ theme) {
+    if (theme === bars && barsVersion === model.version) return;
+    bars = theme;
+    barsVersion = model.version;
+    const c = String((theme ? P.rolesPage : P.projectsPage).value);
+    document.documentElement.style.backgroundColor = c;
+    document.body.style.backgroundColor = c;
+    themeMeta?.setAttribute('content', c);
+  }
+
   let pxRatio = 1;
   return {
     resize(_w, _h, px) { pxRatio = px; },
@@ -93,6 +108,7 @@ export default function create({ canvas, P, model, degrade }) {
       SHADER.perFrame(pxRatio, frameVals);
       switches.update(rdt, w, h, frameVals);
       page.reveal(switches);
+      setBars(switches.topEdge);
 
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.viewport(0, 0, canvas.width, canvas.height);

@@ -28,6 +28,8 @@ export function createSwitches(P) {
   /** @type {{ theme: number, x: number, y: number, t0: number, id: number }[]} */
   const live = [];
   let base = 0;
+  /** The theme along the top edge, Bars lead early (for the browser's bars). */
+  let top = 0;
   let clock = 0;
   let nextId = 0;
   /** The newest switch's outline offsets and reach, as of the last update. */
@@ -37,6 +39,15 @@ export function createSwitches(P) {
   /** Reach (CSS px) τ seconds into a switch on a screen with short side `short`. */
   const reach = (/** @type {number} */ tau, /** @type {number} */ short) =>
     P.startSize.value / 2 + short * (P.switchSpeed.value * tau + 0.5 * P.switchAccel.value * tau * tau);
+
+  /**
+   * Whether switch `sp`'s deepest dip, `lead` seconds from now, has passed the screen's sides
+   * at `dy` below or above the click. (The spline can overshoot its points a little, hence the
+   * 1.5.)
+   * @param {{ x: number, t0: number }} sp
+   */
+  const covers = (sp, /** @type {number} */ w, /** @type {number} */ short, /** @type {number} */ dy, /** @type {number} */ lead) =>
+    reach(clock + lead - sp.t0, short) * (1 - 1.5 * P.wobble.value) >= Math.hypot(Math.max(sp.x, w - sp.x), dy) + 1;
 
   /** Point i's offset (a share of the reach) τ seconds into switch `id`. */
   function point(/** @type {number} */ id, /** @type {number} */ i, /** @type {number} */ tau) {
@@ -49,6 +60,9 @@ export function createSwitches(P) {
   return {
     /** The theme the page is heading to (0 projects, 1 roles). */
     get target() { return live.length ? live[live.length - 1].theme : base; },
+
+    /** The theme drawn right along the top edge, Bars lead early (as of the last update). */
+    get topEdge() { return top; },
 
     /** Whether a switch is under way (as of the last update). */
     get running() { return newestReach >= 0; },
@@ -67,7 +81,7 @@ export function createSwitches(P) {
 
     /** Switch at once (start-up, reduced motion, the Start theme param). */
     jump(/** @type {number} */ theme) {
-      base = theme;
+      base = top = theme;
       live.length = 0;
       newestReach = -1;
     },
@@ -88,17 +102,18 @@ export function createSwitches(P) {
       clock += dt;
       const short = Math.min(w, h);
       const n = P.wobblePoints.value;
-      // A switch whose innermost dip has passed the furthest corner becomes the base, with any
-      // older ones. (The spline can overshoot its points a little, hence the 1.5.)
+      // A switch that has passed the furthest corner becomes the base, with any older ones.
       for (let s = live.length - 1; s >= 0; s--) {
         const sp = live[s];
-        const far = Math.hypot(Math.max(sp.x, w - sp.x), Math.max(sp.y, h - sp.y)) + 1;
-        if (reach(clock - sp.t0, short) * (1 - 1.5 * P.wobble.value) >= far) {
+        if (covers(sp, w, short, Math.max(sp.y, h - sp.y), 0)) {
           base = sp.theme;
           live.splice(0, s + 1);
           break;
         }
       }
+      // Likewise the top edge, by its corners, a little early; newer switches draw over older ones.
+      top = base;
+      for (let s = 0; s < live.length; s++) if (covers(live[s], w, short, live[s].y, P.barsLead.value)) top = live[s].theme;
 
       f.f_baseTheme[0] = base;
       f.f_switchCount[0] = live.length;

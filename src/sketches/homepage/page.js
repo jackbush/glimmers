@@ -30,47 +30,88 @@ export const MODES = ['projects', 'roles'];
  * leaves what's under it alone. */
 const INKS = { m: ['multiply', '#fff'], d: ['difference', '#000'], k: ['plus-lighter', '#000'] };
 
-const MAIN = ':is(h1, h3, strong, .hp-strong, .hp-toggle button)';
+const MAIN = ':is(h1, h3, strong, .hp-strong, .hp-toggle button, .hp-more span)';
 const MINOR = '.hp-minor';
 const flicker = (/** @type {string} */ sel) => `${sel} { animation: hp-flicker 0.7s steps(1) infinite; }`;
 
 const CSS = `
 .hp {
+  --radius: 0.5rem; /* corners of the toggle and the project cards */
+  --gutter: 1.5rem; /* the page's side margins, and the space between project cards */
   position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain; display: grid;
   font-family: "Inter", sans-serif; -webkit-font-smoothing: antialiased;
 }
-.hp-main { grid-area: 1 / 1; width: 100%; max-width: 740px; margin-inline: auto; padding: 4rem 1.5rem 6rem; box-sizing: border-box; }
+.hp-main { grid-area: 1 / 1; width: 100%; max-width: 740px; margin-inline: auto; padding: 4rem var(--gutter) 6rem; box-sizing: border-box; }
 .hp-main * { box-sizing: border-box; }
-.hp-ui { --hp-text: transparent; --hp-minor: transparent; --hp-rule: transparent; --hp-none: transparent; }
+.hp-ui { --hp-text: transparent; --hp-minor: transparent; --hp-none: transparent; }
 .hp-ink { pointer-events: none; user-select: none; }
-${Object.entries(INKS).map(([k, [mode, none]]) => `.hp-ink[data-ink="${k}"] { mix-blend-mode: ${mode}; --hp-text: var(--hp-${k}-main); --hp-minor: var(--hp-${k}-minor); --hp-rule: var(--hp-${k}-rule); --hp-none: ${none}; }`).join('\n')}
-.hp h1 { font-size: clamp(2.75rem, 7vw, 4.5rem); font-weight: 900; line-height: 1.02; letter-spacing: -0.03em; margin: 0 0 1rem; color: var(--hp-text); }
+${Object.entries(INKS).map(([k, [mode, none]]) => `.hp-ink[data-ink="${k}"] { mix-blend-mode: ${mode}; --hp-text: var(--hp-${k}-main); --hp-minor: var(--hp-${k}-minor); --hp-none: ${none}; }`).join('\n')}
+.hp h1 { font-size: clamp(2.25rem, 7vw, 4.5rem); font-weight: 900; line-height: 1.02; letter-spacing: -0.03em; margin: 0 0 1rem; color: var(--hp-text); }
 .hp h3 { font-size: 1.2rem; font-weight: 700; line-height: 1.6; letter-spacing: -0.01em; margin: 0; color: var(--hp-text); }
-.hp p { font-size: 1.125rem; line-height: 1.6; margin: 0; }
+.hp p, .hp .hp-body { font-size: 1.125rem; line-height: 1.6; margin: 0; }
 .hp strong, .hp .hp-strong { color: var(--hp-text); }
 .hp .hp-minor { color: var(--hp-minor); }
 .hp .hp-strong { font-weight: 600; line-height: 1.75; margin-top: 0.25rem; }
 .hp .hp-dates { font-weight: 400; }
 .hp a { color: inherit; text-decoration: none; display: block; }
 .hp ul { list-style: none; margin: 0; padding: 0; }
-.hp-list > li { padding-block: 1.5rem; }
-.hp-list > li:first-child { padding-top: 0; }
-.hp-list > li + li { border-top: 2px solid var(--hp-rule); }
 .hp .hp-desc { margin-top: 0.25rem; }
-.hp .hp-bullets { list-style: disc; margin: 0.5rem 0 0; padding-left: 1.5rem; font-size: 1.125rem; line-height: 1.6; }
+.hp .hp-bullets { list-style: disc; margin: 0.5rem 0 0; padding-left: 1.5rem; }
+/* Phones: a narrower gutter, and body, item titles and strong lines a step down. */
+@media (max-width: 30rem) {
+  .hp { --gutter: 1rem; }
+  .hp h3 { font-size: 1.125rem; }
+  .hp p, .hp .hp-body { font-size: 1rem; }
+}
 .hp-intro { margin-bottom: 3rem; }
 /* Both lists share one cell, so the new one can appear over the old one as it fades. */
 .hp-panels { display: grid; }
 .hp-panels > section { grid-area: 1 / 1; min-width: 0; }
-.hp-toggle { position: relative; display: flex; padding: 2px; margin-bottom: 3rem; }
+/* Roles are divided by lines like the toggle's frame. */
+.hp-roles > li { padding-block: 1.5rem; }
+.hp-roles > li + li { border-top: 1px solid var(--hp-text); }
+.hp-roles .hp-desc { margin-top: 0.5rem; }
+/* Projects are cards, as far apart as the page is from the screen's edges (and from the
+   toggle): a 1px box in the text colour, a line between cover and text. */
+.hp-projects { display: grid; gap: var(--gutter); }
+.hp-projects > li { container: card / inline-size; }
+.hp-card { border: 1px solid var(--hp-text); border-radius: var(--radius); overflow: hidden; }
+.hp-text { padding: 1rem; }
+/* The text and the bar sit on a lighter wash of the page; not in the ink copies, where it
+   would go through their blends. */
+.hp-ui .hp-text, .hp-ui .hp-more { background: rgba(255, 255, 255, 0.25); background-clip: padding-box; }
+.hp .hp-more { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.75rem 1rem; border-top: 1px solid var(--hp-text); }
+.hp-more span { color: var(--hp-text); }
+.hp-more svg { flex: none; width: 1rem; height: 1rem; fill: none; stroke: var(--hp-text); stroke-width: 1.5; }
+/* Covers are boxes sized by their format, so the ink copies (which drop the media) keep the layout. */
+.hp-cover { position: relative; overflow: hidden; background-clip: padding-box; }
+.hp-ui .hp-cover { background: var(--cover-bg, none); }
+.hp-cover > * { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border: 0; }
+.hp-landscape .hp-cover, .hp-vimeo .hp-cover { aspect-ratio: 3 / 2; border-bottom: 1px solid var(--hp-text); box-sizing: content-box; }
+.hp-vimeo .hp-cover { aspect-ratio: 16 / 9; }
+.hp-cover video { opacity: 0; transition: opacity 0.4s ease; }
+.hp-cover video.on { opacity: 1; }
+.hp-square .hp-cover { aspect-ratio: 1; border-bottom: 1px solid var(--hp-text); }
+/* Wide enough, a square sits beside the text (a third), alternating sides down the list. */
+@container card (min-width: 32rem) {
+  .hp-square .hp-cardmain { display: grid; grid-template-columns: 1fr 2fr; align-items: start; }
+  .hp-text { align-self: stretch; display: flex; flex-direction: column; justify-content: center; }
+  .hp-square .hp-cover { border-bottom: 0; }
+  .hp-square .hp-text { border-left: 1px solid var(--hp-text); }
+  .hp-square.hp-flip .hp-text { border-left: 0; border-right: 1px solid var(--hp-text); }
+  .hp-flip .hp-cardmain { grid-template-columns: 2fr 1fr; }
+  .hp-flip .hp-cover { order: 1; }
+}
 /* The frame and both tabs are drawn by the ink layers too, so they take the colours of the page
    under them: the frame and the other tab's label in the text colour, and the current tab
    filled with it, its label a gap in the fill where the page shows through. */
-.hp-toggle::after { content: ""; position: absolute; inset: 0; border: 2px solid var(--hp-text); pointer-events: none; }
+.hp-toggle { --frame: 1px; display: flex; border: var(--frame) solid var(--hp-text); border-radius: var(--radius); margin-bottom: var(--gutter); }
 .hp-toggle button {
   flex: 1; min-height: 2.75rem; padding: 0.6rem 1rem; font: inherit; font-size: 1rem; font-weight: 700; border: none; cursor: pointer;
   color: var(--hp-text); background: transparent;
 }
+.hp-toggle button:first-child { border-radius: calc(var(--radius) - var(--frame)) 0 0 calc(var(--radius) - var(--frame)); }
+.hp-toggle button:last-child { border-radius: 0 calc(var(--radius) - var(--frame)) calc(var(--radius) - var(--frame)) 0; }
 ${MODES.map((m) => `.hp[data-theme="${m}"] .hp-toggle [data-mode="${m}"]`).join(', ')} { color: var(--hp-none); background: var(--hp-text); }
 
 /* Below AA: text on the page it fails on flickers. */
@@ -88,27 +129,50 @@ const el = (/** @type {string} */ tag, /** @type {Record<string, string>} */ att
   return n;
 };
 
+/** The link bar's chevron. */
+function chevron() {
+  const t = document.createElement('template');
+  t.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3l5 5-5 5" /></svg>';
+  return /** @type {Node} */ (t.content.firstChild);
+}
+
 /** The page's markup, once. */
 function build() {
   const tabs = MODES.map((mode) => el('button', {
     role: 'tab', id: 'hp-tab-' + mode, 'data-mode': mode, 'aria-controls': 'hp-panel-' + mode,
   }, [mode === 'projects' ? 'Projects' : 'Roles']));
 
-  const projectItems = projects.map((p) => el('li', {}, [
-    el('a', { href: p.url, target: '_blank', rel: 'noopener noreferrer' }, [
-      el('h3', {}, [p.name]),
-      el('p', { class: 'hp-desc hp-minor' }, [p.description]),
-    ]),
-  ]));
+  // Side (square) covers alternate left, right, left… down the list.
+  let sides = 0;
+  const newTab = { target: '_blank', rel: 'noopener noreferrer' };
+  const projectItems = projects.map((p) => {
+    const format = p.vimeo ? 'vimeo' : p.cover?.format;
+    const flip = format === 'square' && sides++ % 2 === 1;
+    const cover = p.vimeo
+      ? el('div', { class: 'hp-cover' }, [el('iframe', {
+        src: `https://player.vimeo.com/video/${p.vimeo}?dnt=1&title=0&byline=0&portrait=0`, title: `${p.name} video`, loading: 'lazy',
+        allow: 'autoplay; fullscreen; picture-in-picture', referrerpolicy: 'strict-origin-when-cross-origin',
+      })])
+      : p.cover && el('div', { class: 'hp-cover', style: p.cover.background ? `--cover-bg: ${p.cover.background}` : '' }, [
+        el('img', { src: p.cover.image, alt: '' }),
+        ...(p.cover.video ? [el('video', { src: p.cover.video, loop: '', playsinline: '', preload: 'none', 'aria-hidden': 'true' })] : []),
+      ]);
+    const main = el(p.url ? 'a' : 'div', { class: 'hp-cardmain', ...(p.url ? { href: p.url, ...newTab } : {}) }, [
+      ...(cover ? [cover] : []),
+      el('div', { class: 'hp-text' }, [el('h3', {}, [p.name]), el('p', { class: 'hp-desc hp-minor' }, [p.description])]),
+    ]);
+    const more = p.link ? [el('a', { class: 'hp-more', href: p.link.url, ...newTab }, [el('span', { class: 'hp-body' }, [p.link.label]), chevron()])] : [];
+    return el('li', {}, [el('div', { class: `hp-card hp-${format}${flip ? ' hp-flip' : ''}` }, [main, ...more])]);
+  });
   const roleItems = roles.map((r) => el('li', {}, [
     el('h3', {}, [r.organisation]),
     el('p', { class: 'hp-strong' }, [r.role, el('span', { class: 'hp-dates' }, [` (${r.dates})`])]),
     el('p', { class: 'hp-desc hp-minor' }, [r.description]),
-    ...(r.listItems ? [el('ul', { class: 'hp-bullets hp-minor' }, r.listItems.map((i) => el('li', {}, [i])))] : []),
+    ...(r.listItems ? [el('ul', { class: 'hp-bullets hp-minor' }, r.listItems.map((i) => el('li', { class: 'hp-body' }, [i])))] : []),
   ]));
   const panels = MODES.map((mode) => el('section', {
     id: 'hp-panel-' + mode, role: 'tabpanel', 'aria-labelledby': 'hp-tab-' + mode, 'data-mode': mode,
-  }, [el('ul', { class: 'hp-list' }, mode === 'projects' ? projectItems : roleItems)]));
+  }, [el('ul', { class: 'hp-' + mode }, mode === 'projects' ? projectItems : roleItems)]));
 
   return el('main', { class: 'hp-main hp-ui' }, [
     el('section', { class: 'hp-intro' }, [
@@ -134,7 +198,8 @@ export function createPage({ P, onSwitch }) {
   document.head.append(el('link', { rel: 'stylesheet', href: FONTS }), el('style', {}, [CSS]));
 
   const ui = build();
-  // The ink copies: no ids (they'd clash), hidden from assistive tech, never focusable.
+  // The ink copies: no ids (they'd clash), hidden from assistive tech, never focusable. They
+  // drop their media (covers keep their size without it), which would draw in the blends.
   const inks = Object.keys(INKS).map((k) => {
     const copy = /** @type {HTMLElement} */ (ui.cloneNode(true));
     copy.className = 'hp-main hp-ink';
@@ -142,10 +207,26 @@ export function createPage({ P, onSwitch }) {
     copy.setAttribute('aria-hidden', 'true');
     copy.inert = true;
     for (const n of copy.querySelectorAll('[id]')) n.removeAttribute('id');
+    for (const n of copy.querySelectorAll('img, video, iframe')) n.remove();
     return copy;
   });
   const root = el('div', { class: 'hp' }, [ui, ...inks]);
   document.body.append(root);
+
+  // Cover previews play only while on screen, and never with reduced motion. Each fades in over
+  // its poster once it's actually playing.
+  const onScreen = new IntersectionObserver((entries) => {
+    for (const { target, isIntersecting } of entries) {
+      const v = /** @type {HTMLVideoElement} */ (target);
+      if (isIntersecting && !reduceMotion.matches) v.play().catch(() => {});
+      else v.pause();
+    }
+  }, { rootMargin: '100px 0px' });
+  for (const v of ui.querySelectorAll('video')) {
+    v.muted = true;
+    v.addEventListener('playing', () => v.classList.add('on'), { once: true });
+    onScreen.observe(v);
+  }
 
   const tabs = [...ui.querySelectorAll('[role="tab"]')].map((t) => /** @type {HTMLElement} */ (t));
   const panels = [...root.querySelectorAll('section[data-mode]')].map((p) => /** @type {HTMLElement} */ (p));
@@ -286,12 +367,11 @@ export function createPage({ P, onSwitch }) {
       const text = { projects: invert(page.projects), roles: invert(page.roles) };
 
       // Each kind of text is the page's inverse at its own opacity, with its own ink greys.
-      const kinds = { main: 1, minor: P.minorOpacity.value, rule: P.ruleOpacity.value };
+      const kinds = { main: 1, minor: P.minorOpacity.value };
       const fails = [];
       for (const [kind, opacity] of Object.entries(kinds)) {
         const ink = inkLayers(opacity);
         for (const k of /** @type {const} */ (['m', 'd', 'k'])) s.setProperty(`--hp-${k}-${kind}`, css([ink[k], ink[k], ink[k]]));
-        if (kind === 'rule') continue; // rules are decoration, not text
         for (const m of /** @type {const} */ (['projects', 'roles'])) {
           if (contrast(page[m], mixRgb(page[m], text[m], opacity)) < AA) fails.push(`${m}-${kind}`);
         }

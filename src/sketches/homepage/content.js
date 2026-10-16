@@ -1,69 +1,101 @@
 // Homepage — the page's content, copied from jackbush.github.io (src/data/) to try the
 // backdrop under the real thing. The site's own copy is the source of truth.
 
+// Cover URLs are spelled out because Vite only bundles literal paths: the sketch's own
+// (downscaled) copies in covers/, or a glimmer's cover from its folder.
+
+/**
+ * As the site's: a card links to `url` with a `cover` (`landscape`: a 3:2 header, optionally a
+ * looping `video` over the image, or a `background` behind a transparent one; `square`: beside
+ * the text), or plays a Vimeo video in place. Any card can add a `link`, a bar along its bottom.
+ * @type {{ name: string, description: string, url?: string, vimeo?: string,
+ *   cover?: { format: 'landscape' | 'square', image: string, video?: string, background?: string },
+ *   link?: { label: string, url: string } }[]}
+ */
 export const projects = [
   {
-      name: "Risolino",
-      description: "Make risograph prints from anywhere. Customise the ink blending, shading model and registration jitter for some analogue charm.",
-      url: "https://jackbush.github.io/risolino/",
-  },
-  {
-      name: "Glimmers",
-      description:
-          "Interactive experiments into other worlds. Explore the night sky, invent impossible plants, design your own void. Ongoing project.",
-      url: "https://jackbush.github.io/glimmers/",
+      name: "Sprig",
+      description: "Botanical studies. Be taken on an arboreal tour, or click the settings cog and invent your own impossible plants.",
+      url: "https://jackbush.github.io/glimmers/sprig/",
+      cover: { format: "landscape", image: new URL('../sprig/cover.jpg', import.meta.url).href, video: new URL('../sprig/cover.mp4', import.meta.url).href },
   },
   {
       name: "Zola",
       description: "Build more accessible products. Each card describes a real person's experience and needs, which your design should accommodate.",
       url: "https://jackbush.github.io/zola/",
+      cover: { format: "landscape", image: new URL('./covers/zola.png', import.meta.url).href, background: "#BC6061" },
+  },
+  {
+      name: "Risolino",
+      description: "Make risograph prints from anywhere. Customise the ink blending, shading model and registration jitter for some analogue charm.",
+      url: "https://jackbush.github.io/risolino/",
+      cover: { format: "landscape", image: new URL('./covers/risolino.jpg', import.meta.url).href },
+  },
+  {
+      name: "Atlas Nights",
+      description: "Spend a night star-gazing in the High Atlas. Choose constellation maps from any of the historic sky cultures of the region.",
+      url: "https://jackbush.github.io/glimmers/atlas-nights/",
+      cover: { format: "landscape", image: new URL('../atlas-nights/cover.jpg', import.meta.url).href, video: new URL('../atlas-nights/cover.mp4', import.meta.url).href },
   },
   {
       name: "Chromist",
       description:
           "Get your colours right. Build palettes for modern devices, see how they appear on old screens, audit accessibility against the next standards.",
       url: "https://jackbush.github.io/chromist/",
+      cover: { format: "square", image: new URL('./covers/chromist.jpg', import.meta.url).href },
   },
   {
-      name: "Carver",
-      description: "Write in convenient markdown, export as beautiful PDF. Minimal by design, private by default, delightful by nature.",
-      url: "https://jackbush.github.io/carver/",
+      name: "Blackstar",
+      description: "An undulating black orb with a burning halo. Open the settings pane to design your own void.",
+      url: "https://jackbush.github.io/glimmers/blackstar/",
+      cover: { format: "landscape", image: new URL('../blackstar/cover.jpg', import.meta.url).href, video: new URL('../blackstar/cover.mp4', import.meta.url).href },
   },
   {
       name: "Albums",
       description:
           "Nice, old-fashioned photo albums. Because social media is a dumpster fire, but it's nice to show your mum what you've been up to.",
       url: "https://jackbush.github.io/albums/",
+      cover: { format: "landscape", image: new URL('./covers/albums-norway.jpg', import.meta.url).href },
+  },
+  {
+      name: "Carver",
+      description: "Write in convenient markdown, export as beautiful PDF. Minimal by design, private by default, delightful by nature.",
+      url: "https://jackbush.github.io/carver/",
+      cover: { format: "landscape", image: new URL('./covers/carver.jpg', import.meta.url).href },
+  },
+  {
+      name: "Zen and the Art of Bikepacking Maintenance",
+      description: "Photos for an essay about gumption, romantic thinking, quality, and bikepacking across Europe.",
+      url: "https://theradavist.com/zen-and-bikepacking",
+      cover: { format: "landscape", image: new URL('./covers/zen-tentlife.jpg', import.meta.url).href },
   },
   {
       name: "Mindflow",
       description:
           "Animated graphics that respond to your brain waves: focus to overlap the rings, relax to calm the outlines.",
-      url: "https://vimeo.com/1215878977",
+      vimeo: "1215878977",
+      link: { label: "Play with the animation settings", url: "https://jackbush.github.io/glimmers/mindflow/" },
+  },
+  {
+      name: "Metty",
+      description: "Interface prototype for a robotic meditation timer, styled like a record player. Hardware build in progress.",
+      url: "https://jackbush.github.io/metty/",
+      cover: { format: "square", image: new URL('./covers/metty.jpg', import.meta.url).href },
   },
   {
       name: "Seeing Britain",
       description:
           "Learning my adoptive home by visiting every county. Mostly done by bicycle, tracked on an interactive map.",
       url: "https://jackbush.github.io/seeing-britain/",
-  },
-  {
-      name: "Metty",
-      description: "Interface prototype for a robotic meditation timer, styled like a record player. Hardware build in progress.",
-      url: "https://jackbush.github.io/metty/",
-  },
-  {
-      name: "Zen and the Art of Bikepacking Maintenance",
-      description: "Photos for an essay about gumption, romantic thinking, quality, and bikepacking across Europe.",
-      url: "https://theradavist.com/zen-and-bikepacking",
+      cover: { format: "square", image: new URL('./covers/seeing-britain.jpg', import.meta.url).href },
   },
   {
       name: "Quadra",
       description: "Make QR codes without having your data scraped. Highly customisable, ISO-compliant and ad-free.",
       url: "https://jackbush.github.io/quadra/",
+      cover: { format: "square", image: new URL('./covers/quadra.jpg', import.meta.url).href },
   },
 ];
-
 
 export const roles = [
     {
