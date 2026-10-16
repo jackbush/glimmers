@@ -90,7 +90,7 @@ export default function create({ canvas, P, model, degrade }) {
       demo(rdt);
       if (!pass) return;
       const w = canvas.width / pxRatio, h = canvas.height / pxRatio;
-      SHADER.perFrame(P, rt, pxRatio, frameVals);
+      SHADER.perFrame(pxRatio, frameVals);
       switches.update(rdt, w, h, frameVals);
       page.reveal(switches);
 

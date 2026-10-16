@@ -42,12 +42,4 @@ export default [
       { key: 'wobbleAmpJitter', label: 'Size jitter', value: 0.5, min: 0, max: 1, step: 0.01, uniform: false, desc: 'Each point\'s own swing size.', when: { key: 'wobble', not: [0] } },
     ],
   },
-  {
-    group: 'Finish',
-    params: [
-      { key: 'grainAmount', label: 'Grain', value: 0.025, min: 0, max: 0.2, step: 0.001, desc: 'Signed per-grain brightness, so it shows on light and dark alike.' },
-      { key: 'grainSize', label: 'Size (px)', value: 1, min: 0.5, max: 4, step: 0.05, desc: 'Grain size in CSS px.', when: { key: 'grainAmount', not: [0] } },
-      { key: 'grainFps', label: 'Fps', value: 0, min: 0, max: 30, step: 1, uniform: false, desc: 'How often the grain changes. 0 = fixed, like a surface rather than film.', when: { key: 'grainAmount', not: [0] } },
-    ],
-  },
 ];

@@ -1,12 +1,11 @@
 // Homepage — the backdrop shader and its per-frame CPU values.
 //
 // One full-resolution pass: the theme's page colour, with each switch (switches.js) laying the
-// other theme over it in a wobbling ring that grows from the click, then a little grain.
+// other theme over it in a wobbling ring that grows from the click.
 //
 // Uniforms: u_<key> for every param without `uniform: false`, f_<name> per frame (below),
 // u_res (canvas px), u_screen, u_time (scene s), u_realTime.
 
-import { FILM_GLSL } from '../../kit/film.js';
 import { MAX_POINTS, MAX_SWITCHES } from './switches.js';
 
 const composite = `
@@ -44,23 +43,17 @@ void main() {
     float ahead = r - length(d); // > 0: the front has passed
     th = mix(th, f_switch[s * 4 + 3], smoothstep(-aa, aa, ahead));
   }
-  vec3 col = mix(u_projectsPage, u_rolesPage, th);
-
-  // Grain: signed, so it reads on light and dark alike; still unless Grain fps is set.
-  float gs = max(u_grainSize * f_px, 1.0);
-  col += (hash(vec3(floor(fc / gs), f_grainFrame)) - 0.5) * u_grainAmount;
-  outColor = vec4(col, 1.0);
+  outColor = vec4(mix(u_projectsPage, u_rolesPage, th), 1.0);
 }
 `;
 
 export default {
-  common: FILM_GLSL,
+  common: '',
   composite,
 
   // name → component count, or [length] for a float array.
   frameUniforms: {
     f_px: 1,              // canvas px per CSS px
-    f_grainFrame: 1,
     f_baseTheme: 1,       // 0 projects, 1 roles
     f_switchCount: 1,
     f_switch: [MAX_SWITCHES * 4], // click x, y, reach (CSS px), theme
@@ -69,11 +62,11 @@ export default {
   },
 
   /**
-   * Values every pixel shares. Must not allocate.
-   * @param {Record<string, any>} P
+   * Values every pixel shares (the switches write their own). Must not allocate.
+   * @param {number} px canvas px per CSS px
+   * @param {Record<string, Float32Array>} f
    */
-  perFrame(P, rt, px, f) {
+  perFrame(px, f) {
     f.f_px[0] = px;
-    f.f_grainFrame[0] = P.grainFps.value > 0 ? Math.floor(rt * P.grainFps.value) : 0;
   },
 };

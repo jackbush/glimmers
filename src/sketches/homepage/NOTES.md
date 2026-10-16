@@ -2,7 +2,7 @@
 
 A prototype of jackbush.github.io's light/dark switch, under a copy of the real page (`page.js`, `content.js`), to get the animation right before it moves into the site. Raw WebGL2, one full-resolution pass.
 
-The backdrop is the theme's page colour with a little grain. A Projects/Roles switch (`switches.js`) starts at the click (the tab's centre from the keyboard), Start size across, and grows outwards, accelerating, until it has passed the whole screen. Its outline is Blackstar's: a closed Catmull-Rom spline through a few radii round the click, each swinging in and out on its own sine wave (Shape group). The intro stays and changes colour as the switch passes it; the old list fades out, and the new list shows only inside the switch as it spreads. That's an SVG polygon clip of 256 points on the list, set each frame from the same spline (`radiusAt` in `switches.js`; the shader's `ringOffset` is the same spline in GLSL), so its edge is the canvas's edge.
+The backdrop is the theme's page colour. A Projects/Roles switch (`switches.js`) starts at the click (the tab's centre from the keyboard), Start size across, and grows outwards, accelerating, until it has passed the whole screen. Its outline is Blackstar's: a closed Catmull-Rom spline through a few radii round the click, each swinging in and out on its own sine wave (Shape group). The intro stays and changes colour as the switch passes it; the old list fades out, and the new list shows only inside the switch as it spreads. That's an SVG polygon clip of 256 points on the list, set each frame from the same spline (`radiusAt` in `switches.js`; the shader's `ringOffset` is the same spline in GLSL), so its edge is the canvas's edge.
 
 ## Files
 
@@ -24,7 +24,7 @@ The backdrop is the theme's page colour with a little grain. A Projects/Roles sw
 
 ## Performance budget
 
-Per pixel: a loop over up to 2 switches and a grain hash. Cheap.
+Per pixel: a loop over up to 2 switches, each a spline lookup. Cheap.
 
 | Date | Machine | Command | fps |
 |---|---|---|---|
