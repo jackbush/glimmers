@@ -89,7 +89,7 @@ export default [
       { key: 'traceOverlap', label: 'Trace overlap', value: 0.02, min: 0.02, max: 1, step: 0.01, desc: 'How many lines grow at once as a constellation traces in: low = one after another.' },
       { key: 'fadeStart', label: 'Start fading', value: 4.5, min: -12, max: 12, step: 0.1, desc: 'Hour angle where a setting constellation starts to fade.' },
       { key: 'fadeEnd', label: 'Gone', value: 9, min: -12, max: 12, step: 0.1, desc: 'Hour angle where it has faded out.' },
-      { key: 'lineTwilight', label: 'Dark enough', value: 0.74, min: 0.01, max: 1, step: 0.01, uniform: false, desc: 'Lines trace in at dusk once the twilight drops below this, and fade at dawn as it passes it (0 = full dark, 1 = brightest).' },
+      { key: 'lineTwilight', label: 'Dark enough', value: 0.44, min: 0.01, max: 1, step: 0.01, uniform: false, desc: 'Lines trace in at dusk once the twilight drops below this, and fade at dawn as it passes it (0 = full dark, 1 = brightest).' },
     ],
   },
   {
