@@ -79,7 +79,7 @@ export function createSwitches(P) {
       return newestReach * (1 + off);
     },
 
-    /** Switch at once (start-up, reduced motion, the Start theme param). */
+    /** Switch at once (start-up, reduced motion, the Active tab param). */
     jump(/** @type {number} */ theme) {
       base = top = theme;
       live.length = 0;

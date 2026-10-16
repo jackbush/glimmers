@@ -9,15 +9,14 @@ export default [
   playback({}, {
     extra: [
       { key: 'seed', label: 'Seed', value: 0, min: 0, max: 100, step: 1, uniform: false, desc: 'Where on the tab demo switches start.' },
-      { key: 'startTheme', label: 'Start theme', type: 'select', options: ['Projects', 'Roles'], value: 'Projects', uniform: false, desc: 'Which theme the page opens on.' },
+      { key: 'activeTab', label: 'Active tab', type: 'select', options: ['Projects', 'Roles'], value: 'Projects', uniform: false, desc: 'Which tab the page opens on.' },
       { key: 'autoSwitch', label: 'Demo switch (s)', value: 0, min: 0, max: 10, step: 0.1, uniform: false, desc: 'Switch theme on its own every this many seconds, from a random point on the toggle. 0 = off.' },
     ],
   }),
   {
     group: 'Colours',
     params: [
-      { key: 'projectsPage', label: 'Projects page', type: 'color', value: '#f3ead6', desc: 'The page colour in Projects. Its text is the inverse; flickers if that\'s below AA (4.5:1).' },
-      { key: 'rolesPage', label: 'Roles page', type: 'color', value: '#000210', desc: 'The page colour in Roles. Its text is the inverse; flickers if that\'s below AA (4.5:1).' },
+      { key: 'themeColour', label: 'Theme colour', type: 'color', value: '#f3ead6', desc: 'The one colour behind the whole theme: the page in Projects, and the text in Roles. Projects\' text and the Roles page are its inverse. Flickers if that\'s below AA (4.5:1).' },
       { key: 'minorOpacity', label: 'Minor opacity', value: 0.8, min: 0, max: 1, step: 0.01, uniform: false, desc: 'Body text: the page\'s inverse at this opacity over it. Flickers if that\'s below AA (4.5:1).' },
     ],
   },

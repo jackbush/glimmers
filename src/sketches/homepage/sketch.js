@@ -7,6 +7,7 @@
 import SHADER from './shader.js';
 import { createSwitches } from './switches.js';
 import { createPage, MODES } from './page.js';
+import { invertHex } from './ink.js';
 import { rng } from '../../kit/random.js';
 import { FULLSCREEN_VERT, frameUniforms, program, shaderHeader, shaderParams, uploadFrame, uploadParams } from '../../kit/gl.js';
 
@@ -54,15 +55,15 @@ export default function create({ canvas, P, model, degrade }) {
     },
   });
 
-  let seen = -1, startTheme = '';
-  /** Push param changes to the page; a new Start theme switches at once. */
+  let seen = -1, activeTab = '';
+  /** Push param changes to the page; a new Active tab switches at once. */
   function syncParams() {
     if (seen === model.version) return;
     seen = model.version;
     page.sync(P);
-    if (P.startTheme.value !== startTheme) {
-      startTheme = P.startTheme.value;
-      const mode = MODES[startTheme === 'Roles' ? 1 : 0];
+    if (P.activeTab.value !== activeTab) {
+      activeTab = P.activeTab.value;
+      const mode = MODES[activeTab === 'Roles' ? 1 : 0];
       switches.jump(MODES.indexOf(mode));
       page.setMode(mode);
     }
@@ -91,7 +92,7 @@ export default function create({ canvas, P, model, degrade }) {
     if (theme === bars && barsVersion === model.version) return;
     bars = theme;
     barsVersion = model.version;
-    const c = String((theme ? P.rolesPage : P.projectsPage).value);
+    const c = theme ? invertHex(String(P.themeColour.value)) : String(P.themeColour.value);
     document.documentElement.style.backgroundColor = c;
     document.body.style.backgroundColor = c;
     themeMeta?.setAttribute('content', c);

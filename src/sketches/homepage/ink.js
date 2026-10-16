@@ -23,6 +23,9 @@ export function inkLayers(opacity) {
 /** A colour's inverse. */
 export const invert = (/** @type {ArrayLike<number>} */ c) => [0, 1, 2].map((i) => 1 - c[i]);
 
+/** A #rrggbb colour's inverse, as #rrggbb. */
+export const invertHex = (/** @type {string} */ h) => '#' + (0xffffff ^ parseInt(h.slice(1), 16)).toString(16).padStart(6, '0');
+
 /** `share` of the way from colour `a` to colour `b`. */
 export const mixRgb = (/** @type {ArrayLike<number>} */ a, /** @type {ArrayLike<number>} */ b, /** @type {number} */ share) =>
   [0, 1, 2].map((c) => a[c] + (b[c] - a[c]) * share);

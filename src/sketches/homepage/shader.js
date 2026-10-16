@@ -1,6 +1,6 @@
 // Homepage — the backdrop shader and its per-frame CPU values.
 //
-// One full-resolution pass: the theme's page colour, with each switch (switches.js) laying the
+// One full-resolution pass: the theme's page colour (Roles is Projects' inverse), with each switch (switches.js) laying the
 // other theme over it in a wobbling ring that grows from the click.
 //
 // Uniforms: u_<key> for every param without `uniform: false`, f_<name> per frame (below),
@@ -43,7 +43,7 @@ void main() {
     float ahead = r - length(d); // > 0: the front has passed
     th = mix(th, f_switch[s * 4 + 3], smoothstep(-aa, aa, ahead));
   }
-  outColor = vec4(mix(u_projectsPage, u_rolesPage, th), 1.0);
+  outColor = vec4(mix(u_themeColour, 1.0 - u_themeColour, th), 1.0);
 }
 `;
 

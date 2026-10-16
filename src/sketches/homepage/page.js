@@ -363,8 +363,9 @@ export function createPage({ P, onSwitch }) {
      */
     sync(P) {
       const s = root.style;
-      const page = { projects: P.projectsPage.rgb, roles: P.rolesPage.rgb };
-      const text = { projects: invert(page.projects), roles: invert(page.roles) };
+      // Roles is Projects inverted: each page is the other's text.
+      const page = { projects: P.themeColour.rgb, roles: invert(P.themeColour.rgb) };
+      const text = { projects: page.roles, roles: page.projects };
 
       // Each kind of text is the page's inverse at its own opacity, with its own ink greys.
       const kinds = { main: 1, minor: P.minorOpacity.value };
