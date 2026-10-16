@@ -1,7 +1,7 @@
 ---
 import type { GetStaticPaths } from 'astro';
 import SketchLayout from '../layouts/SketchLayout.astro';
-import { getSite, getSketches, type SketchEntry } from '../lib/sketches';
+import { getListed, getSite, getSketches, type SketchEntry } from '../lib/sketches';
 import type { Group } from '../kit/types';
 
 interface Props {
@@ -21,12 +21,16 @@ if (sketch.pageColour && !pageParam) {
   throw new Error(`src/sketches/${sketch.slug}/manifest.js: pageColour "${sketch.pageColour}" isn't a param key.`);
 }
 const background = pageParam ? String(pageParam.value) : '#000';
+
+// A sketch in index.js's `more` list stands alone: it's shared directly, so no way back to the index.
+const standalone = getListed('more').some((s) => s.slug === sketch.slug);
 ---
 
 <SketchLayout
   title={`${sketch.name} | ${getSite().name}`}
   appTitle={sketch.name}
   background={background}
+  back={!standalone}
   image={sketch.cover.share}
   imageAlt={sketch.cover.share ? `A still from ${sketch.name}` : undefined}
 >
