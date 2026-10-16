@@ -1,0 +1,30 @@
+# Homepage
+
+A prototype of jackbush.github.io's light/dark switch, under a copy of the real page (`page.js`, `content.js`), to get the animation right before it moves into the site. Raw WebGL2, one full-resolution pass.
+
+The backdrop is the theme's page colour with a little grain. A Projects/Roles switch (`switches.js`) starts at the click (the tab's centre from the keyboard), Start size across, and grows outwards, accelerating, until it has passed the whole screen. Its outline is Blackstar's: a closed Catmull-Rom spline through a few radii round the click, each swinging in and out on its own sine wave (Shape group). The intro stays and changes colour as the switch passes it; the old list fades out, and the new list shows only inside the switch as it spreads. That's an SVG polygon clip of 256 points on the list, set each frame from the same spline (`radiusAt` in `switches.js`; the shader's `ringOffset` is the same spline in GLSL), so its edge is the canvas's edge.
+
+## Files
+
+| File | Role |
+|---|---|
+| `params.js` | Every default. |
+| `shader.js` | The GLSL, and `perFrame()`. |
+| `switches.js` | Each switch's click, reach and outline → `f_switch`, `f_ring`. Runs on its own real-time clock, so a switch plays out while paused. |
+| `page.js` | The page over the canvas: markup, CSS, the toggle, the contrast flicker. Its colours come from params. |
+| `ink.js` | The blend-layer colours that turn a page colour into its text colour (its inverse), and the contrast maths. |
+| `content.js` | The site's projects and roles, copied from `jackbush.github.io/src/data/`. The intro copy is in `page.js`. |
+| `sketch.js` | WebGL engine and wiring. No design logic. |
+
+## Surprises
+
+- **Text colour follows the switch.** Each page's text is its inverse (1 − page), main text at full strength, minor text and rules at their opacities. The page is laid out four times (`page.js`): one real, interactive copy with transparent text, and three aria-hidden, inert copies that only draw text in blend layers over the canvas (multiply, difference, plus-lighter). Per channel they map the page colour under each glyph to its inverse at the text's opacity (`ink.js`), so text flips pixel by pixel as the switch passes. The toggle is drawn the same way: its frame and the other tab's label in the text colour, the current tab filled with it and its label a gap in the fill (the identity colour for each layer), so nothing ever uses the other page's colours. The scroll layer (`.hp`) must stay no stacking context, or the blends stop reaching the canvas.
+- **Contrast:** main and minor text below WCAG AA (4.5:1) on its page flickers, tabs included. Rules aren't checked: they're decoration.
+- With reduced motion, a switch is instant.
+
+## Performance budget
+
+Per pixel: a loop over up to 2 switches and a grain hash. Cheap.
+
+| Date | Machine | Command | fps |
+|---|---|---|---|

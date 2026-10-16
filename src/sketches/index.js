@@ -3,7 +3,7 @@
  *
  * `sketches` sets the order: first in the list is first on the page. `more` are live but not
  * shown off: they're listed below the others only when the home page is opened with ?all (or
- * #all). Comment a line out to hide a sketch entirely — its page still builds at its own URL,
+ * #all). New sketches start at the top of `more`; publishing moves them to `sketches`. Comment a line out to hide a sketch entirely — its page still builds at its own URL,
  * it just isn't linked from the index.
  */
 export default {
@@ -20,6 +20,7 @@ export default {
   ],
 
   more: [
+    'homepage',
     'orb',
     'constellations',
     'cubeland',
