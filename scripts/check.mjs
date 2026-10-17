@@ -15,8 +15,6 @@ import { manifestSchema } from '../src/kit/manifest-schema.js';
 const root = new URL('../src/sketches/', import.meta.url).pathname;
 const only = process.argv.slice(2);
 const slugs = readdirSync(root).filter((d) => existsSync(join(root, d, 'manifest.js')) && (!only.length || only.includes(d)));
-const home = (await import(pathToFileURL(join(root, 'index.js')).href)).default;
-const listed = [...home.sketches, ...(home.more || [])];
 let totalErrors = 0;
 
 for (const slug of slugs) {
@@ -142,7 +140,6 @@ for (const slug of slugs) {
     await hook({ dir, params, manifest, errors, warnings });
   }
 
-  if (!listed.includes(slug)) warnings.push('not listed in src/sketches/index.js (its page still builds)');
   const covers = ['cover.mp4', 'cover.jpg', 'share.jpg'].filter((f) => !existsSync(join(dir, f)));
   if (covers.length) warnings.push(`no ${covers.join(' or ')} — run: node scripts/capture.mjs ${slug}`);
 

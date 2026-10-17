@@ -1,6 +1,6 @@
 ---
 name: publish-glimmer
-description: Put a finished glimmer on the home page — move it from the `more` section to the front page, make sure its cover is captured and current, check its params, scan its code for performance problems, and benchmark it on the real GPU. Use when asked to publish a glimmer or sketch, or when a sketch in src/sketches/<slug>/ is ready to go live.
+description: Put a finished glimmer on the home page — add it to the `listed` sketches in src/sketches/index.js, make sure its cover is captured and current, check its params, scan its code for performance problems, and benchmark it on the real GPU. Use when asked to publish a glimmer or sketch, or when a sketch in src/sketches/<slug>/ is ready to go live.
 ---
 
 # Publishing a glimmer
@@ -11,11 +11,10 @@ This skill **reports and asks; it never rewrites the sketch on its own.** It edi
 
 ## 1. Move it to the front page
 
-The front page is `sketches` in `src/sketches/index.js`; `more` is for sketches that are live but only shown with `?all`. New sketches start at the top of `more` (`new-glimmer` puts them there), so publishing moves the slug from `more` to `sketches`:
+The front page is `listed` in `src/sketches/index.js`. Every other sketch is unlisted (live at its URL, on the index only with `?all`), which is where new sketches start, so publishing adds the slug to `listed`:
 
-- **In `more`** (the usual case): take it out of `more` and add it to `sketches`. Ask where (first in the list is first on the page); default to the top.
-- **Commented out** in either list, or **absent**: ask where it should go, as above.
-- **Already in `sketches`**, uncommented: nothing to do. Say so; don't add a second line.
+- **Not in `listed`** (the usual case), or commented out: add it. Ask where (first in the list is first on the page); default to the top.
+- **Already in `listed`**, uncommented: nothing to do. Say so; don't add a second line.
 
 ## 2. Check the manifest
 
@@ -83,9 +82,9 @@ Expect 0 errors from both. Then `npm run preview` and confirm the sketch shows a
 
 ## Hand it back
 
-First re-read `src/sketches/index.js`. If the slug isn't in `sketches` (uncommented), or is still in `more`, **warn at the top of the report**: the sketch isn't on the front page, so it isn't published yet.
+First re-read `src/sketches/index.js`. If the slug isn't in `listed` (uncommented), **warn at the top of the report**: the sketch isn't on the front page, so it isn't published yet.
 
-- Whether the sketch moved to `sketches` (and where), was already there, or is waiting on where it should go.
+- Whether the sketch was added to `listed` (and where), was already there, or is waiting on where it should go.
 - Cover: recaptured or current, its size, and any warning.
 - Check warnings from step 3, and the params at zero with what the owner chose for each.
 - Performance findings from step 5, most serious first, as warnings, not fixes.

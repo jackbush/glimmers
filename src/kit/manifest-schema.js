@@ -34,6 +34,8 @@ export const manifestSchema = z
         start: z.number().min(0),
         fps: z.number().positive(),
         crf: z.number().int().min(0).max(51),
+        /** x264's tune for the cover: 'grain' keeps fine noise (and the dither in dark gradients) that it would otherwise smooth into bands. */
+        tune: z.enum(['grain', 'film', 'animation']),
         pingpong: z.boolean(),
         /** Params held at these values for the clip and its stills (`--set` overrides them). */
         set: z.record(z.string(), z.union([z.number(), z.string(), z.boolean()])),

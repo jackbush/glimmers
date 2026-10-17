@@ -114,7 +114,7 @@ export default {
 
     // Turn: spin about the cluster's own upright, a gentle rock, then the camera's height.
     const sw = P.sway.value * DEG, ss = TAU * P.swaySpeed.value * t;
-    rotY(M, P.spin.value * DEG * t);
+    rotY(M, (P.spinStart.value + P.spin.value * t) * DEG);
     rotZ(A, sw * Math.sin(ss));
     rotX(B, sw * 0.7 * Math.sin(ss * 1.618 + 1.3));
     mul(M, A, M);

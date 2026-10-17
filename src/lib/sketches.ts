@@ -1,7 +1,8 @@
 // Build-time view of src/sketches/: every sketch folder, validated, with its cover resolved.
 //
 // Pages are built from the folders, not from index.js, so an unlisted sketch is still
-// reachable by direct URL — that's how you preview one before publishing it.
+// reachable by direct URL: that's how you preview one before publishing it, or share one that
+// stands alone.
 
 import { z } from 'astro/zod';
 import home from '../sketches/index.js';
@@ -10,7 +11,7 @@ import { manifestSchema } from '../kit/manifest-schema.js';
 const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 const homeSchema = z
-  .object({ name: z.string().trim().min(1), description: z.string().trim().min(1), sketches: z.array(z.string()), more: z.array(z.string()) })
+  .object({ name: z.string().trim().min(1), description: z.string().trim().min(1), listed: z.array(z.string()) })
   .strict();
 
 export interface SketchEntry {
@@ -71,14 +72,20 @@ export function getSite(): { name: string; description: string } {
   return { name, description };
 }
 
-/** The sketches in one of src/sketches/index.js's lists (`sketches`, or `more`), in order. */
-export function getListed(list: 'sketches' | 'more' = 'sketches'): SketchEntry[] {
+/** The home page's sketches: src/sketches/index.js's `listed`, in order. */
+export function getListed(): SketchEntry[] {
   const all = getSketches();
-  return getHome()[list].map((slug) => {
+  return getHome().listed.map((slug) => {
     const s = all.get(slug);
     if (!s) throw new Error(`src/sketches/index.js lists "${slug}", but there's no src/sketches/${slug}/manifest.js.`);
     return s;
   });
+}
+
+/** Every other sketch, alphabetically by name: live at its URL, shown on the home page only with ?all. */
+export function getUnlisted(): SketchEntry[] {
+  const listed = new Set(getHome().listed);
+  return [...getSketches().values()].filter((s) => !listed.has(s.slug)).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /** Turns a site path into a URL under `base`: url('blackstar/') → '/glimmers/blackstar/'. */

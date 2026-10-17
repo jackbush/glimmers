@@ -1,11 +1,11 @@
 ---
 name: new-glimmer
-description: Start a new sketch in glimmers — scaffold its folder (manifest, params, sketch, notes) and list it at the top of the `more` section (shown only with ?all) until it's published. Use when the user wants to make a new glimmer, sketch, toy or animation in this repo, or to bring in an existing sketch from elsewhere.
+description: Start a new sketch in glimmers — scaffold its folder (manifest, params, sketch, notes) and leave it unlisted (live at its URL, on the index only with ?all) until it's published. Use when the user wants to make a new glimmer, sketch, toy or animation in this repo, or to bring in an existing sketch from elsewhere.
 ---
 
 # Starting a new glimmer
 
-Output: a working, empty sketch at `src/sketches/<slug>/`, reachable at `/glimmers/<slug>/` and listed at the top of `more` (shown only with `?all`). `publish-glimmer` moves it to the front page later.
+Output: a working, empty sketch at `src/sketches/<slug>/`, reachable at `/glimmers/<slug>/`. It's unlisted: shown on the index only with `?all`, and standalone (no back arrow). `publish-glimmer` moves it to the front page later.
 
 ## 1. Pick the slug and name
 
@@ -79,17 +79,8 @@ export default function create({ canvas, P }) {
 |---|---|---|---|
 ```
 
-## 4. Register it in `more`
-
-Add the slug at the **top** of `more` in `src/sketches/index.js`. It's then live at its URL and listed only on `?all`, not on the front page:
-```js
-  more: [
-    'rain',
-    …
-```
-
-## 5. Check and show it
+## 4. Check and show it
 
 1. `node scripts/check.mjs <slug>`: 0 errors. (A "no cover" warning is expected until it's published.)
 2. `node scripts/bench.mjs <slug> --size 1280x800 --shot <scratchpad>/shot.png` and read the PNG.
-3. Tell the user its local URL (`npm run dev`, then `http://localhost:4321/glimmers/<slug>/`) and that it's only listed with `?all` until they publish it.
+3. Tell the user its local URL (`npm run dev`, then `http://localhost:4321/glimmers/<slug>/`) and that it's unlisted (on the index only with `?all`) until they publish it.

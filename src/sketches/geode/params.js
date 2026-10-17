@@ -27,6 +27,7 @@ export default [
     group: 'Motion',
     params: [
       { key: 'spin', label: 'Spin °/s', value: 7, min: -60, max: 60, step: 0.5, uniform: false, desc: 'How fast the cluster turns about its upright axis.' },
+      { key: 'spinStart', label: 'Start angle °', value: 0, min: 0, max: 360, step: 1, uniform: false, desc: 'Where in its turn the cluster starts (it turns from here at Spin).' },
       { key: 'sway', label: 'Sway °', value: 0, min: 0, max: 25, step: 0.5, uniform: false, desc: 'The cluster rocks gently as it turns.' },
       { key: 'swaySpeed', label: 'Sway speed', value: 0.07, min: 0, max: 0.5, step: 0.005, uniform: false, desc: 'Rocks per second.', when: { key: 'sway', not: [0] } },
     ],

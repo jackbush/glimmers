@@ -163,8 +163,17 @@ const run = (argv) => {
   const r = spawnSync('ffmpeg', ['-v', 'error', '-y', ...argv], { stdio: 'inherit' });
   if (r.status !== 0) throw new Error('ffmpeg failed');
 };
+// RGB → 8-bit YUV with error-diffusion dither: plain rounding turns a dark gradient's dither
+// back into bands. A manifest `tune` (x264's) can keep that noise through compression too.
+// Converted with BT.709 and labelled so: browsers decode an unlabelled HD video as BT.709, and
+// ffmpeg's default (BT.601) then comes out hue-shifted against the poster and the page.
 run(['-framerate', String(fps), '-i', join(work, 'seq', '%05d.png'),
-  '-c:v', 'libx264', '-preset', 'slow', '-crf', crf, '-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-an', video]);
+  '-vf', 'scale=out_color_matrix=bt709:out_range=tv:flags=lanczos+accurate_rnd+full_chroma_int:sws_dither=ed,format=yuv420p',
+  '-c:v', 'libx264', '-preset', 'slow', '-crf', crf, ...(preset.tune ? ['-tune', preset.tune] : []),
+  // The labels go in the stream itself: sRGB's primaries (BT.709's) and its own transfer curve,
+  // so Safari doesn't apply BT.709's darker gamma.
+  '-x264-params', 'colorprim=bt709:transfer=iec61966-2-1:colormatrix=bt709:range=tv',
+  '-movflags', '+faststart', '-an', video]);
 // A still of this sketch, rendered natively at width×height (at dpr) by a second run of this
 // script, on the manifest's `share` preset if it has one (else the clip's first).
 const stillPreset = preset.share || seq[0];

@@ -22,8 +22,8 @@ if (sketch.pageColour && !pageParam) {
 }
 const background = pageParam ? String(pageParam.value) : '#000';
 
-// A sketch in index.js's `more` list stands alone: it's shared directly, so no way back to the index.
-const standalone = getListed('more').some((s) => s.slug === sketch.slug);
+// A sketch the home page doesn't list stands alone: it's shared directly, so no way back to the index.
+const standalone = !getListed().some((s) => s.slug === sketch.slug);
 ---
 
 <SketchLayout

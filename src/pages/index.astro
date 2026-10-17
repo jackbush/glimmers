@@ -1,11 +1,12 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
-import { getListed, getSite, url } from '../lib/sketches';
+import { getListed, getSite, getUnlisted, url } from '../lib/sketches';
 
 const site = getSite();
+// The listed sketches, then (only with ?all) every unlisted one, alphabetically, in two columns.
 const lists = [
-  { sketches: getListed(), more: false },
-  { sketches: getListed('more'), more: true },
+  { sketches: getListed(), unlisted: false },
+  { sketches: getUnlisted(), unlisted: true },
 ];
 ---
 
@@ -17,8 +18,8 @@ const lists = [
   </Fragment>
   <main>
     <h1>{site.name}</h1>
-    {lists.map(({ sketches, more }) => (
-    <ul class:list={{ more }} hidden={more}>
+    {lists.map(({ sketches, unlisted }) => (
+    <ul class:list={{ unlisted }} hidden={unlisted}>
       {sketches.map((s) => (
         <li>
           <a href={url(s.slug + '/')}>
@@ -42,9 +43,9 @@ const lists = [
 </BaseLayout>
 
 <script>
-  // The second list (index.js `more`) shows only for ?all or #all.
+  // The unlisted sketches show only for ?all or #all.
   if (/(^|[?&])all\b/.test(location.search.slice(1)) || location.hash === '#all') {
-    document.querySelectorAll<HTMLElement>('ul.more').forEach((ul) => (ul.hidden = false));
+    document.querySelectorAll<HTMLElement>('ul.unlisted').forEach((ul) => (ul.hidden = false));
   }
 
   // Only the covers on screen play; the rest sit on their poster frame. With reduced motion,
@@ -73,7 +74,8 @@ const lists = [
   h1 { margin: 32px 0 24px; font: 400 72px/1 "Grenze Gotisch", serif; }
   ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 40px; }
   ul[hidden] { display: none; }
-  ul.more { margin-top: 40px; padding-top: 40px; border-top: 1px solid var(--line); }
+  /* Twice the list's own gap above it, so it reads as a separate section without a line. */
+  ul.unlisted { grid-template-columns: 1fr 1fr; gap: 32px 24px; margin-top: 80px; }
   a { display: block; color: inherit; text-decoration: none; }
   video, img, .blank, .cover { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: cover; background: #111; }
   .cover { position: relative; overflow: hidden; }
@@ -85,7 +87,7 @@ const lists = [
   /* Phones: a smaller heading with less space above it, and covers run edge to edge. */
   @media (max-width: 699px) {
     h1 { margin-top: 26px; font-size: 58px; }
-    a > .cover, a > img, a > .blank { width: calc(100% + var(--gutter-l) + var(--gutter-r)); margin-left: calc(-1 * var(--gutter-l)); }
+    ul:not(.unlisted) a > .cover, ul:not(.unlisted) a > img, ul:not(.unlisted) a > .blank { width: calc(100% + var(--gutter-l) + var(--gutter-r)); margin-left: calc(-1 * var(--gutter-l)); }
     .cover img, .cover video { width: 100%; margin-left: 0; }
   }
 </style>
