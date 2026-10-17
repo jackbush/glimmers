@@ -52,21 +52,27 @@ html, body { height: auto; overflow: visible; }
 .hp-ink { pointer-events: none; user-select: none; }
 ${Object.entries(INKS).map(([k, [mode, none]]) => `.hp-ink[data-ink="${k}"] { mix-blend-mode: ${mode}; --hp-text: var(--hp-${k}-main); --hp-minor: var(--hp-${k}-minor); --hp-none: ${none}; }`).join('\n')}
 .hp h1 { font-size: clamp(2.25rem, 7vw, 4.5rem); font-weight: 900; line-height: 1.02; letter-spacing: -0.03em; margin: 0 0 1rem; color: var(--hp-text); }
-.hp h2 { font-size: 1.375rem; font-weight: 700; line-height: 1.4; letter-spacing: -0.01em; margin: 0; color: var(--hp-text); }
-.hp h3 { font-size: 1.2rem; font-weight: 700; line-height: 1.6; letter-spacing: -0.01em; margin: 0; color: var(--hp-text); }
+.hp h2 { font-size: 1.625rem; font-weight: 800; line-height: 1.1; letter-spacing: -0.015em; margin: 0; color: var(--hp-text); }
+/* Project names and roles share a style. */
+.hp h3, .hp .hp-strong { font-size: 1.25rem; font-weight: 600; line-height: 1.35; letter-spacing: -0.01em; margin: 0; color: var(--hp-text); }
 .hp p, .hp .hp-body { font-size: 1.125rem; line-height: 1.6; margin: 0; }
-.hp strong, .hp .hp-strong { color: var(--hp-text); }
+.hp strong { font-weight: 600; color: var(--hp-text); }
 .hp .hp-minor { color: var(--hp-minor); }
-.hp .hp-strong { font-weight: 600; line-height: 1.75; }
-.hp .hp-dates { font-weight: 400; }
+/* Role dates: small capitals set close, with tabular figures so the years line up. */
+.hp .hp-dates { font-size: 0.8125rem; line-height: 1.6; letter-spacing: 0.02em; text-transform: uppercase; font-variant-numeric: tabular-nums; }
 .hp a { color: inherit; text-decoration: none; display: block; }
 .hp ul { list-style: none; margin: 0; padding: 0; }
 .hp .hp-desc { margin-top: 0.25rem; }
-.hp .hp-bullets { list-style: disc; margin: 0.5rem 0 0; padding-left: 1.5rem; }
-/* Phones: a narrower gutter, and body, item titles and strong lines a step down. */
+/* Each highlight hangs off a short dash, a quieter mark than a bullet. */
+.hp .hp-bullets { margin: 0.25rem 0 0; }
+.hp-bullets > li { position: relative; padding-left: 1.5rem; }
+.hp-bullets > li + li { margin-top: 0.25rem; }
+.hp-bullets > li::before { content: ""; position: absolute; left: 0; top: 0.8em; width: 0.625rem; border-top: 1px solid var(--hp-minor); }
+/* Phones: a narrower gutter, and body, item titles and roles a step down. */
 @media (max-width: 30rem) {
   .hp { --gutter: 1rem; }
-  .hp h3 { font-size: 1.125rem; }
+  .hp h3, .hp .hp-strong { font-size: 1.125rem; }
+  .hp-roles > li + li { margin-top: 1.75rem; padding-top: 1.75rem; }
   .hp p, .hp .hp-body { font-size: 1rem; }
 }
 .hp-intro { margin-bottom: 3rem; }
@@ -76,8 +82,9 @@ ${Object.entries(INKS).map(([k, [mode, none]]) => `.hp-ink[data-ink="${k}"] { mi
 /* Roles are divided by lines like the toggle's frame. A card's text sits inside its padding,
    so the roles start that much lower to line up. */
 .hp .hp-roles { padding-top: var(--card-padding); }
-.hp-roles > li + li { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--hp-text); }
-.hp-roles .hp-desc { margin-top: 0.5rem; }
+.hp-roles > li + li { margin-top: 2.25rem; padding-top: 2.25rem; border-top: 1px solid var(--hp-text); }
+/* Organisation, then the role and its dates set close as one unit. */
+.hp .hp-roles .hp-strong { margin-top: 0.5rem; }
 /* Projects are cards, as far apart as the page is from the screen's edges (and from the
    toggle): a 1px box in the text colour, a line between cover and text. */
 .hp-projects { display: grid; gap: var(--gutter); }
@@ -114,7 +121,7 @@ ${Object.entries(INKS).map(([k, [mode, none]]) => `.hp-ink[data-ink="${k}"] { mi
    filled with it, its label a gap in the fill where the page shows through. */
 .hp-toggle { --frame: 1px; display: flex; border: var(--frame) solid var(--hp-text); border-radius: var(--radius); margin-bottom: var(--gutter); }
 .hp-toggle button {
-  flex: 1; min-height: 2.75rem; padding: 0.6rem 1rem; font: inherit; font-size: 1rem; font-weight: 700; border: none; cursor: pointer;
+  flex: 1; min-height: 2.75rem; padding: 0.6rem 1rem; font: inherit; font-size: 1rem; font-weight: 600; border: none; cursor: pointer;
   color: var(--hp-text); background: transparent;
 }
 .hp-toggle button:first-child { border-radius: calc(var(--radius) - var(--frame)) 0 0 calc(var(--radius) - var(--frame)); }
@@ -176,7 +183,8 @@ function build({ intro, projects, roles }) {
   });
   const roleItems = roles.map((r) => el('li', {}, [
     el('h2', {}, [r.organisation]),
-    el('p', { class: 'hp-strong' }, [r.role, el('span', { class: 'hp-dates' }, [` (${r.dates})`])]),
+    el('p', { class: 'hp-strong' }, [r.role]),
+    el('p', { class: 'hp-dates hp-minor' }, [r.dates]),
     el('p', { class: 'hp-desc hp-minor' }, [r.description]),
     ...(r.listItems ? [el('ul', { class: 'hp-bullets hp-minor' }, r.listItems.map((i) => el('li', { class: 'hp-body' }, [i])))] : []),
   ]));
