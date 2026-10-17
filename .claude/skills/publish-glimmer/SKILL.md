@@ -80,6 +80,15 @@ npm run build && npm run check
 
 Expect 0 errors from both. Then `npm run preview` and confirm the sketch shows at `http://localhost:4321/glimmers/` in its `index.js` position, its cover plays, and its page opens from it.
 
+## 8. Add it to jackbush.github.io's projects (ask first)
+
+The owner's site (`~/repos/jackbush.github.io`, deployed from the `source` branch) lists projects on its home page, glimmers among them. **Unless the owner has said whether to, ask before doing this.** If yes, draft it for the owner to finish and position:
+
+1. Copy the sketch's `cover.jpg` and `cover.mp4` to `src/assets/covers/<slug>.jpg` and `<slug>.mp4` (exact copies, as the other glimmers' are).
+2. In `src/data/projects.ts`, import them like the other glimmers (`<name>Poster` from the `.jpg`, `<name>Video` from the `.mp4?url`) and add an entry at the top of `projects`: `name`, a draft `description` (one or two sentences in the others' voice: what it is, then an invitation to open the settings), `url: "https://jackbush.github.io/glimmers/<slug>/"` and `cover: { format: "landscape", image: <name>Poster, video: <name>Video }` (a 3:2 header with the cover playing over its poster).
+3. `npm run build` in that repo: 0 errors.
+4. Leave it uncommitted and say so: the owner edits the copy and moves the entry. If the cover is recaptured later, copy it over again. The glimmers homepage sketch picks the new project up from the site's `content.json` once that's deployed.
+
 ## Hand it back
 
 First re-read `src/sketches/index.js`. If the slug isn't in `listed` (uncommented), **warn at the top of the report**: the sketch isn't on the front page, so it isn't published yet.
@@ -89,4 +98,5 @@ First re-read `src/sketches/index.js`. If the slug isn't in `listed` (uncommente
 - Check warnings from step 3, and the params at zero with what the owner chose for each.
 - Performance findings from step 5, most serious first, as warnings, not fixes.
 - The fps numbers and how they compare with the last run.
+- Whether it was drafted into jackbush.github.io's projects (uncommitted), or the owner was asked.
 - That it goes live on the next push to `main`, if nothing above blocks it.
