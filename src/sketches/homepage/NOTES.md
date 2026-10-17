@@ -1,6 +1,6 @@
 # Homepage
 
-A prototype of jackbush.github.io's light/dark switch, under a copy of the real page (`page.js`, `content.js`), to get the animation right before it moves into the site. Raw WebGL2, one full-resolution pass.
+A prototype of jackbush.github.io's light/dark switch, under the real page's copy (`page.js`, from the site's `content.json`), to get the animation right before it moves into the site. Raw WebGL2, one full-resolution pass.
 
 One colour, Theme colour, sets the whole theme: it's the Projects page and the Roles text, and its inverse is the Projects text and the Roles page. The backdrop is the theme's page colour. A Projects/Roles switch (`switches.js`) starts at the click (the tab's centre from the keyboard), Start size across, and grows outwards, accelerating, until it has passed the whole screen. Its outline is Blackstar's: a closed Catmull-Rom spline through a few radii round the click, each swinging in and out on its own sine wave (Shape group). The intro stays and changes colour as the switch passes it; the old list fades out, and the new list shows only inside the switch as it spreads. That's an SVG polygon clip of 256 points on the list, set each frame from the same spline (`radiusAt` in `switches.js`; the shader's `ringOffset` is the same spline in GLSL), so its edge is the canvas's edge.
 
@@ -15,8 +15,7 @@ The browser's bars take one flat colour, so they follow the page along the top e
 | `switches.js` | Each switch's click, reach and outline → `f_switch`, `f_ring`. Runs on its own real-time clock, so a switch plays out while paused. |
 | `page.js` | The page over the canvas: markup, CSS, the toggle, the contrast flicker. Its colours come from params. |
 | `ink.js` | The blend-layer colours that turn a page colour into its text colour (its inverse), and the contrast maths. |
-| `content.js` | The site's projects and roles, copied from `jackbush.github.io/src/data/`. The intro copy is in `page.js`. |
-| `covers/` | Downscaled copies of the site's covers; the glimmers' own come from their folders. |
+| `content.json` | Fallback copy: a snapshot of the site's `content.json` (intro, projects, roles, covers as absolute URLs, made by the site's `src/pages/content.json.ts`). The page draws from it at once, then fetches the live one (`content-url.js`) and lays out again if it differs. `scripts/homepage-content.mjs` refreshes it after every commit and commits the change on its own (the post-commit hook in `.githooks`). |
 | `sketch.js` | WebGL engine and wiring. No design logic. |
 
 ## Surprises

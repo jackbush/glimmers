@@ -1,0 +1,233 @@
+{
+  "intro": {
+    "title": "Jack Bush",
+    "lead": "I'm a design and product leader who loves making things.",
+    "body": "Since 2005 I've built apps, platforms, teams, design systems, AI agents, instruments, a brain-machine interface, exhibitions, furniture, and a van. I care about quality, accessibility, delight, and contributing to the human toolbox."
+  },
+  "projects": [
+    {
+      "name": "Sprig",
+      "description": "Botanical studies. Be taken on an arboreal tour, or click the settings cog and invent your own impossible plants.",
+      "url": "https://jackbush.github.io/glimmers/sprig/",
+      "cover": {
+        "format": "landscape",
+        "video": "https://jackbush.github.io/_astro/sprig.CeY_ypBq.mp4",
+        "image": "https://jackbush.github.io/_astro/sprig.CPjynxXk_Z1cJM25.webp",
+        "width": 1680,
+        "height": 1050
+      }
+    },
+    {
+      "name": "Zola",
+      "description": "Build more accessible products. Each card describes a real person's experience and needs, which your design should accommodate.",
+      "url": "https://jackbush.github.io/zola/",
+      "cover": {
+        "format": "landscape",
+        "background": "#BC6061",
+        "image": "https://jackbush.github.io/_astro/zola.B2vd_PRb_ANHQA.webp",
+        "width": 2400,
+        "height": 1600
+      }
+    },
+    {
+      "name": "Risolino",
+      "description": "Make risograph prints from anywhere. Customise the ink blending, shading model and registration jitter for some analogue charm.",
+      "url": "https://jackbush.github.io/risolino/",
+      "cover": {
+        "format": "landscape",
+        "image": "https://jackbush.github.io/_astro/risolino.DHcRARnd_GTgDG.webp",
+        "width": 2400,
+        "height": 1600
+      }
+    },
+    {
+      "name": "Atlas Nights",
+      "description": "Spend a night star-gazing in the High Atlas. Choose constellation maps from a selection of regional sky cultures.",
+      "url": "https://jackbush.github.io/glimmers/atlas-nights/",
+      "cover": {
+        "format": "landscape",
+        "video": "https://jackbush.github.io/_astro/atlas-nights.B69ga4eh.mp4",
+        "image": "https://jackbush.github.io/_astro/atlas-nights.B8WC12Bk_ZaehqJ.webp",
+        "width": 1680,
+        "height": 1050
+      }
+    },
+    {
+      "name": "Chromist",
+      "description": "Get your colours right. Build palettes for modern devices, see how they appear on old screens, audit accessibility against the next standards.",
+      "url": "https://jackbush.github.io/chromist/",
+      "cover": {
+        "format": "square",
+        "image": "https://jackbush.github.io/_astro/chromist.DqW-F4UW_Z1uV9Rg.webp",
+        "width": 1200,
+        "height": 630
+      }
+    },
+    {
+      "name": "Metty",
+      "description": "Interface prototype for a robotic meditation timer, styled like a record player. Hardware build in progress.",
+      "url": "https://jackbush.github.io/metty/",
+      "cover": {
+        "format": "square",
+        "image": "https://jackbush.github.io/_astro/metty.BwAXlglg_Z1befeV.webp",
+        "width": 1000,
+        "height": 1000
+      }
+    },
+    {
+      "name": "Blackstar",
+      "description": "An undulating black orb with a burning halo. Open the settings pane to design your own void.",
+      "url": "https://jackbush.github.io/glimmers/blackstar/",
+      "cover": {
+        "format": "landscape",
+        "video": "https://jackbush.github.io/_astro/blackstar.AQ07rvE_.mp4",
+        "image": "https://jackbush.github.io/_astro/blackstar.ChbOaYRy_ZRmKIy.webp",
+        "width": 1680,
+        "height": 1050
+      }
+    },
+    {
+      "name": "Albums",
+      "description": "Nice, old-fashioned photo albums. Because social media is a dumpster fire, but it's nice to show your mum what you've been up to.",
+      "url": "https://jackbush.github.io/albums/",
+      "cover": {
+        "format": "landscape",
+        "image": "https://jackbush.github.io/_astro/albums-norway.DYT44xt1_gcizl.webp",
+        "width": 2400,
+        "height": 1600
+      }
+    },
+    {
+      "name": "Carver",
+      "description": "Write in convenient markdown, export as beautiful PDF. Minimal by design, private by default, delightful by nature.",
+      "url": "https://jackbush.github.io/carver/",
+      "cover": {
+        "format": "landscape",
+        "image": "https://jackbush.github.io/_astro/carver.D4GGVlEL_1ssRTg.webp",
+        "width": 2400,
+        "height": 1600
+      }
+    },
+    {
+      "name": "Zen and the Art of Bikepacking Maintenance",
+      "description": "Photos for an essay about gumption, romantic thinking, quality, and bikepacking across Europe.",
+      "url": "https://theradavist.com/zen-and-bikepacking",
+      "cover": {
+        "format": "landscape",
+        "image": "https://jackbush.github.io/_astro/zen-tentlife.CEASElIZ_ZTeRIO.webp",
+        "width": 2400,
+        "height": 1600
+      }
+    },
+    {
+      "name": "Mindflow",
+      "description": "Animated graphics that respond to your brain waves: focus to overlap the rings, relax to calm the outlines.",
+      "vimeo": "1215878977",
+      "link": {
+        "label": "Play with the animation settings",
+        "url": "https://jackbush.github.io/glimmers/mindflow/"
+      }
+    },
+    {
+      "name": "Seeing Britain",
+      "description": "Learning my adoptive home by visiting every county. Mostly done by bicycle, tracked on an interactive map.",
+      "url": "https://jackbush.github.io/seeing-britain/",
+      "cover": {
+        "format": "square",
+        "image": "https://jackbush.github.io/_astro/seeing-britain.BRYZcK94_12fzvA.webp",
+        "width": 1000,
+        "height": 1000
+      }
+    },
+    {
+      "name": "Quadra",
+      "description": "Make QR codes without having your data scraped. Highly customisable, ISO-compliant and ad-free.",
+      "url": "https://jackbush.github.io/quadra/",
+      "cover": {
+        "format": "square",
+        "image": "https://jackbush.github.io/_astro/quadra.BWDe5Mex_Z2ckaeC.webp",
+        "width": 1000,
+        "height": 1000
+      }
+    }
+  ],
+  "roles": [
+    {
+      "organisation": "Circulor",
+      "role": "VP Product",
+      "dates": "2024 – 2026",
+      "description": "Owned product, design, research and product marketing. Took supply chain traceability and Digital Product Passports from a fragmented, support-run legacy suite to one self-serve platform.",
+      "listItems": [
+        "Restructured product and engineering into cross-functional, value-stream-aligned teams.",
+        "Packaged the platform into two off-the-shelf propositions, setting sales up for repeatable deals instead of bespoke pilots.",
+        "Rebuilt the platform API-first on AWS and open source, with a data lake and full API parity, cutting running costs 25%.",
+        "Addressed scaling bottlenecks: Cut configuration time 70%, shipped setup tool and AI assistant for self-serve API integration."
+      ]
+    },
+    {
+      "organisation": "OVO Energy",
+      "role": "Principal Product Designer",
+      "dates": "2020 – 2024",
+      "description": "Led design of OVO’s consumer app and digital experience for 4m UK households, also owning the design system and accessibility.",
+      "listItems": [
+        "Rebuilt the customer app from information architecture up, based on mental model research, growing users from 200k to 500k and doubling engagement.",
+        "Brought every customer product onto one design system at WCAG AA, with open clinics and team-wide training."
+      ]
+    },
+    {
+      "organisation": "Kantan",
+      "role": "Head of Design",
+      "dates": "2019 – 2020",
+      "description": "First hire at a start-up using tools for independent tradespeople to build a network it could route jobs to. Built and led a design team covering research, service design, product design and brand.",
+      "listItems": [
+        "Conceived an automated booking service from ethnographic research, converted 82% from email to booking.",
+        "Scaled from four local pilot users to a 1000+ engineer UK-wide network completing 200k jobs/year.",
+        "Implemented ride-alongs, with every colleague spending a day in the field."
+      ]
+    },
+    {
+      "organisation": "Rocket Lawyer",
+      "role": "Product Innovation Consultant",
+      "dates": "2018 – 2019",
+      "description": "Led research and development into how emerging technologies (electronic signatures, blockchain, smart contracts and payments) could make legal protection more accessible.",
+      "listItems": [
+        "Designed Rocket Wallet, a payment protection service that released funds based on contract terms, taking it to private beta with partners."
+      ]
+    },
+    {
+      "organisation": "Everledger",
+      "role": "Head of Product",
+      "dates": "2016 – 2018",
+      "description": "Set up the product and design function at an accelerator-stage start-up, leading it through growth to a $10.4m Series A.",
+      "listItems": [
+        "Built the first decentralised platform for tracing provenance data across supply chains, securing over two million diamonds.",
+        "Used it to digitally track the first diamond from mine to market across mining, cutting, polishing and certification."
+      ]
+    },
+    {
+      "organisation": "Make Us Proud",
+      "role": "Product Designer + Engineer",
+      "dates": "2015 – 2016",
+      "description": "Full-spectrum product consultancy covering research, propositions, prototyping, user testing and engineering. Projects included B2B platforms, marketing websites and experiences (VR, game, exhibition).",
+      "listItems": [
+        "Won: Best Exhibition Design at London Design Week (2015)."
+      ]
+    },
+    {
+      "organisation": "Victoria University",
+      "role": "Research Assistant",
+      "dates": "2012 – 2013",
+      "description": "Found and documented Vishnu shrines in the Kathmandu valley, narrating local myths about the origins of the cosmos, and integrated into a series of drawings."
+    },
+    {
+      "organisation": "Ponoko",
+      "role": "Production Manager",
+      "dates": "2010 – 2013",
+      "description": "Ran the workshop for an on-demand prototyping and manufacturing service covering NZ and Australia.",
+      "listItems": [
+        "Reduced order turnaround from 10 days to 48 hours.",
+        "Cut material costs 25% by renegotiating with existing suppliers."
+      ]
+    }
+  ]
+}

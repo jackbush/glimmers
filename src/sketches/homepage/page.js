@@ -18,7 +18,8 @@
 // Text that falls short of WCAG AA (4.5:1) on its page flickers, so a failing colour is
 // obvious while tuning.
 
-import { projects, roles } from './content.js';
+import { CONTENT_URL } from './content-url.js';
+import snapshot from './content.json';
 import { contrast, css, inkLayers, invert, mixRgb } from './ink.js';
 
 const FONTS = 'https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap';
@@ -142,8 +143,11 @@ function chevron() {
   return /** @type {Node} */ (t.content.firstChild);
 }
 
-/** The page's markup, once. */
-function build() {
+/**
+ * The page's markup, from the site's content.json.
+ * @param {typeof snapshot} content
+ */
+function build({ intro, projects, roles }) {
   const tabs = MODES.map((mode) => el('button', {
     role: 'tab', id: 'hp-tab-' + mode, 'data-mode': mode, 'aria-controls': 'hp-panel-' + mode,
   }, [mode === 'projects' ? 'Projects' : 'Roles']));
@@ -182,12 +186,8 @@ function build() {
 
   return el('main', { class: 'hp-main hp-ui' }, [
     el('section', { class: 'hp-intro' }, [
-      el('h1', {}, ['Jack Bush']),
-      el('p', {}, [
-        el('strong', {}, ["I'm a design and product leader who loves making things."]),
-        ' ',
-        el('span', { class: 'hp-minor' }, ["Since 2005 I've built apps, platforms, teams, design systems, AI agents, instruments, a brain-machine interface, exhibitions, furniture, and a van. I care about quality, accessibility, delight, and contributing to the human toolbox."]),
-      ]),
+      el('h1', {}, [intro.title]),
+      el('p', {}, [el('strong', {}, [intro.lead]), ' ', el('span', { class: 'hp-minor' }, [intro.body])]),
     ]),
     el('div', { class: 'hp-toggle', role: 'tablist', 'aria-label': 'Projects or roles' }, tabs),
     el('div', { class: 'hp-panels' }, panels),
@@ -203,20 +203,7 @@ export function createPage({ P, onSwitch }) {
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
   document.head.append(el('link', { rel: 'stylesheet', href: FONTS }), el('style', {}, [CSS]));
 
-  const ui = build();
-  // The ink copies: no ids (they'd clash), hidden from assistive tech, never focusable. They
-  // drop their media (covers keep their size without it), which would draw in the blends.
-  const inks = Object.keys(INKS).map((k) => {
-    const copy = /** @type {HTMLElement} */ (ui.cloneNode(true));
-    copy.className = 'hp-main hp-ink';
-    copy.dataset.ink = k;
-    copy.setAttribute('aria-hidden', 'true');
-    copy.inert = true;
-    for (const n of copy.querySelectorAll('[id]')) n.removeAttribute('id');
-    for (const n of copy.querySelectorAll('img, video, iframe')) n.remove();
-    return copy;
-  });
-  const root = el('div', { class: 'hp' }, [ui, ...inks]);
+  const root = el('div', { class: 'hp' }, []);
   document.body.append(root);
 
   // Cover previews play only while on screen, and never with reduced motion. Each fades in over
@@ -228,14 +215,49 @@ export function createPage({ P, onSwitch }) {
       else v.pause();
     }
   }, { rootMargin: '100px 0px' });
-  for (const v of ui.querySelectorAll('video')) {
-    v.muted = true;
-    v.addEventListener('playing', () => v.classList.add('on'), { once: true });
-    onScreen.observe(v);
-  }
 
-  const tabs = [...ui.querySelectorAll('[role="tab"]')].map((t) => /** @type {HTMLElement} */ (t));
-  const panels = [...root.querySelectorAll('section[data-mode]')].map((p) => /** @type {HTMLElement} */ (p));
+  /** @type {HTMLElement[]} */
+  let tabs = [];
+  /** @type {HTMLElement[]} */
+  let panels = [];
+
+  /**
+   * Lay the page out from `content`: the real copy and the ink copies, replacing any before.
+   * @param {typeof snapshot} content
+   */
+  function mount(content) {
+    const ui = build(content);
+    // The ink copies: no ids (they'd clash), hidden from assistive tech, never focusable. They
+    // drop their media (covers keep their size without it), which would draw in the blends.
+    const inks = Object.keys(INKS).map((k) => {
+      const copy = /** @type {HTMLElement} */ (ui.cloneNode(true));
+      copy.className = 'hp-main hp-ink';
+      copy.dataset.ink = k;
+      copy.setAttribute('aria-hidden', 'true');
+      copy.inert = true;
+      for (const n of copy.querySelectorAll('[id]')) n.removeAttribute('id');
+      for (const n of copy.querySelectorAll('img, video, iframe')) n.remove();
+      return copy;
+    });
+    onScreen.disconnect();
+    root.replaceChildren(ui, ...inks);
+    for (const v of ui.querySelectorAll('video')) {
+      v.muted = true;
+      v.addEventListener('playing', () => v.classList.add('on'), { once: true });
+      onScreen.observe(v);
+    }
+    tabs = [...ui.querySelectorAll('[role="tab"]')].map((t) => /** @type {HTMLElement} */ (t));
+    panels = [...root.querySelectorAll('section[data-mode]')].map((p) => /** @type {HTMLElement} */ (p));
+    tabs.forEach((tab, i) => {
+      tab.addEventListener('click', (e) => pick(tab, e));
+      tab.addEventListener('keydown', (e) => {
+        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+        const next = tabs[(i + 1) % tabs.length];
+        pick(next, null);
+        next.focus();
+      });
+    });
+  }
 
   // The reveal clips: two SVG polygons, so a list cut off mid-reveal keeps its clip while the
   // next reveal uses the other. Points are set as numbers each frame: nothing is allocated.
@@ -330,15 +352,17 @@ export function createPage({ P, onSwitch }) {
     const y = e && e.detail > 0 ? e.clientY : r.top + r.height / 2;
     switchTo(/** @type {string} */ (tab.dataset.mode), x, y);
   }
-  tabs.forEach((tab, i) => {
-    tab.addEventListener('click', (e) => pick(tab, e));
-    tab.addEventListener('keydown', (e) => {
-      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-      const next = tabs[(i + 1) % tabs.length];
-      pick(next, null);
-      next.focus();
-    });
-  });
+  // Today's snapshot at once, then the live copy if it differs. A remount keeps the mode and
+  // drops any reveal under way.
+  mount(snapshot);
+  fetch(CONTENT_URL)
+    .then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.statusText))))
+    .then((live) => {
+      if (JSON.stringify(live) === JSON.stringify(snapshot)) return;
+      mount(live);
+      if (root.dataset.theme) setMode(root.dataset.theme);
+    })
+    .catch(() => { /* offline or moved: the snapshot stands */ });
 
   return {
     setMode,

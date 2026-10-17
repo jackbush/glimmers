@@ -10,6 +10,7 @@ A home for small browser sketches ("glimmers"): an index page of looping covers,
   - `scripts/check.mjs`: params ↔ code consistency. Run it after every change.
   - `scripts/bench.mjs`: real-GPU fps in headless Chrome.
   - `scripts/capture.mjs`: cover videos. Needs ffmpeg.
+  - `scripts/homepage-content.mjs`: refreshes the homepage sketch's fallback copy from the site's live `content.json`. The post-commit hook runs it and commits any change on its own (`.githooks`; enable in a fresh clone with `git config core.hooksPath .githooks`).
   - `scripts/sky-data.mjs`: rebuilds Atlas Nights' star, constellation and ridge data (its hand-made Tuareg set is `scripts/sky-tuareg.mjs`). Needs network and ffmpeg.
   - Both bench and capture rebuild the site and start `astro preview` themselves (or reuse one already serving this dist/; they refuse `astro dev`).
 - Site metadata: name and description live in `src/sketches/index.js`; `BaseLayout.astro` builds every page's title, share tags and icons from them. Titles are `Glimmers` on the index and `<Name> | Glimmers` on sketch pages (a manifest's `year` is kept but not shown); the home-screen name is `Glimmers` or the sketch's name. Each sketch page's link preview is its own `share.jpg` (made by `capture.mjs` with the cover); the index uses `public/share.jpg`. `scripts/site-images.mjs` renders that and the home-screen icons from Blackstar, and the favicon's PNG fallback from `public/favicon.svg` (Phosphor's "code" icon on white).
