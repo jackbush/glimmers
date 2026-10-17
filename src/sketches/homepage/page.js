@@ -1,12 +1,13 @@
 // Homepage — the page itself, over the canvas: intro, the Projects/Roles toggle and both
 // lists, as on jackbush.github.io, so the backdrop is judged under real text.
 //
-// The page is laid out four times in one scrolling grid cell. The first copy is the real one:
-// tabs, links, focus and screen readers, with its text transparent. The other three are
-// aria-hidden copies that only draw text, each in a blend layer over the canvas (ink.js), so
-// every glyph takes the inverse of whichever page is under it and flips with the switch
-// pixel by pixel. The scroll layer (`.hp`) is no stacking context, so those blends reach the
-// canvas. Don't give it one.
+// The page is laid out four times in one grid cell. The first copy is the real one: tabs,
+// links, focus and screen readers, with its text transparent. The other three are aria-hidden
+// copies that only draw text, each in a blend layer over the canvas (ink.js), so every glyph
+// takes the inverse of whichever page is under it and flips with the switch pixel by pixel.
+// Nothing between them and the canvas may isolate them, or the blends only meet each other
+// and the text goes dark: `.hp` is no stacking context, and the document scrolls (as on the
+// site), not `.hp`, because Safari isolates a scroller's content.
 //
 // On a switch the intro stays (it just changes colour with the page), but the lists swap: the
 // old one fades out over Old text fade, and the new one shows only inside the switch as it
@@ -30,15 +31,18 @@ export const MODES = ['projects', 'roles'];
  * leaves what's under it alone. */
 const INKS = { m: ['multiply', '#fff'], d: ['difference', '#000'], k: ['plus-lighter', '#000'] };
 
-const MAIN = ':is(h1, h3, strong, .hp-strong, .hp-toggle button, .hp-more span)';
+const MAIN = ':is(h1, h2, h3, strong, .hp-strong, .hp-toggle button, .hp-more span)';
 const MINOR = '.hp-minor';
 const flicker = (/** @type {string} */ sel) => `${sel} { animation: hp-flicker 0.7s steps(1) infinite; }`;
 
 const CSS = `
+/* The document scrolls, not .hp (see the top of this file). */
+html, body { height: auto; overflow: visible; }
 .hp {
+  --card-padding: 1rem; /* around a project card's text */
   --radius: 0.5rem; /* corners of the toggle and the project cards */
   --gutter: 1.5rem; /* the page's side margins, and the space between project cards */
-  position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain; display: grid;
+  position: relative; display: grid;
   font-family: "Inter", sans-serif; -webkit-font-smoothing: antialiased;
 }
 .hp-main { grid-area: 1 / 1; width: 100%; max-width: 740px; margin-inline: auto; padding: 4rem var(--gutter) 6rem; box-sizing: border-box; }
@@ -47,11 +51,12 @@ const CSS = `
 .hp-ink { pointer-events: none; user-select: none; }
 ${Object.entries(INKS).map(([k, [mode, none]]) => `.hp-ink[data-ink="${k}"] { mix-blend-mode: ${mode}; --hp-text: var(--hp-${k}-main); --hp-minor: var(--hp-${k}-minor); --hp-none: ${none}; }`).join('\n')}
 .hp h1 { font-size: clamp(2.25rem, 7vw, 4.5rem); font-weight: 900; line-height: 1.02; letter-spacing: -0.03em; margin: 0 0 1rem; color: var(--hp-text); }
+.hp h2 { font-size: 1.375rem; font-weight: 700; line-height: 1.4; letter-spacing: -0.01em; margin: 0; color: var(--hp-text); }
 .hp h3 { font-size: 1.2rem; font-weight: 700; line-height: 1.6; letter-spacing: -0.01em; margin: 0; color: var(--hp-text); }
 .hp p, .hp .hp-body { font-size: 1.125rem; line-height: 1.6; margin: 0; }
 .hp strong, .hp .hp-strong { color: var(--hp-text); }
 .hp .hp-minor { color: var(--hp-minor); }
-.hp .hp-strong { font-weight: 600; line-height: 1.75; margin-top: 0.25rem; }
+.hp .hp-strong { font-weight: 600; line-height: 1.75; }
 .hp .hp-dates { font-weight: 400; }
 .hp a { color: inherit; text-decoration: none; display: block; }
 .hp ul { list-style: none; margin: 0; padding: 0; }
@@ -67,20 +72,21 @@ ${Object.entries(INKS).map(([k, [mode, none]]) => `.hp-ink[data-ink="${k}"] { mi
 /* Both lists share one cell, so the new one can appear over the old one as it fades. */
 .hp-panels { display: grid; }
 .hp-panels > section { grid-area: 1 / 1; min-width: 0; }
-/* Roles are divided by lines like the toggle's frame. */
-.hp-roles > li { padding-block: 1.5rem; }
-.hp-roles > li + li { border-top: 1px solid var(--hp-text); }
+/* Roles are divided by lines like the toggle's frame. A card's text sits inside its padding,
+   so the roles start that much lower to line up. */
+.hp .hp-roles { padding-top: var(--card-padding); }
+.hp-roles > li + li { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--hp-text); }
 .hp-roles .hp-desc { margin-top: 0.5rem; }
 /* Projects are cards, as far apart as the page is from the screen's edges (and from the
    toggle): a 1px box in the text colour, a line between cover and text. */
 .hp-projects { display: grid; gap: var(--gutter); }
 .hp-projects > li { container: card / inline-size; }
 .hp-card { border: 1px solid var(--hp-text); border-radius: var(--radius); overflow: hidden; }
-.hp-text { padding: 1rem; }
+.hp-text { padding: var(--card-padding); }
 /* The text and the bar sit on a lighter wash of the page; not in the ink copies, where it
    would go through their blends. */
 .hp-ui .hp-text, .hp-ui .hp-more { background: rgba(255, 255, 255, 0.25); background-clip: padding-box; }
-.hp .hp-more { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.75rem 1rem; border-top: 1px solid var(--hp-text); }
+.hp .hp-more { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.75rem var(--card-padding); border-top: 1px solid var(--hp-text); }
 .hp-more span { color: var(--hp-text); }
 .hp-more svg { flex: none; width: 1rem; height: 1rem; fill: none; stroke: var(--hp-text); stroke-width: 1.5; }
 /* Covers are boxes sized by their format, so the ink copies (which drop the media) keep the layout. */
@@ -165,7 +171,7 @@ function build() {
     return el('li', {}, [el('div', { class: `hp-card hp-${format}${flip ? ' hp-flip' : ''}` }, [main, ...more])]);
   });
   const roleItems = roles.map((r) => el('li', {}, [
-    el('h3', {}, [r.organisation]),
+    el('h2', {}, [r.organisation]),
     el('p', { class: 'hp-strong' }, [r.role, el('span', { class: 'hp-dates' }, [` (${r.dates})`])]),
     el('p', { class: 'hp-desc hp-minor' }, [r.description]),
     ...(r.listItems ? [el('ul', { class: 'hp-bullets hp-minor' }, r.listItems.map((i) => el('li', { class: 'hp-body' }, [i])))] : []),
@@ -180,7 +186,7 @@ function build() {
       el('p', {}, [
         el('strong', {}, ["I'm a design and product leader who loves making things."]),
         ' ',
-        el('span', { class: 'hp-minor' }, ["Since 2005 I've built apps, platforms, teams, design systems, AI agents, instruments, a brain-machine interface, exhibitions, furniture, and a van. I care a lot about quality, accessibility, delight, and contributing to the human toolbox."]),
+        el('span', { class: 'hp-minor' }, ["Since 2005 I've built apps, platforms, teams, design systems, AI agents, instruments, a brain-machine interface, exhibitions, furniture, and a van. I care about quality, accessibility, delight, and contributing to the human toolbox."]),
       ]),
     ]),
     el('div', { class: 'hp-toggle', role: 'tablist', 'aria-label': 'Projects or roles' }, tabs),
@@ -337,6 +343,8 @@ export function createPage({ P, onSwitch }) {
   return {
     setMode,
     switchTo,
+    /** The real page's tab for `mode`. */
+    tab: (/** @type {string} */ mode) => /** @type {HTMLElement} */ (tabs.find((t) => t.dataset.mode === mode)),
     /**
      * Step the reveal to the newest switch's outline, or end it once no switch is running.
      * Called every frame; allocation-free.
