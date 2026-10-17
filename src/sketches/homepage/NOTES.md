@@ -12,6 +12,7 @@ The browser's bars take one flat colour, so they follow the page along the top e
 |---|---|
 | `params.js` | Every default. |
 | `shader.js` | The GLSL, and `perFrame()`. |
+| `theme.js` | The theme colour in use: the Theme colour param, or with Hue from window on, an OKLCH colour set by where the window sits on its screen: across is hue, down is lightness from white to Min lightness (polled every frame, since moving a window fires no event). The shader (`f_theme`), page, card wash and bars all read it; nothing is saved. At lightness 0.85, chroma up to 0.074 fits sRGB at every hue and the inverse text passes AA; lighter passes too. |
 | `switches.js` | Each switch's click, reach and outline → `f_switch`, `f_ring`. Runs on its own real-time clock, so a switch plays out while paused. |
 | `page.js` | The page over the canvas: markup, CSS, the toggle, the contrast flicker. Its colours come from params. |
 | `ink.js` | The blend-layer colours that turn a page colour into its text colour (its inverse), and the contrast maths. |

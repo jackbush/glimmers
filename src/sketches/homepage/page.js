@@ -390,19 +390,20 @@ export function createPage({ P, onSwitch }) {
       }
     },
     /**
-     * Push the params the page's CSS reads, and flag text below AA. Call when they change.
+     * Push the params the page's CSS reads, and flag text below AA. Call when they or the theme
+     * colour change.
      * @param {Record<string, any>} P
+     * @param {Float32Array} theme the theme colour in use (theme.js), 0–1 sRGB
      */
-    sync(P) {
+    sync(P, theme) {
       const s = root.style;
       // Roles is Projects inverted: each page is the other's text.
-      const page = { projects: P.themeColour.rgb, roles: invert(P.themeColour.rgb) };
+      const page = { projects: theme, roles: invert(theme) };
       const text = { projects: page.roles, roles: page.projects };
       // Card text sits on a wash of the theme colour blended over the page: screen lightens a
       // bright theme, multiply deepens a dark one (HSB brightness, the max channel, from 50%).
       // Blending the colour with itself keeps its hue and adds saturation, where white or black
       // would grey it.
-      const theme = page.projects;
       const bright = Math.max(theme[0], theme[1], theme[2]) >= 0.5;
       s.setProperty('--hp-card-bg', `rgba(${theme[0] * 255}, ${theme[1] * 255}, ${theme[2] * 255}, ${P.cardOpacity.value})`);
       s.setProperty('--hp-card-blend', bright ? 'screen' : 'multiply');

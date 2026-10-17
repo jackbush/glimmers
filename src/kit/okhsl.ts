@@ -1,6 +1,6 @@
 // OKHSL ↔ sRGB hex, for the colour picker: Björn Ottosson's OKLab-based HSL (MIT), whose
 // square of saturation × lightness is all inside sRGB at every hue, so the picker has no
-// unreachable corners. Hue, saturation and lightness are 0–1.
+// unreachable corners. Hue, saturation and lightness are 0–1. Also plain OKLCH → sRGB.
 
 const K1 = 0.206, K2 = 0.03, K3 = (1 + K1) / (1 + K2);
 /** OKLab lightness → OKHSL's, which is closer to CIE L* in the darks. */
@@ -98,6 +98,21 @@ function chromas(L: number, a: number, b: number): [number, number, number] {
   const c0a = L * 0.4, c0b = (1 - L) * 0.8;
   const C0 = Math.sqrt(1 / (1 / (c0a * c0a) + 1 / (c0b * c0b)));
   return [C0, Cmid, Cmax];
+}
+
+/**
+ * OKLCH (hue in degrees) → gamma-encoded sRGB 0–1 into `out`, each channel clipped.
+ * Allocation-free, for per-frame use.
+ */
+export function oklchToRgb(l: number, c: number, h: number, out: Float32Array | Float64Array): void {
+  const a = c * Math.cos(h * Math.PI / 180), b = c * Math.sin(h * Math.PI / 180);
+  const l_ = l + 0.3963377774 * a + 0.2158037573 * b;
+  const m_ = l - 0.1055613458 * a - 0.0638541728 * b;
+  const s_ = l - 0.0894841775 * a - 1.2914855480 * b;
+  const L = l_ * l_ * l_, M = m_ * m_ * m_, S = s_ * s_ * s_;
+  out[0] = enc(Math.min(1, Math.max(0, 4.0767416621 * L - 3.3077115913 * M + 0.2309699292 * S)));
+  out[1] = enc(Math.min(1, Math.max(0, -1.2684380046 * L + 2.6097574011 * M - 0.3413193965 * S)));
+  out[2] = enc(Math.min(1, Math.max(0, -0.0041960863 * L - 0.7034186147 * M + 1.7076147010 * S)));
 }
 
 const hex2 = (v: number) => Math.round(Math.min(1, Math.max(0, v)) * 255).toString(16).padStart(2, '0');

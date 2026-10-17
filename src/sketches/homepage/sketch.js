@@ -7,6 +7,7 @@
 import SHADER from './shader.js';
 import { createSwitches } from './switches.js';
 import { createPage, MODES } from './page.js';
+import { createTheme } from './theme.js';
 import { invertHex } from './ink.js';
 import { rng } from '../../kit/random.js';
 import { FULLSCREEN_VERT, frameUniforms, program, shaderHeader, shaderParams, uploadFrame, uploadParams } from '../../kit/gl.js';
@@ -22,6 +23,7 @@ export default function create({ canvas, P, model, degrade }) {
   const uniformParams = shaderParams(model.params);
   const { vals: frameVals, list: frameList } = frameUniforms(SHADER.frameUniforms);
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  const theme = createTheme(P, model);
 
   /** @type {null | { prog: WebGLProgram, version: number, uRes: any, uScreen: any, uTime: any, uRealTime: any, paramLocs: any[], frameLocs: any[] }} */
   let pass = null;
@@ -55,12 +57,15 @@ export default function create({ canvas, P, model, degrade }) {
     },
   });
 
-  let seen = -1, activeTab = '';
-  /** Push param changes to the page; a new Active tab switches at once. */
+  let seen = -1, seenTheme = -1, activeTab = '';
+  /** Push param and theme colour changes to the page; a new Active tab switches at once. */
   function syncParams() {
+    theme.update();
+    if (seen === model.version && seenTheme === theme.version) return;
+    seenTheme = theme.version;
+    page.sync(P, theme.rgb);
     if (seen === model.version) return;
     seen = model.version;
-    page.sync(P);
     if (P.activeTab.value !== activeTab) {
       activeTab = P.activeTab.value;
       const mode = MODES[activeTab === 'Roles' ? 1 : 0];
@@ -87,12 +92,13 @@ export default function create({ canvas, P, model, degrade }) {
   // they follow the page along the top edge, Bars lead before a switch covers it. The kit sets
   // them to the Projects page on every edit, so they're set again then.
   const themeMeta = document.querySelector('meta[name="theme-color"]');
-  let bars = -1, barsVersion = -1;
-  function setBars(/** @type {number} */ theme) {
-    if (theme === bars && barsVersion === model.version) return;
-    bars = theme;
+  let bars = -1, barsVersion = -1, barsTheme = -1;
+  function setBars(/** @type {number} */ side) {
+    if (side === bars && barsVersion === model.version && barsTheme === theme.version) return;
+    bars = side;
     barsVersion = model.version;
-    const c = theme ? invertHex(String(P.themeColour.value)) : String(P.themeColour.value);
+    barsTheme = theme.version;
+    const c = side ? invertHex(theme.hex) : theme.hex;
     document.documentElement.style.backgroundColor = c;
     document.body.style.backgroundColor = c;
     themeMeta?.setAttribute('content', c);
@@ -106,7 +112,7 @@ export default function create({ canvas, P, model, degrade }) {
       demo(rdt);
       if (!pass) return;
       const w = canvas.width / pxRatio, h = canvas.height / pxRatio;
-      SHADER.perFrame(pxRatio, frameVals);
+      SHADER.perFrame(pxRatio, theme.rgb, frameVals);
       switches.update(rdt, w, h, frameVals);
       page.reveal(switches);
       setBars(switches.topEdge);

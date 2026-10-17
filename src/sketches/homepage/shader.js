@@ -43,7 +43,7 @@ void main() {
     float ahead = r - length(d); // > 0: the front has passed
     th = mix(th, f_switch[s * 4 + 3], smoothstep(-aa, aa, ahead));
   }
-  outColor = vec4(mix(u_themeColour, 1.0 - u_themeColour, th), 1.0);
+  outColor = vec4(mix(f_theme, 1.0 - f_theme, th), 1.0);
 }
 `;
 
@@ -54,6 +54,7 @@ export default {
   // name → component count, or [length] for a float array.
   frameUniforms: {
     f_px: 1,              // canvas px per CSS px
+    f_theme: 3,           // the theme colour in use (theme.js)
     f_baseTheme: 1,       // 0 projects, 1 roles
     f_switchCount: 1,
     f_switch: [MAX_SWITCHES * 4], // click x, y, reach (CSS px), theme
@@ -64,9 +65,11 @@ export default {
   /**
    * Values every pixel shares (the switches write their own). Must not allocate.
    * @param {number} px canvas px per CSS px
+   * @param {Float32Array} theme the theme colour in use, 0–1 sRGB
    * @param {Record<string, Float32Array>} f
    */
-  perFrame(px, f) {
+  perFrame(px, theme, f) {
     f.f_px[0] = px;
+    f.f_theme.set(theme);
   },
 };

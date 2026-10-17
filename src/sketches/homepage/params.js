@@ -16,7 +16,11 @@ export default [
   {
     group: 'Colours',
     params: [
-      { key: 'themeColour', label: 'Theme colour', type: 'color', value: '#f3ead6', desc: 'The one colour behind the whole theme: the page in Projects, and the text in Roles. Projects\' text and the Roles page are its inverse. Flickers if that\'s below AA (4.5:1).' },
+      { key: 'windowHue', label: 'Hue from window', type: 'bool', value: true, uniform: false, desc: 'The theme follows where the browser window sits on your screen: across sets the hue (the whole wheel, left to right), down sets the lightness. Not saved as the Theme colour.' },
+      { key: 'windowMinLightness', label: 'Min lightness', value: 0.85, min: 0.85, max: 1, step: 0.01, uniform: false, desc: 'OKLCH lightness with the window at the bottom of the screen; it rises to white at the top. The slider starts where the inverse text passes AA at every hue, at full chroma and Minor text opacity 0.8 (0.849).', when: { key: 'windowHue', is: [true] } },
+      { key: 'windowChroma', label: 'Chroma', value: 0.045, min: 0, max: 0.074, step: 0.001, uniform: false, desc: 'OKLCH chroma. Up to 0.074, every hue at lightness 0.85 fits sRGB; higher up the screen less fits, and channels clip toward white.', when: { key: 'windowHue', is: [true] } },
+      { key: 'windowHueOffset', label: 'Hue offset °', value: 0, min: 0, max: 360, step: 1, uniform: false, desc: 'Turns the wheel: the hue with the window at the left edge.', when: { key: 'windowHue', is: [true] } },
+      { key: 'themeColour', label: 'Theme colour', type: 'color', value: '#f3ead6', uniform: false, when: { key: 'windowHue', is: [false] }, desc: 'The one colour behind the whole theme: the page in Projects, and the text in Roles. Projects\' text and the Roles page are its inverse. Flickers if that\'s below AA (4.5:1).' },
       { key: 'minorOpacity', label: 'Minor text opacity', value: 0.8, min: 0, max: 1, step: 0.01, uniform: false, desc: 'Body text: the page\'s inverse at this opacity over it. Flickers if that\'s below AA (4.5:1).' },
       { key: 'cardOpacity', label: 'Card opacity', value: 0.25, min: 0, max: 1, step: 0.01, uniform: false, desc: 'The wash behind card text: the theme colour screened over a bright page (lighter) or multiplied over a dark one (deeper), at this opacity.' },
     ],
