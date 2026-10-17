@@ -86,7 +86,7 @@ ${Object.entries(INKS).map(([k, [mode, none]]) => `.hp-ink[data-ink="${k}"] { mi
 .hp-text { padding: var(--card-padding); }
 /* The text and the bar sit on a lighter wash of the page; not in the ink copies, where it
    would go through their blends. */
-.hp-ui .hp-text, .hp-ui .hp-more { background: rgba(255, 255, 255, 0.25); background-clip: padding-box; }
+.hp-ui .hp-text, .hp-ui .hp-more { background: var(--hp-card-bg); background-clip: padding-box; }
 .hp .hp-more { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.75rem var(--card-padding); border-top: 1px solid var(--hp-text); }
 .hp-more span { color: var(--hp-text); }
 .hp-more svg { flex: none; width: 1rem; height: 1rem; fill: none; stroke: var(--hp-text); stroke-width: 1.5; }
@@ -398,6 +398,10 @@ export function createPage({ P, onSwitch }) {
       // Roles is Projects inverted: each page is the other's text.
       const page = { projects: P.themeColour.rgb, roles: invert(P.themeColour.rgb) };
       const text = { projects: page.roles, roles: page.projects };
+      // Cards sit on the Projects page: a white wash over a bright theme colour, black over a dark
+      // one (HSB brightness, the max channel, from 50%).
+      const bright = Math.max(page.projects[0], page.projects[1], page.projects[2]) >= 0.5;
+      s.setProperty('--hp-card-bg', bright ? 'rgba(255, 255, 255, 0.25)' : 'rgba(0, 0, 0, 0.25)');
 
       // Each kind of text is the page's inverse at its own opacity, with its own ink greys.
       const kinds = { main: 1, minor: P.minorOpacity.value };
