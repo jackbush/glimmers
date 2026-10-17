@@ -149,6 +149,18 @@
         "width": 1000,
         "height": 1000
       }
+    },
+    {
+      "name": "Geode",
+      "description": "An experiment in browser-based ray tracing. Open the settings to grow your own crystals.",
+      "url": "https://jackbush.github.io/glimmers/geode/",
+      "cover": {
+        "format": "landscape",
+        "video": "https://jackbush.github.io/_astro/geode.CGJzQkfw.mp4",
+        "image": "https://jackbush.github.io/_astro/geode.TnyMZsxv_22K1Tu.webp",
+        "width": 1680,
+        "height": 1050
+      }
     }
   ],
   "roles": [
@@ -214,12 +226,6 @@
       ]
     },
     {
-      "organisation": "Victoria University",
-      "role": "Research Assistant",
-      "dates": "2012 – 2013",
-      "description": "Found and documented Vishnu shrines in the Kathmandu valley, narrating local myths about the origins of the cosmos, and integrated into a series of drawings."
-    },
-    {
       "organisation": "Ponoko",
       "role": "Production Manager",
       "dates": "2010 – 2013",
@@ -228,6 +234,12 @@
         "Reduced order turnaround from 10 days to 48 hours.",
         "Cut material costs 25% by renegotiating with existing suppliers."
       ]
+    },
+    {
+      "organisation": "Victoria University",
+      "role": "Research Assistant",
+      "dates": "2011 – 2012",
+      "description": "Found and documented Vishnu shrines in the Kathmandu valley, narrating local myths about the origins of the cosmos, and integrated into a series of drawings."
     }
   ]
 }
