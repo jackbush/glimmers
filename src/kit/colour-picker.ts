@@ -5,8 +5,8 @@
 //
 // The picker owns its coordinates, so the hue survives a pass through grey. Desktop: 90% of the
 // pane's width, centred on it, under the row being edited and nudged up to stay on screen; drag
-// its title bar to put it elsewhere, and it stays there until the page reloads. Phones: full
-// screen. A press outside it, or Escape, closes it.
+// its title bar to put it elsewhere, and it stays there until the page reloads. Phones: over
+// the settings sheet, exactly its size. A press outside it, or Escape, closes it.
 
 import { hexToOkhsl, okhslRow, okhslToHex } from './okhsl';
 
