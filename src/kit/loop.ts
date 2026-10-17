@@ -3,6 +3,8 @@
 // Scene time `t` runs at the Speed param and stops while `paused` (the play/pause button);
 // real time `rt` always runs (wrapped to keep float32 precision in shaders). The canvas is
 // sized to its CSS box × min(devicePixelRatio, maxDpr) × renderScale × the adaptive scale.
+// A Frame cap (maxFps) skips animation frames to draw at most that often; `fixed` (captures,
+// benchmarks) ignores it.
 
 import type { Param, SketchInstance } from './types';
 
@@ -29,7 +31,7 @@ const MIN_SCALE = 0.35;
 export function createLoop(canvas: HTMLCanvasElement, P: Record<string, Param>, sketch: () => SketchInstance | null): Loop {
   const P_timeScale = P.timeScale;
   const P_renderScale = P.renderScale, P_maxDpr = P.maxDpr;
-  const P_targetFps = P.targetFps;
+  const P_targetFps = P.targetFps, P_maxFps = P.maxFps;
 
   let raf = 0, last = 0, sceneTime = 0, realTime = 0;
   let fpsAccum = 0, fpsFrames = 0;
@@ -42,6 +44,9 @@ export function createLoop(canvas: HTMLCanvasElement, P: Record<string, Param>, 
   let dynScale = 1;
   let winTime = 0, winFrames = 0, sinceChange = 0, ceiling = 1, ceilingAge = 0;
   let judgingDrop = false, preDropScale = 1, preDropAvg = 0, holdDown = 0, holdDownLen = 5;
+  // The window after a change is thrown away: frames already queued at the old size, and the
+  // sketch reallocating its targets, made a drop look like it hadn't helped.
+  let settling = false;
 
   // Always on for sketches with quality controls (a Target fps), except when fixed.
   function adaptive(): boolean { return !!P_targetFps && !loop.fixed; }
@@ -57,7 +62,10 @@ export function createLoop(canvas: HTMLCanvasElement, P: Record<string, Param>, 
     const avg = winTime / winFrames;
     winTime = 0;
     winFrames = 0;
-    const budget = 1 / (P_targetFps ? (P_targetFps.value as number) : 60);
+    if (settling) { settling = false; return; }
+    // Aim for the target, or the frame cap if that's lower (capped frames come no faster).
+    const cap = cappedFps();
+    const budget = 1 / Math.min(P_targetFps ? (P_targetFps.value as number) : 60, cap || Infinity);
 
     if (judgingDrop) {
       judgingDrop = false;
@@ -67,6 +75,7 @@ export function createLoop(canvas: HTMLCanvasElement, P: Record<string, Param>, 
         holdDown = holdDownLen;
         holdDownLen = Math.min(holdDownLen * 2, 60);
         sinceChange = 0;
+        settling = true;
         return;
       }
       holdDownLen = 5;
@@ -79,11 +88,13 @@ export function createLoop(canvas: HTMLCanvasElement, P: Record<string, Param>, 
       ceilingAge = 0;
       judgingDrop = true;
       sinceChange = 0;
+      settling = true;
     } else if (avg < budget * 1.08 && dynScale < 1 && sinceChange > 2) {
       const next = Math.min(1, dynScale * 1.12);
       if (next < ceiling * 0.97 || ceilingAge > 20) {
         dynScale = next;
         sinceChange = 0;
+        settling = true;
       }
     }
   }
@@ -134,8 +145,17 @@ export function createLoop(canvas: HTMLCanvasElement, P: Record<string, Param>, 
     }
   }
 
+  /** The frame cap in use, or 0 for none. */
+  function cappedFps(): number {
+    return P_maxFps && !loop.fixed ? (P_maxFps.value as number) : 0;
+  }
+
   function frame(now: number) {
     raf = requestAnimationFrame(frame);
+    // Under a cap, skip screen refreshes until (nearly) a capped frame's time has passed: the
+    // slack lets 30 land on every other refresh of a 60Hz screen rather than every third.
+    const cap = cappedFps();
+    if (cap > 0 && last && now - last < 900 / cap) return;
     const dt = last ? Math.min((now - last) * 0.001, 0.1) : 0; // clamp after tab switches
     last = now;
     render(dt);

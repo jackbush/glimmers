@@ -13,7 +13,7 @@
 //
 // Trace: every body is a convex solid of planes (cluster.js), read from the `bodies[]`
 // uniform buffer. A camera ray finds the nearest body (sphere cull, then exact plane tests).
-// Rock: shaded and done. Crystal: Fresnel reflection off the face (to the studio), refraction
+// Each crystal: Fresnel reflection off the face (to the studio), refraction
 // in, then up to Bounces internal segments, each exiting through the nearest face or
 // reflecting totally. Along each segment light is absorbed (Beer–Lambert, deeper toward the
 // tips) and scattered by the inclusions; phantoms, needles and cracks are exact hits. Out of a
@@ -36,7 +36,7 @@
 //   u_realTime  wall-clock seconds (drives the film layer)
 
 import { FILM_GLSL } from '../../kit/film.js';
-import { cluster, CRYSTAL_PLANES, MAX_CRYSTALS, MAX_ROCKS, PLANES_AT, ROCK_PLANES, ROW_W, ROWS } from './cluster.js';
+import { cluster, CRYSTAL_PLANES, MAX_CRYSTALS, PLANES_AT, ROW_W, ROWS } from './cluster.js';
 
 const INCL = 128;          // inclusion volume edge, texels
 const LIGHTS = 4;          // key, fill, rim left, rim right
@@ -99,9 +99,8 @@ export default {
     f_focal: 1,       // screen distance for a short side of 1
     f_pixAngle: 1,    // radians per canvas px
     f_crystals: 1,
-    f_rocks: 1,
     f_lights: [LIGHTS * LIGHT_STRIDE],
-    f_ambient: 3,     // the studio's average light, for inclusions and rock fill
+    f_ambient: 3,     // the studio's average light, for inclusions and chips
     f_glow: 3,        // backdrop glow colour, linear
     f_sigma: 3,       // absorption per unit length
   },
@@ -112,7 +111,6 @@ export default {
     f.f_frame[0] = Math.floor(rt * P.filmFps.value);
     f.f_seed[0] = P.seed.value;
     f.f_crystals[0] = cluster.crystals;
-    f.f_rocks[0] = cluster.rocks;
 
     // Turn: spin about the cluster's own upright, a gentle rock, then the camera's height.
     const sw = P.sway.value * DEG, ss = TAU * P.swaySpeed.value * t;
@@ -126,19 +124,19 @@ export default {
     // Column-major for GLSL.
     for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) f.f_toWorld[c * 3 + r] = M[r * 3 + c];
 
-    // Camera: at +z in world, far enough that the cluster's sphere spans Size of the short side.
+    // Camera: at +z in world, Distance from the cluster's middle, with Lens as its field of view.
     const fov = P.fov.value * DEG, focal = 0.5 / Math.tan(fov / 2);
-    const R = cluster.radius, half = 0.5 * P.size.value;
-    const D = R * Math.sqrt(1 + (focal / half) * (focal / half));
+    const D = P.distance.value, R = cluster.radius;
     f.f_focal[0] = focal;
-    // The cluster's sphere spans Size of the short side, centred: trace only that square.
+    f.f_pixAngle[0] = 1 / (focal * Math.min(width, height));
+    // Trace only the square the cluster's sphere covers on screen (all of it, close up).
+    const half = D > R * 1.01 ? (focal * R) / Math.sqrt(D * D - R * R) : 1e3;
     const reach = Math.ceil(half * Math.min(width, height)) + 2;
     const box = this.traceBox;
     box[0] = Math.max(0, Math.floor(width / 2) - reach);
     box[1] = Math.max(0, Math.floor(height / 2) - reach);
     box[2] = Math.min(width, Math.floor(width / 2) + reach) - box[0];
     box[3] = Math.min(height, Math.floor(height / 2) + reach) - box[1];
-    f.f_pixAngle[0] = 1 / (focal * Math.min(width, height));
     // World axis j in cluster space is row j of M.
     for (let k = 0; k < 3; k++) {
       f.f_cam[k] = M[k];            // right
@@ -288,9 +286,7 @@ void main() {
   // ---------------------------------------------------------------- trace
   trace: `
 #define MAX_CRYSTALS ${MAX_CRYSTALS}
-#define MAX_ROCKS ${MAX_ROCKS}
 #define CP ${CRYSTAL_PLANES}
-#define RP ${ROCK_PLANES}
 #define PA ${PLANES_AT}
 layout(std140) uniform Bodies { vec4 bodies[${ROW_W * ROWS}]; };
 uniform highp sampler3D u_incl;
@@ -307,10 +303,9 @@ bool sphereHit(vec3 ro, vec3 rd, vec4 s, float tMax) {
   return -b + h > 0.0 && -b - h < tMax;
 }
 // Ray vs a convex body: entry tn through plane kn, exit tf through plane kf.
-bool convexHit(int row, int np, vec3 ro, vec3 rd, out float tn, out float tf, out int kn, out int kf) {
+bool convexHit(int row, vec3 ro, vec3 rd, out float tn, out float tf, out int kn, out int kf) {
   tn = -1e9; tf = 1e9; kn = 0; kf = 0;
-  for (int k = 0; k < RP; k++) {
-    if (k >= np) break;
+  for (int k = 0; k < CP; k++) {
     vec4 pl = body(row, PA + k);
     float dn = dot(pl.xyz, rd);
     float dist = pl.w - dot(pl.xyz, ro); // > 0: inside this face
@@ -335,34 +330,15 @@ float exitCrystal(int row, vec3 ro, vec3 rd, out int kf) {
   }
   return max(tf, 0.0);
 }
-// Nearest crystal (kind 1) or rock (kind 2) ahead, ignoring crystal skip; 0 = none.
-int traceScene(vec3 ro, vec3 rd, int skip, out int id, out float tHit, out int kHit) {
-  int kind = 0; id = 0; kHit = 0; tHit = 1e9;
+// Nearest crystal ahead, ignoring crystal skip; false = none.
+bool traceScene(vec3 ro, vec3 rd, int skip, out int id, out float tHit, out int kHit) {
+  bool hit = false; id = 0; kHit = 0; tHit = 1e9;
   float tn, tf; int kn, kf;
-  int nc = int(f_crystals + 0.5), nr = int(f_rocks + 0.5);
+  int nc = int(f_crystals + 0.5);
   for (int i = 0; i < MAX_CRYSTALS; i++) {
     if (i >= nc) break;
     if (i == skip || !sphereHit(ro, rd, body(i, 0), tHit)) continue;
-    if (convexHit(i, CP, ro, rd, tn, tf, kn, kf) && tn > 1e-5 && tn < tHit) { tHit = tn; id = i; kHit = kn; kind = 1; }
-  }
-  for (int j = 0; j < MAX_ROCKS; j++) {
-    if (j >= nr) break;
-    int row = MAX_CRYSTALS + j;
-    if (!sphereHit(ro, rd, body(row, 0), tHit)) continue;
-    if (convexHit(row, RP, ro, rd, tn, tf, kn, kf) && tn > 1e-5 && tn < tHit) { tHit = tn; id = row; kHit = kn; kind = 2; }
-  }
-  return kind;
-}
-// First rock hit within tMax (from inside a crystal: its root is buried).
-bool rockAhead(vec3 ro, vec3 rd, float tMax, out int id, out float tHit, out int kHit) {
-  bool hit = false; tHit = tMax; id = 0; kHit = 0;
-  float tn, tf; int kn, kf;
-  int nr = int(f_rocks + 0.5);
-  for (int j = 0; j < MAX_ROCKS; j++) {
-    if (j >= nr) break;
-    int row = MAX_CRYSTALS + j;
-    if (!sphereHit(ro, rd, body(row, 0), tHit)) continue;
-    if (convexHit(row, RP, ro, rd, tn, tf, kn, kf) && tn > 0.0 && tn < tHit) { tHit = tn; id = row; kHit = kn; hit = true; }
+    if (convexHit(i, ro, rd, tn, tf, kn, kf) && tn > 1e-5 && tn < tHit) { tHit = tn; id = i; kHit = kn; hit = true; }
   }
   return hit;
 }
@@ -371,30 +347,6 @@ float fresnel(float cosi, float eta) { // eta = n1 / n2; Schlick
   float r0 = (1.0 - eta) / (1.0 + eta);
   r0 *= r0;
   return r0 + (1.0 - r0) * pow(1.0 - clamp(cosi, 0.0, 1.0), 5.0);
-}
-
-// ---- rock: mottled, faceted, coated in tiny glinting crystals
-vec3 shadeRock(int row, int k, vec3 p, vec3 rd) {
-  vec3 n = body(row, PA + k).xyz;
-  vec4 v = texture(u_incl, p * 1.7);
-  vec4 v2 = texture(u_incl, p * 7.0 + 0.37);
-  n = normalize(n + (vec3(v2.b, v2.a, v.b) - 0.5) * 0.8);
-  vec3 alb = lin(u_rockColour) * mix(1.0, 0.35 + 1.3 * v.b * (0.6 + 0.8 * v2.b), u_rockMottle);
-  vec3 c = alb * f_ambient * 0.25 * (0.6 + 0.4 * n.y);
-  for (int i = 0; i < LIGHTS; i++) {
-    int o = i * LS;
-    vec3 l = transpose(f_toWorld) * vec3(f_lights[o], f_lights[o + 1], f_lights[o + 2]);
-    float area = f_lights[o + 12] * f_lights[o + 13];
-    c += alb * max(dot(n, l), 0.0) * area * vec3(f_lights[o + 9], f_lights[o + 10], f_lights[o + 11]) * 0.5;
-  }
-  // Druse: some cells hold a tiny crystal facet that mirrors the softboxes.
-  vec3 cell = floor(p * 160.0);
-  float h = hash(cell + f_seed * 13.0);
-  if (h > 0.8 && u_druse > 0.0) {
-    vec3 fn = normalize(n + 0.9 * (vec3(hash(cell + 1.7), hash(cell + 2.9), hash(cell + 4.1)) - 0.5));
-    c += u_druse * 0.5 * lights(f_toWorld * reflect(rd, fn), 0.0) * (h - 0.8) * 5.0;
-  }
-  return c;
 }
 
 // ---- a crystal's inside: absorption, clouds, veils, phantoms, needles, cracks along one segment
@@ -426,7 +378,8 @@ vec3 inside(int id, vec3 ro, vec3 rd, float len, float travelled, float jitter, 
   }
 
   // Phantom: the same solid shrunk about the middle; each crossing of its skin is a dusty sheet.
-  if (u_phantom > 0.0) {
+  // Only in a Phantom rate share of the points.
+  if (u_phantom > 0.0 && hash(vec3(float(id), f_seed, 97.0)) < u_phantomRate) {
     vec3 c = root + axis * L * 0.45;
     float tn = -1e9, tf = 1e9; int kn = 0, kf = 0;
     for (int k = 0; k < CP; k++) {
@@ -563,11 +516,9 @@ void main() {
   for (int hop = 0; hop < 4; hop++) {
     if (hop >= depth) break;
     int id, k; float t;
-    int kind = traceScene(ro, rd, skip, id, t, k);
-    if (kind == 0) break;
+    if (!traceScene(ro, rd, skip, id, t, k)) break;
     vec3 p = ro + rd * t;
     travelled += t;
-    if (kind == 2) { col += thr * shadeRock(id, k, p, rd); thr = vec3(0.0); break; }
 
     // Into the crystal.
     float footprint = travelled * f_pixAngle;
@@ -587,15 +538,11 @@ void main() {
       if (b >= bounces) break;
       int kf;
       float len = exitCrystal(id, ro, rd, kf);
-      int rid, rk; float rt;
-      bool rock = rockAhead(ro, rd, len, rid, rt, rk);
-      if (rock) len = rt;
       vec3 trans;
       col += thr * inside(id, ro, rd, len, travelled, jitter, trans);
       thr *= trans;
       travelled += len;
       p = ro + rd * len;
-      if (rock) { col += thr * shadeRock(rid, rk, p, rd); thr = vec3(0.0); left = true; break; }
 
       float fr = hash(vec3(float(id), float(kf), f_seed + 0.5)) < u_frostShare ? u_frost : 0.0;
       vec3 nf = faceNormal(id, kf, body(id, PA + kf).xyz, p, fr, travelled * f_pixAngle);

@@ -4,10 +4,10 @@ A raw quartz cluster revolving in a dark studio, ray-traced in WebGL2, at `src/s
 
 ## Phase 1: does the look work? (built 2026-10-17; awaiting the user's verdict)
 - [x] Scaffold (`new-glimmer`): manifest, params, NOTES, check.mjs, listed at the top of `more`.
-- [x] `cluster.js`: the seed lays out crystals radiating from a rock matrix. Each crystal is 13 planes (6 prism, 6 tip faces in large and small pairs, 1 base); the matrix is convex rock lumps. All of it goes into a float texture.
+- [x] `cluster.js`: the seed lays out crystals radiating from a shared root (a rock matrix at first, since removed). Each crystal is 13 planes (6 prism, 6 tip faces in large and small pairs, 1 base); the matrix is convex rock lumps. All of it goes into a float texture.
 - [x] Trace pass: exact ray–plane hits, Fresnel, refraction, internal bounces with TIR, Beer–Lambert colour concentrated toward the tips, dispersion at the last exit.
 - [x] Inclusions: milky clouds (more toward the base) and veils from a baked, tileable 3D texture; analytic phantoms, rutile needles and iridescent fractures.
-- [x] Surface: prism striations, frosted faces, worn and chipped edges. Rock: mottled, with druse glints.
+- [x] Surface: prism striations, frosted faces, worn and chipped edges.
 - [x] Studio env: backdrop glow in the shifted hue, key, fill and two rim softboxes (analytically blurred for rough faces).
 - [x] Backdrop pass, with the trace scissored to the cluster's box (28 → ~34fps at 5K).
 - [x] HDR → bloom → tone map → vignette → grain.

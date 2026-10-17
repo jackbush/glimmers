@@ -11,7 +11,7 @@ description: Add, edit, or remove visual elements and parameters in a glimmers s
 
 | File | Role |
 |---|---|
-| `src/sketches/<slug>/params.js` | **The only place defaults live.** Groups → params; the settings pane is generated from it. Starts with `playback()` from `src/kit/standard.js` (Speed, pixel-ratio cap; `quality: true` adds render scale and target fps, and turns adaptive quality on). |
+| `src/sketches/<slug>/params.js` | **The only place defaults live.** Groups → params; the settings pane is generated from it. Starts with `playback()` from `src/kit/standard.js` (Speed, pixel-ratio cap; `quality: true` adds render scale, target fps and a frame cap, and turns adaptive quality on). |
 | `src/sketches/<slug>/sketch.js` | `export default function create({ canvas, P, model, degrade })` → `{ resize(w, h, pxRatio), frame(t, dt, rt, rdt), morph? }`. All drawing lives here (plus any helper files in the folder). WebGL sketches compile and upload params with `src/kit/gl.js`. |
 | `src/sketches/<slug>/manifest.js` | `name`, `year`, optional `pageColour` (a colour param key that drives the page background), optional `capture` settings for the cover. The schema is `src/kit/manifest-schema.js`; defaults are in `src/kit/manifest.js`. |
 | `src/kit/` | Shared engine: param model and saved settings, pane, buttons and keys, frame loop, adaptive quality. **No design logic.** Change it only for behaviour every sketch should get. |
@@ -26,7 +26,7 @@ description: Add, edit, or remove visual elements and parameters in a glimmers s
    ```js
    { key: 'haloFlare', label: 'Flare', value: 0.2, min: 0, max: 1, step: 0.01, desc: 'One-line tooltip.' },
    ```
-   - `key` is camelCase, unique and descriptive. It's the key in copied state, so treat it as permanent. Don't reuse a standard key (`timeScale`, `renderScale`, `targetFps`, `maxDpr`).
+   - `key` is camelCase, unique and descriptive. It's the key in copied state, so treat it as permanent. Don't reuse a standard key (`timeScale`, `renderScale`, `targetFps`, `maxFps`, `maxDpr`).
    - `type` is `'range'` (the default), `'color'` (lowercase `'#rrggbb'`), `'bool'` or `'select'` (a dropdown: `options: ['Ovate', 'Cordate']`, and the value is one of those strings).
    - The default must sit inside `[min, max]`. Pick ranges that are useful but not destructive, and pick `step` to suit the precision that matters.
    - `label` stays short (≤ 18 characters, counting the "- " a dependent gets per level) so it fits the 124px label column. `desc` is required because it's the tooltip.

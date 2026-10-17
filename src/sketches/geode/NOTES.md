@@ -7,12 +7,14 @@ A raw quartz cluster (amethyst by default) turning slowly in a dark studio, ray-
 | File | Role | Edit when |
 |---|---|---|
 | `params.js` | Every default. | Any control |
-| `cluster.js` | The geometry: each crystal is 13 planes (6 prism, 6 tip, 1 base), and the rock is 1–2 convex lumps of 16 facets, all written into `cluster.data`, a uniform buffer the trace reads as `bodies[]`. Built from the seed and the Cluster and Matrix params; it allocates nothing, so it can rebuild every frame. | Crystal or rock shape, layout |
+| `cluster.js` | The geometry: each crystal is 18 planes (6 prism, and a 6-face tip at each end), all written into `cluster.data`, a uniform buffer the trace reads as `bodies[]`. Built from the seed and the Cluster params; it allocates nothing, so it can rebuild every frame. | Crystal shape, layout |
 | `shader.js` | Every pass's GLSL and `perFrame()` (camera, turn, softboxes, backdrop hue, absorption). All design logic. | Any visual change |
 | `sketch.js` | Engine: the bake, the uniform buffer, HDR and bloom targets, the passes. No design logic. | New pass or target |
 | `check.mjs` | Params ↔ GLSL ↔ `perFrame()` and `cluster.js`. | Rarely |
 
 ## How it works
+
+- **Layout and camera:** every crystal's axis passes through one point, at Cross point along its length (0.5 middles, 1 outer tips: a hat, 0 roots: a bowl), leaning out by Fan. The camera (Camera group) stands Distance from the cluster's middle at Height, with Lens as its field of view, so how big the cluster looks comes from those two: far and narrow, or close and wide. The trace's scissor box is the cluster's bounding sphere projected from there.
 
 - **Passes:** `bake` (only when the seed changes) fills a 128³ tileable volume: milky cloud, bubble veils, slow mottling, sparkle. `backdrop` fills the HDR target with the studio. `trace` runs only inside the cluster's square on screen (`traceBox`, a scissor), because empty pixels cost almost as much as the full shader's occupancy. Then `bright` → `blurH` → `blurV` at ¼ resolution for bloom, and `composite` (exposure, ACES, vignette toward Edge colour, grain).
 - **Trace:** a sphere cull, then exact convex-solid hits (the largest entry plane and the smallest exit plane). Entering a crystal: Schlick Fresnel reflection to the studio, then refraction. Inside, up to Bounces segments: each is marched for clouds, veils and absorption (Inclusion steps, jittered per pixel). Phantoms (the same planes shrunk about the crystal's middle), rutile needles (exact closest approach between the ray and each needle, antialiased by pixel footprint) and cracks (a ragged disc with a thin-film palette) are exact hits. At the exit face the ray reflects totally or refracts out. The part reflected back inside reads the studio along its reflected direction rather than being traced. Out of a crystal the ray can enter another (Pass-throughs); if it last left through a face, the studio is read once per Fire sample along each wavelength's direction.
@@ -22,6 +24,8 @@ A raw quartz cluster (amethyst by default) turning slowly in a dark studio, ray-
 - **Colour space:** colour params are sRGB, converted with `lin()`. HDR targets store `x / (1 + x)`, so the RGBA8 fallback still holds highlights.
 
 ## Surprises
+
+- The cluster first grew from a rock (convex lumps with druse glints). It read as a plinth and cost a rock test on every ray segment, so it was removed: the points now float, roots sunk into each other.
 
 - The first chip model drew a white line along every edge, like a cartoon outline. Chips must be sparse: noise decides, edge proximity only allows them.
 - A frosted face's grain made glitter at 0.3 normal jitter; 0.06 plus the analytic blur reads as etched.
@@ -41,13 +45,13 @@ Pixel-bound: 4× the pixels runs ~3.7× slower. No single feature dominates; the
 
 ## Optimisation todo
 
-- [ ] At 2560×1440 @2, adaptive quality drops to 80% and stops there (~31fps): its "did the drop help?" check judged that it didn't. Find out why before relying on adaptive quality for 5K screens.
+- [ ] Re-benchmark on mains power, alternating before/after: since the table above, the rock is gone, crystals have 18 planes (a tip at both ends), the pixel ratio is capped at 1.5 and frames at 30 (`maxFps`; `--fixed` benches ignore both caps, so also bench without it).
+- [ ] Adaptive quality used to stop at 80% at 2560×1440 @2, judging the drop hadn't helped. The kit now throws away the half-second after each change (frames queued at the old size, targets reallocating); check it now keeps dropping until it holds the target.
 - [ ] Cheaper scene traversal: per-crystal screen bounds, or tighter bounding capsules instead of spheres.
 - [ ] Try tracing at a fixed fraction of the canvas resolution with an edge-aware upscale.
 
 ## Look todo
 
 - [ ] Big flat white softbox reflections on tip faces read as CG: try a softbox texture (a gradient or grid) or smaller boxes.
-- [ ] The rock still reads as a plinth: try more, smaller lumps, small crystals over it, and sparser druse.
 - [ ] Rainbow cracks look grainy behind frosted faces.
 - [ ] Edge aliasing while turning (1 sample per pixel).

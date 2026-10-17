@@ -15,6 +15,7 @@ const STANDARD = {
   timeScale: { key: 'timeScale', label: 'Speed', value: 1, min: 0, max: 4, step: 0.01, uniform: false, desc: 'Global speed of all scene motion.' },
   renderScale: { key: 'renderScale', label: 'Render scale', value: 1, min: 0.25, max: 1, step: 0.05, uniform: false, desc: 'Internal resolution ceiling. Lower = faster, softer. Adaptive quality works below this.' },
   targetFps: { key: 'targetFps', label: 'Target fps', value: 60, min: 24, max: 120, step: 1, uniform: false, desc: 'Frame rate adaptive quality tries to hold.' },
+  maxFps: { key: 'maxFps', label: 'Frame cap', value: 0, min: 0, max: 120, step: 1, uniform: false, desc: 'Most frames per second to draw (0 = as many as the screen shows). A slow scene looks the same at 30 and costs half the GPU, battery and heat.' },
   maxDpr: { key: 'maxDpr', label: 'Max pixel ratio', value: 2, min: 1, max: 3, step: 0.25, uniform: false, desc: 'Caps device pixel ratio on retina screens.' },
 };
 
@@ -23,8 +24,8 @@ export const STANDARD_KEYS = Object.keys(STANDARD);
 
 /**
  * The Playback group: Speed, any sketch-specific `extra` params, then the
- * resolution controls. `quality: true` adds render scale and the target fps that adaptive
- * quality holds (adaptive quality is always on for those sketches), which
+ * resolution controls. `quality: true` adds render scale, the target fps that adaptive
+ * quality holds (adaptive quality is always on for those sketches) and a frame cap, which
  * only pay off for GPU-heavy sketches; every sketch gets the pixel-ratio cap.
  *
  * @param {Partial<Record<string, number | boolean>>} [defaults] default values for standard keys
@@ -42,7 +43,7 @@ export function playback(defaults = {}, { quality = false, extra = [] } = {}) {
     params: [
       pick('timeScale'),
       ...extra,
-      ...(quality ? [pick('renderScale'), pick('targetFps')] : []),
+      ...(quality ? [pick('renderScale'), pick('targetFps'), pick('maxFps')] : []),
       pick('maxDpr'),
     ],
   };
