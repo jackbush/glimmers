@@ -20,6 +20,7 @@ export default {
   ],
 
   more: [
+    'geode',
     'homepage',
     'orb',
     'constellations',
