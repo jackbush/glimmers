@@ -17,14 +17,17 @@ export function createTheme(/** @type {Record<string, any>} */ P, /** @type {imp
     /** Call every frame; true when the colour changed. Allocates only when it does. */
     update,
   };
+  // Captures (scripts/capture.mjs) treat the window as centred: headless Chrome puts it wherever,
+  // and a cover must come out the same on any machine.
+  const capture = new URLSearchParams(location.search).has('capture');
   let x = NaN, y = NaN, seen = -1;
   const next = new Float32Array(3);
 
   function update() {
     const follow = P.windowHue.value;
     // The window's centre as a share of the screen it's on, 0–1 from the left and from the top.
-    const wx = follow ? (window.screenX + window.outerWidth / 2 - (screen.availLeft ?? 0)) / screen.availWidth : 0;
-    const wy = follow ? (window.screenY + window.outerHeight / 2 - (screen.availTop ?? 0)) / screen.availHeight : 0;
+    const wx = capture ? 0.5 : follow ? (window.screenX + window.outerWidth / 2 - (screen.availLeft ?? 0)) / screen.availWidth : 0;
+    const wy = capture ? 0.5 : follow ? (window.screenY + window.outerHeight / 2 - (screen.availTop ?? 0)) / screen.availHeight : 0;
     if (wx === x && wy === y && seen === model.version) return false;
     x = wx; y = wy; seen = model.version;
     if (follow) {

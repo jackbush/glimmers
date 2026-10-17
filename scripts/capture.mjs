@@ -11,7 +11,7 @@
 // on how fast the machine is. By default the clip plays forwards then backwards, so it loops
 // without a jump.
 //
-// --seconds, --start, --fps, --crf, ping-pong and param sweeps (`animate`) default to the
+// --seconds, --start, --fps, --crf, ping-pong and param sweeps (`animate`, `cycle`) default to the
 // sketch's `capture` settings in its manifest.js, so a re-capture comes out the same; pass
 // them to experiment.
 // --size is the CSS size of the frame (the index shows covers at 16:10, up to 840px wide);
@@ -89,12 +89,22 @@ try {
     await sleep(100);
   }
   const error = await chrome.evaluate(`(() => { const e = document.getElementById('error'); return e.hidden ? null : e.textContent; })()`);
+  // Fonts and images (a page's own, or ones it fetched) in place before the first frame, which
+  // is also the poster. A few seconds at most: one that never loads mustn't stall the capture.
+  await chrome.evaluate(`Promise.race([
+    Promise.all([document.fonts.ready, ...[...document.images].map((i) => i.decode().catch(() => {}))]),
+    new Promise((r) => setTimeout(r, 5000)),
+  ])`);
   if (error) throw new Error(error);
 
-  // `animate` sweeps params from → to → from over the clip (eased), starting from `from`.
-  const sweep = Object.entries(preset.animate);
-  const setAt = (p) => chrome.evaluate(sweep.map(([key, [a, b]]) =>
-    `window.__glimmer.set(${JSON.stringify(key)}, ${a + (b - a) * (1 - Math.cos(2 * Math.PI * p)) / 2})`).join(';') || '0');
+  // `animate` sweeps params from → to → from over the clip (eased), starting from `from`;
+  // `cycle` runs them from → to once, linearly, so a wrapping value (a full turn of hue) loops.
+  const sweep = [
+    ...Object.entries(preset.animate).map(([key, [a, b]]) => [key, (p) => a + (b - a) * (1 - Math.cos(2 * Math.PI * p)) / 2]),
+    ...Object.entries(preset.cycle || {}).map(([key, [a, b]]) => [key, (p) => a + (b - a) * p]),
+  ];
+  const setAt = (p) => chrome.evaluate(sweep.map(([key, at]) =>
+    `window.__glimmer.set(${JSON.stringify(key)}, ${at(p)})`).join(';') || '0');
   await setAt(0);
   if (seq.length) {
     // Land on the first preset, and give the sketch's own morphs (selects) time to settle,
@@ -108,6 +118,9 @@ try {
   // Skip ahead at the capture timestep, so physics-style sketches see the same dt as in the clip.
   const skip = Math.round(start * fps);
   if (skip) await chrome.evaluate(`for (let i = 0; i < ${skip}; i++) window.__glimmer.step(${1 / fps})`);
+  // Anything the page animates on the wall clock (CSS or Web Animations, like a fade it started
+  // during the skip) gets real time to finish, since the skip took next to none.
+  if (skip) await sleep(1500);
 
   if (still) {
     await chrome.evaluate(`window.__glimmer.step(${1 / fps})`);

@@ -45,6 +45,11 @@ export const manifestSchema = z
         /** Params to sweep during the clip: from → to and back, eased, over the whole clip. */
         animate: z.record(z.string(), z.tuple([z.number(), z.number()])),
         /**
+         * Params to run once during the clip: from → to, linearly, so a value that wraps (a hue
+         * turned a full 360°) loops without a jump. Use with pingpong: false.
+         */
+        cycle: z.record(z.string(), z.tuple([z.number(), z.number()])),
+        /**
          * Morph through presets instead: hold each for `hold` seconds, then morph to the next
          * over presetSeconds; the last morphs back to the first, so it loops.
          */

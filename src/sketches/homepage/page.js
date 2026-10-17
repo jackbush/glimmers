@@ -206,12 +206,14 @@ export function createPage({ P, onSwitch }) {
   const root = el('div', { class: 'hp' }, []);
   document.body.append(root);
 
-  // Cover previews play only while on screen, and never with reduced motion. Each fades in over
-  // its poster once it's actually playing.
+  // Cover previews play only while on screen, and never with reduced motion or in a capture
+  // (they run on real time, so a captured loop would jump). Each fades in over its poster once
+  // it's actually playing.
+  const still = reduceMotion.matches || new URLSearchParams(location.search).has('capture');
   const onScreen = new IntersectionObserver((entries) => {
     for (const { target, isIntersecting } of entries) {
       const v = /** @type {HTMLVideoElement} */ (target);
-      if (isIntersecting && !reduceMotion.matches) v.play().catch(() => {});
+      if (isIntersecting && !still) v.play().catch(() => {});
       else v.pause();
     }
   }, { rootMargin: '100px 0px' });
