@@ -86,7 +86,7 @@ ${Object.entries(INKS).map(([k, [mode, none]]) => `.hp-ink[data-ink="${k}"] { mi
 .hp-text { padding: var(--card-padding); }
 /* The text and the bar sit on a lighter wash of the page; not in the ink copies, where it
    would go through their blends. */
-.hp-ui .hp-text, .hp-ui .hp-more { background: var(--hp-card-bg); background-clip: padding-box; }
+.hp-ui .hp-text, .hp-ui .hp-more { background: var(--hp-card-bg); mix-blend-mode: var(--hp-card-blend); background-clip: padding-box; }
 .hp .hp-more { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.75rem var(--card-padding); border-top: 1px solid var(--hp-text); }
 .hp-more span { color: var(--hp-text); }
 .hp-more svg { flex: none; width: 1rem; height: 1rem; fill: none; stroke: var(--hp-text); stroke-width: 1.5; }
@@ -398,10 +398,14 @@ export function createPage({ P, onSwitch }) {
       // Roles is Projects inverted: each page is the other's text.
       const page = { projects: P.themeColour.rgb, roles: invert(P.themeColour.rgb) };
       const text = { projects: page.roles, roles: page.projects };
-      // Cards sit on the Projects page: a white wash over a bright theme colour, black over a dark
-      // one (HSB brightness, the max channel, from 50%).
-      const bright = Math.max(page.projects[0], page.projects[1], page.projects[2]) >= 0.5;
-      s.setProperty('--hp-card-bg', bright ? 'rgba(255, 255, 255, 0.25)' : 'rgba(0, 0, 0, 0.25)');
+      // Card text sits on a wash of the theme colour blended over the page: screen lightens a
+      // bright theme, multiply deepens a dark one (HSB brightness, the max channel, from 50%).
+      // Blending the colour with itself keeps its hue and adds saturation, where white or black
+      // would grey it.
+      const theme = page.projects;
+      const bright = Math.max(theme[0], theme[1], theme[2]) >= 0.5;
+      s.setProperty('--hp-card-bg', `rgba(${theme[0] * 255}, ${theme[1] * 255}, ${theme[2] * 255}, ${P.cardOpacity.value})`);
+      s.setProperty('--hp-card-blend', bright ? 'screen' : 'multiply');
 
       // Each kind of text is the page's inverse at its own opacity, with its own ink greys.
       const kinds = { main: 1, minor: P.minorOpacity.value };

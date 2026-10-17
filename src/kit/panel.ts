@@ -7,6 +7,7 @@
 
 import type { ParamStore } from './params';
 import type { Param, Presets } from './types';
+import { createColourPicker } from './colour-picker';
 import { jumpTo, newerBuild } from './version';
 
 export const STATE_TAG = 'state@1';
@@ -51,6 +52,7 @@ export function buildPanel({ slug, store, onEdited, presets, onPreset }: PanelOp
   const statusEl = document.getElementById('status')!;
   const showBox = document.getElementById('show-changes') as HTMLInputElement;
   const rows: { p: Param; wrap: HTMLElement; sync(): void }[] = [];
+  const picker = createColourPicker();
 
   function buildRow(p: Param): HTMLElement {
     const wrap = el('div', 'row row-' + p.type);
@@ -82,17 +84,32 @@ export function buildPanel({ slug, store, onEdited, presets, onPreset }: PanelOp
       wrap.appendChild(menu);
       sync = () => { menu.value = String(p.value); mark(); };
     } else if (p.type === 'color') {
-      const pick = el('input');
-      pick.type = 'color';
+      // A swatch that opens the kit's colour picker (colour-picker.ts), plus the hex to type in.
+      const pick = el('button', 'swatch');
+      pick.type = 'button';
       pick.id = id;
+      pick.setAttribute('aria-haspopup', 'dialog');
+      pick.setAttribute('aria-expanded', 'false');
       const hex = el('input', 'num');
       hex.type = 'text';
       hex.maxLength = 7;
       noSuggestions(hex);
-      pick.addEventListener('input', () => { store.setValue(p, pick.value); hex.value = String(p.value); mark(); onEdited(); });
+      pick.addEventListener('click', () => {
+        if (picker.anchor === pick) { picker.close(); return; }
+        picker.open(pick, String(p.value), (v) => {
+          store.setValue(p, v);
+          pick.style.background = hex.value = String(p.value);
+          mark();
+          onEdited();
+        });
+      });
       hex.addEventListener('change', () => { store.setValue(p, hex.value.trim().replace(/^#?/, '#')); sync(); onEdited(); });
       wrap.append(pick, hex);
-      sync = () => { pick.value = String(p.value); hex.value = String(p.value); mark(); };
+      sync = () => {
+        pick.style.background = hex.value = String(p.value);
+        if (picker.anchor === pick) picker.follow(String(p.value));
+        mark();
+      };
     } else {
       const track = el('span', 'track');
       const range = el('input');

@@ -57,7 +57,13 @@ export async function ensureServer(url = 'http://127.0.0.1:4321/glimmers/') {
   const port = new URL(url).port || '4321';
   const proc = spawn('npx', ['astro', 'preview', '--port', port, '--host', '127.0.0.1'], { cwd: ROOT, stdio: 'ignore', detached: true });
   for (let i = 0; i < 100; i++) {
-    if ((await probe()) === 'ours') return { base: url, stop: () => { try { process.kill(-proc.pid); } catch {} } };
+    // Astro 7 runs a non-interactive preview as a background server that outlives its npx
+    // parent, so stopping it takes `astro preview stop` as well as the kill.
+    const stop = () => {
+      try { process.kill(-proc.pid); } catch {}
+      spawnSync('npx', ['astro', 'preview', 'stop'], { cwd: ROOT, stdio: 'ignore' });
+    };
+    if ((await probe()) === 'ours') return { base: url, stop };
     await sleep(200);
   }
   throw new Error('preview server did not start at ' + url);

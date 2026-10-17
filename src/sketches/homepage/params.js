@@ -17,7 +17,8 @@ export default [
     group: 'Colours',
     params: [
       { key: 'themeColour', label: 'Theme colour', type: 'color', value: '#f3ead6', desc: 'The one colour behind the whole theme: the page in Projects, and the text in Roles. Projects\' text and the Roles page are its inverse. Flickers if that\'s below AA (4.5:1).' },
-      { key: 'minorOpacity', label: 'Minor opacity', value: 0.8, min: 0, max: 1, step: 0.01, uniform: false, desc: 'Body text: the page\'s inverse at this opacity over it. Flickers if that\'s below AA (4.5:1).' },
+      { key: 'minorOpacity', label: 'Minor text opacity', value: 0.8, min: 0, max: 1, step: 0.01, uniform: false, desc: 'Body text: the page\'s inverse at this opacity over it. Flickers if that\'s below AA (4.5:1).' },
+      { key: 'cardOpacity', label: 'Card opacity', value: 0.25, min: 0, max: 1, step: 0.01, uniform: false, desc: 'The wash behind card text: the theme colour screened over a bright page (lighter) or multiplied over a dark one (deeper), at this opacity.' },
     ],
   },
   {
