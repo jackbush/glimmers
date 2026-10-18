@@ -138,7 +138,7 @@ export function run(slug: string, { manifest, params, presets, sketch }: SketchM
 
   // The first preset lands before the sketch starts, so it opens on it rather than morphing in.
   const names = manifest.autoplay?.sequence ?? (presets ? Object.keys(presets) : []);
-  if (!capture && manifest.autoplay && names.length && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  if (!capture && !chrome.paneOpen && manifest.autoplay && names.length && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
     // A random one first, then on through the sequence (or the menu order) from there.
     const first = Math.floor(Math.random() * names.length);
     autoplay = { names, i: first, wait: autoHold };

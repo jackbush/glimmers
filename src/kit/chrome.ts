@@ -2,7 +2,9 @@
 // keyboard. Two states, shared by every sketch on the site:
 //   ui    on | off       Space toggles; off hides the buttons and the pane. Remembered per
 //                       browser (glimmers:ui).
-//   pane  open | closed  the cog toggles; Escape closes. Every page opens with it closed.
+//   pane  open | closed  the cog toggles; Escape closes. Every page opens with it closed,
+//                       unless its URL ends #settings (links straight to the settings), which
+//                       also shows the buttons for that visit without saving it.
 
 const UI_KEY = 'glimmers:ui';
 
@@ -25,8 +27,9 @@ export function setupChrome(persist: boolean, onPane?: (open: boolean) => void):
   const body = document.body;
   const cog = document.getElementById('cog')!;
   const panel = document.getElementById('panel')!;
-  let ui = persist ? (load(UI_KEY) === 'off' ? 'off' : 'on') : 'off';
-  let pane = 'closed';
+  const settings = persist && location.hash === '#settings';
+  let ui = persist && (settings || load(UI_KEY) !== 'off') ? 'on' : 'off';
+  let pane = settings ? 'open' : 'closed';
 
   function apply() {
     body.dataset.ui = ui;
