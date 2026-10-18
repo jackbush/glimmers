@@ -1,55 +1,31 @@
 // Homepage — a prototype of jackbush.github.io's light/dark switch, under the real page: each
 // Projects/Roles switch runs the other theme out from the click. See NOTES.md.
 //
-// This file is the engine and the wiring: the GLSL and per-frame values are in shader.js,
-// the switch in switches.js, the page in page.js. The frame loop allocates nothing.
+// This file is the wiring: the switch is in switches.js, the colours under the page and the
+// warp in backdrop.js, the page in page.js. It's all DOM and SVG, so the kit's canvas stays
+// hidden; the kit's frame loop still drives it. The frame loop allocates nothing.
 
-import SHADER from './shader.js';
+import { createBackdrop } from './backdrop.js';
 import { createSwitches } from './switches.js';
 import { createPage, MODES } from './page.js';
 import { createTheme } from './theme.js';
 import { invertHex } from './ink.js';
 import { rng } from '../../kit/random.js';
-import { FULLSCREEN_VERT, frameUniforms, program, shaderHeader, shaderParams, uploadFrame, uploadParams } from '../../kit/gl.js';
 
 /** @type {import('../../kit/types').Sketch} */
-export default function create({ canvas, P, model, degrade }) {
-  const gl = canvas.getContext('webgl2', {
-    alpha: false, antialias: false, depth: false, stencil: false,
-    premultipliedAlpha: false, preserveDrawingBuffer: false, powerPreference: 'high-performance',
-  });
-  if (!gl) throw new Error('WebGL2 is not available in this browser.');
-
-  const uniformParams = shaderParams(model.params);
-  const { vals: frameVals, list: frameList } = frameUniforms(SHADER.frameUniforms);
+export default function create({ canvas, P, model }) {
+  canvas.style.visibility = 'hidden';
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
   const theme = createTheme(P, model);
 
-  /** @type {null | { prog: WebGLProgram, version: number, uRes: any, uScreen: any, uTime: any, uRealTime: any, paramLocs: any[], frameLocs: any[] }} */
-  let pass = null;
-  function build() {
-    const prog = program(gl, FULLSCREEN_VERT, shaderHeader(uniformParams, frameList) + SHADER.common + SHADER.composite, 'composite');
-    const loc = (/** @type {string} */ n) => gl.getUniformLocation(prog, n);
-    pass = {
-      prog, version: -1,
-      uRes: loc('u_res'), uScreen: loc('u_screen'), uTime: loc('u_time'), uRealTime: loc('u_realTime'),
-      paramLocs: uniformParams.map((p) => loc('u_' + p.key)),
-      frameLocs: frameList.map((f) => loc(f.name)),
-    };
-    gl.bindVertexArray(gl.createVertexArray());
-  }
-  canvas.addEventListener('webglcontextlost', (e) => {
-    e.preventDefault();
-    pass = null;
-    degrade(0.6);
-  });
-  canvas.addEventListener('webglcontextrestored', build);
-  build();
-
-  // The page, and the switch each tab starts. With reduced motion a switch is instant.
+  // The page over its backdrop, and the switch each tab starts. With reduced motion a switch
+  // is instant.
   const switches = createSwitches(P);
+  const backdrop = createBackdrop();
+  document.body.append(backdrop.defs);
   const page = createPage({
     P,
+    backdrop: backdrop.svg,
     onSwitch(mode, x, y) {
       const theme = MODES.indexOf(mode);
       if (reduceMotion.matches) switches.jump(theme);
@@ -64,6 +40,7 @@ export default function create({ canvas, P, model, degrade }) {
     if (seen === model.version && seenTheme === theme.version) return;
     seenTheme = theme.version;
     page.sync(P, theme.rgb);
+    backdrop.sync(P);
     if (seen === model.version) return;
     seen = model.version;
     if (P.activeTab.value !== activeTab) {
@@ -104,32 +81,20 @@ export default function create({ canvas, P, model, degrade }) {
     themeMeta?.setAttribute('content', c);
   }
 
-  let pxRatio = 1;
+  let warping = false;
   return {
-    resize(_w, _h, px) { pxRatio = px; },
-    frame(t, _dt, rt, rdt) {
+    resize() {},
+    frame(_t, _dt, _rt, rdt) {
       syncParams();
       demo(rdt);
-      if (!pass) return;
-      const w = canvas.width / pxRatio, h = canvas.height / pxRatio;
-      SHADER.perFrame(pxRatio, theme.rgb, frameVals);
-      switches.update(rdt, w, h, frameVals);
+      // The screen, in page px: the hidden canvas still covers it (behind mobile browser bars too).
+      const vx = scrollX - page.root.offsetLeft, vy = scrollY - page.root.offsetTop;
+      const w = canvas.clientWidth, h = canvas.clientHeight;
+      switches.update(rdt, vx, vy, w, h);
       page.reveal(switches);
+      const warp = backdrop.update(switches, P, vx, vy, w, h);
+      if (warp !== warping) page.root.style.filter = (warping = warp) ? backdrop.filter : '';
       setBars(switches.topEdge);
-
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-      gl.viewport(0, 0, canvas.width, canvas.height);
-      gl.useProgram(pass.prog);
-      gl.uniform2f(pass.uRes, canvas.width, canvas.height);
-      gl.uniform2f(pass.uScreen, canvas.width, canvas.height);
-      gl.uniform1f(pass.uTime, t);
-      gl.uniform1f(pass.uRealTime, rt);
-      if (pass.version !== model.version) {
-        uploadParams(gl, pass.paramLocs, uniformParams);
-        pass.version = model.version;
-      }
-      uploadFrame(gl, pass.frameLocs, frameList);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
     },
   };
 }

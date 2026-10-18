@@ -1,18 +1,17 @@
-// Homepage — the page itself, over the canvas: intro, the Projects/Roles toggle and both
-// lists, as on jackbush.github.io, so the backdrop is judged under real text.
+// Homepage — the page itself: intro, the Projects/Roles toggle and both lists, as on
+// jackbush.github.io, over the backdrop (backdrop.js), so the switch is judged under real text.
 //
-// The page is laid out four times in one grid cell. The first copy is the real one: tabs,
-// links, focus and screen readers, with its text transparent. The other three are aria-hidden
-// copies that only draw text, each in a blend layer over the canvas (ink.js), so every glyph
-// takes the inverse of whichever page is under it and flips with the switch pixel by pixel.
-// Nothing between them and the canvas may isolate them, or the blends only meet each other
-// and the text goes dark: `.hp` is no stacking context, and the document scrolls (as on the
-// site), not `.hp`, because Safari isolates a scroller's content.
+// The page is laid out four times in one grid cell, over the backdrop. The first copy is the
+// real one: tabs, links, focus and screen readers, with its text transparent. The other three
+// are aria-hidden copies that only draw text, each in a blend layer over the backdrop (ink.js),
+// so every glyph takes the inverse of whichever page is under it and flips with the switch
+// pixel by pixel. `.hp` isolates, so the blends meet the backdrop and nothing else, and the
+// warp filter can go on it without changing them. The document scrolls, as on the site.
 //
 // On a switch the intro stays (it just changes colour with the page), but the lists swap: the
 // old one fades out over Old text fade, and the new one shows only inside the switch as it
 // spreads (an SVG polygon clip, set each frame to the switch's outline, so it matches the
-// canvas). Switching back mid-switch fades the half-revealed list over Interrupt
+// backdrop). Switching back mid-switch fades the half-revealed list over Interrupt
 // fade instead. With reduced motion the lists swap at once.
 //
 // Text that falls short of WCAG AA (4.5:1) on its page flickers, so a failing colour is
@@ -21,11 +20,10 @@
 import { CONTENT_URL } from './content-url.js';
 import snapshot from './content.json';
 import { contrast, css, inkLayers, invert, mixRgb } from './ink.js';
+import { COS, OUTLINE_POINTS, SIN } from './switches.js';
 
 const FONTS = 'https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap';
 const AA = 4.5;
-/** Points in the reveal's outline: at a full-screen radius, 256 chords sit within a pixel of the curve. */
-const CLIP_POINTS = 256;
 
 export const MODES = ['projects', 'roles'];
 /** The blend layers, bottom to top: their CSS blend modes (see ink.js), and the colour that
@@ -37,15 +35,18 @@ const MINOR = '.hp-minor';
 const flicker = (/** @type {string} */ sel) => `${sel} { animation: hp-flicker 0.7s steps(1) infinite; }`;
 
 const CSS = `
-/* The document scrolls, not .hp (see the top of this file). */
+/* The document scrolls (see the top of this file). */
 html, body { height: auto; overflow: visible; }
 .hp {
   --card-padding: 1rem; /* around a project card's text */
   --radius: 0.5rem; /* corners of the toggle and the project cards */
   --gutter: 1.5rem; /* the page's side margins, and the space between project cards */
-  position: relative; display: grid;
+  position: relative; display: grid; isolation: isolate; min-height: 100lvh;
   font-family: "Inter", sans-serif; -webkit-font-smoothing: antialiased;
 }
+/* The backdrop draws the warp's map off the left of the screen (backdrop.js), hence overflow. */
+.hp-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; overflow: visible; }
+${MODES.map((m) => `.hp-backdrop [data-page="${m}"] { fill: var(--hp-page-${m}); }`).join('\n')}
 .hp-main { grid-area: 1 / 1; width: 100%; max-width: 740px; margin-inline: auto; padding: 4rem var(--gutter) 6rem; box-sizing: border-box; }
 .hp-main * { box-sizing: border-box; }
 .hp-ui { --hp-text: transparent; --hp-minor: transparent; --hp-none: transparent; }
@@ -203,11 +204,11 @@ function build({ intro, projects, roles }) {
 }
 
 /**
- * @param {{ P: Record<string, any>, onSwitch: (mode: string, x: number, y: number) => void }} opts
- *   `onSwitch` is called when the page switches, with where the switch starts (CSS px from the
- *   top left)
+ * @param {{ P: Record<string, any>, backdrop: SVGSVGElement, onSwitch: (mode: string, x: number, y: number) => void }} opts
+ *   `backdrop` goes under the copies. `onSwitch` is called when the page switches, with where
+ *   the switch starts (CSS px from the page's top left)
  */
-export function createPage({ P, onSwitch }) {
+export function createPage({ P, backdrop, onSwitch }) {
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
   document.head.append(el('link', { rel: 'stylesheet', href: FONTS }), el('style', {}, [CSS]));
 
@@ -250,7 +251,7 @@ export function createPage({ P, onSwitch }) {
       return copy;
     });
     onScreen.disconnect();
-    root.replaceChildren(ui, ...inks);
+    root.replaceChildren(backdrop, ui, ...inks);
     for (const v of ui.querySelectorAll('video')) {
       v.muted = true;
       v.addEventListener('playing', () => v.classList.add('on'), { once: true });
@@ -279,10 +280,10 @@ export function createPage({ P, onSwitch }) {
     const clip = document.createElementNS(SVG, 'clipPath');
     clip.id = 'hp-clip-' + i;
     const poly = document.createElementNS(SVG, 'polygon');
-    for (let j = 0; j < CLIP_POINTS; j++) poly.points.appendItem(svg.createSVGPoint());
+    for (let j = 0; j < OUTLINE_POINTS; j++) poly.points.appendItem(svg.createSVGPoint());
     clip.append(poly);
     svg.append(clip);
-    return { url: `url(#hp-clip-${i})`, points: [...Array(CLIP_POINTS).keys()].map((j) => poly.points.getItem(j)) };
+    return { url: `url(#hp-clip-${i})`, points: [...Array(OUTLINE_POINTS).keys()].map((j) => poly.points.getItem(j)) };
   });
   document.body.append(svg);
 
@@ -321,16 +322,17 @@ export function createPage({ P, onSwitch }) {
   /** Switch to `mode`, starting at (x, y) CSS px: the old list fades, the new one is revealed. */
   function switchTo(/** @type {string} */ mode, /** @type {number} */ x, /** @type {number} */ y) {
     if (mode === root.dataset.theme) return;
+    const page = root.getBoundingClientRect();
     if (reduceMotion.matches) {
       setMode(mode);
-      onSwitch(mode, x, y);
+      onSwitch(mode, x - page.left, y - page.top);
       return;
     }
     setTabs(mode);
     for (const p of panels) {
       if (p.dataset.mode === mode || p.hidden) continue;
       // A list still being revealed (a switch back mid-switch) keeps its clip, so it doesn't
-      // jump to whole, and goes quickly; the switch it was in keeps spreading on the canvas.
+      // jump to whole, and goes quickly; the switch it was in keeps spreading on the backdrop.
       const interrupted = reveal?.lists.includes(p) ?? false;
       settle(p);
       p.setAttribute('aria-hidden', 'true');
@@ -351,7 +353,7 @@ export function createPage({ P, onSwitch }) {
     const box = lists[0].getBoundingClientRect();
     reveal = { clip, lists, x: x - box.left, y: y - box.top };
     for (const pt of clip.points) { pt.x = reveal.x; pt.y = reveal.y; }
-    onSwitch(mode, x, y);
+    onSwitch(mode, x - page.left, y - page.top);
   }
 
   // The switch starts at the pointer, or at the tab's centre from the keyboard (a keyboard
@@ -375,6 +377,7 @@ export function createPage({ P, onSwitch }) {
     .catch(() => { /* offline or moved: the snapshot stands */ });
 
   return {
+    root,
     setMode,
     switchTo,
     /** The real page's tab for `mode`. */
@@ -382,21 +385,19 @@ export function createPage({ P, onSwitch }) {
     /**
      * Step the reveal to the newest switch's outline, or end it once no switch is running.
      * Called every frame; allocation-free.
-     * @param {{ running: boolean, radiusAt(a: number): number }} switches
+     * @param {import('./switches.js').Switches} switches
      */
     reveal(switches) {
       if (!reveal) return;
-      if (!switches.running) {
+      if (!switches.count) {
         for (const p of reveal.lists) p.style.clipPath = '';
         reveal = null;
         return;
       }
-      const pts = reveal.clip.points;
-      for (let j = 0; j < CLIP_POINTS; j++) {
-        const a = (j / CLIP_POINTS) * Math.PI * 2;
-        const r = switches.radiusAt(a);
-        pts[j].x = reveal.x + Math.cos(a) * r;
-        pts[j].y = reveal.y + Math.sin(a) * r;
+      const pts = reveal.clip.points, o = (switches.count - 1) * OUTLINE_POINTS;
+      for (let j = 0; j < OUTLINE_POINTS; j++) {
+        pts[j].x = reveal.x + COS[j] * switches.radius[o + j];
+        pts[j].y = reveal.y + SIN[j] * switches.radius[o + j];
       }
     },
     /**
@@ -410,6 +411,7 @@ export function createPage({ P, onSwitch }) {
       // Roles is Projects inverted: each page is the other's text.
       const page = { projects: theme, roles: invert(theme) };
       const text = { projects: page.roles, roles: page.projects };
+      for (const m of MODES) s.setProperty(`--hp-page-${m}`, css(page[/** @type {'projects' | 'roles'} */ (m)]));
       // Card text sits on a wash of the theme colour blended over the page: screen lightens a
       // bright theme, multiply deepens a dark one (HSB brightness, the max channel, from 50%).
       // Blending the colour with itself keeps its hue and adds saturation, where white or black
