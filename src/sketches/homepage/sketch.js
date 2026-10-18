@@ -19,6 +19,9 @@ export default function create({ canvas, P, model, degrade }) {
     premultipliedAlpha: false, preserveDrawingBuffer: false, powerPreference: 'high-performance',
   });
   if (!gl) throw new Error('WebGL2 is not available in this browser.');
+  // Under the page, so the page needn't be positioned to sit above it (see page.js). Body then
+  // can't have a background, or it would cover the canvas (setBars).
+  canvas.style.zIndex = '-1';
 
   const uniformParams = shaderParams(model.params);
   const { vals: frameVals, list: frameList } = frameUniforms(SHADER.frameUniforms);
@@ -89,8 +92,10 @@ export default function create({ canvas, P, model, degrade }) {
   }
 
   // The browser's bars take one flat colour (theme-color, and the page background in Safari), so
-  // they follow the page along the top edge, Bars lead before a switch covers it. The kit sets
-  // them to the Projects page on every edit, so they're set again then.
+  // they follow the page along the top edge, Bars lead before a switch covers it. The colour goes
+  // on html only, as on the site: the canvas (z-index −1) paints over the root's background but
+  // under body's, so body has none. The kit sets both to the Projects page on every edit, so
+  // they're set again then.
   const themeMeta = document.querySelector('meta[name="theme-color"]');
   let bars = -1, barsVersion = -1, barsTheme = -1;
   function setBars(/** @type {number} */ side) {
@@ -100,7 +105,7 @@ export default function create({ canvas, P, model, degrade }) {
     barsTheme = theme.version;
     const c = side ? invertHex(theme.hex) : theme.hex;
     document.documentElement.style.backgroundColor = c;
-    document.body.style.backgroundColor = c;
+    document.body.style.backgroundColor = 'transparent';
     themeMeta?.setAttribute('content', c);
   }
 

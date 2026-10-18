@@ -6,7 +6,8 @@
 // copies that only draw text, each in a blend layer over the canvas (ink.js), so every glyph
 // takes the inverse of whichever page is under it and flips with the switch pixel by pixel.
 // Nothing between them and the canvas may isolate them, or the blends only meet each other
-// and the text goes dark: `.hp` is no stacking context, and the document scrolls (as on the
+// and the text goes dark: `.hp` is no stacking context and isn't positioned (the canvas sits
+// under the page at z-index −1 instead; see sketch.js), and the document scrolls (as on the
 // site), not `.hp`, because Safari isolates a scroller's content.
 //
 // On a switch the intro stays (it just changes colour with the page), but the lists swap: the
@@ -43,16 +44,13 @@ html, body { height: auto; overflow: visible; }
   --card-padding: 1rem; /* around a project card's text */
   --radius: 0.5rem; /* corners of the toggle and the project cards */
   --gutter: 1.5rem; /* the page's side margins, and the space between project cards */
-  position: relative; display: grid;
+  display: grid;
   font-family: "Inter", sans-serif; -webkit-font-smoothing: antialiased;
 }
 .hp-main { grid-area: 1 / 1; width: 100%; max-width: 740px; margin-inline: auto; padding: 4rem var(--gutter) 6rem; box-sizing: border-box; }
 .hp-main * { box-sizing: border-box; }
 .hp-ui { --hp-text: transparent; --hp-minor: transparent; --hp-none: transparent; }
-/* Each ink copy gets its own compositing layer. Otherwise iOS Safari paints them into a layer
-   of their own above the WebGL canvas, the blends meet only each other, and the text goes
-   black; the cover media in Projects happened to force the layers, so only Roles broke. */
-.hp-ink { pointer-events: none; user-select: none; will-change: transform; }
+.hp-ink { pointer-events: none; user-select: none; }
 ${Object.entries(INKS).map(([k, [mode, none]]) => `.hp-ink[data-ink="${k}"] { mix-blend-mode: ${mode}; --hp-text: var(--hp-${k}-main); --hp-minor: var(--hp-${k}-minor); --hp-none: ${none}; }`).join('\n')}
 .hp h1 { font-size: clamp(2.25rem, 7vw, 4.5rem); font-weight: 900; line-height: 1.02; letter-spacing: -0.03em; margin: 0 0 1rem; color: var(--hp-text); }
 .hp h2 { font-size: 1.625rem; font-weight: 800; line-height: 1.1; letter-spacing: -0.015em; margin: 0; color: var(--hp-text); }
