@@ -136,6 +136,25 @@ export function run(slug: string, { manifest, params, presets, sketch }: SketchM
   if (manifest.startPaused && !capture) loop.paused = true;
   syncPlay();
 
+  // Camera: downloads the current moment as a PNG at the native resolution of a 15" MacBook Air
+  // (1440×932 points at 2×), so it fits that screen pixel for pixel as a wallpaper.
+  const shotBtn = document.getElementById('shot') as HTMLButtonElement;
+  shotBtn.addEventListener('click', async () => {
+    shotBtn.disabled = true;
+    try {
+      const png = await loop.snapshot(2880, 1864, 2);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(png);
+      a.download = slug + '-' + new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-') + '.png';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    } catch (err) {
+      fail(err);
+    } finally {
+      shotBtn.disabled = false;
+    }
+  });
+
   // The first preset lands before the sketch starts, so it opens on it rather than morphing in.
   const names = manifest.autoplay?.sequence ?? (presets ? Object.keys(presets) : []);
   if (!capture && !chrome.paneOpen && manifest.autoplay && names.length && !matchMedia('(prefers-reduced-motion: reduce)').matches) {

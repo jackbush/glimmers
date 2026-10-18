@@ -18,7 +18,7 @@ description: Add, edit, or remove visual elements and parameters in a glimmers s
 
 - `P.<key>.value` is the live value; colour params also have `P.<key>.rgb` (a Float32Array of 0–1 floats, updated in place). `model.version` increments on every edit, so cache anything derived from params and rebuild it only when the version moves.
 - `frame(t, dt, rt, rdt)`: `t`/`dt` are scene time and its step, with Speed and the play/pause button applied (dt is 0 while paused). `rt`/`rdt` are real time and its step, which always run (film grain, twinkle, preset morphs). Motion must be driven by `dt` or `t`, never by frame count.
-- The kit sizes the canvas in device pixels (`resize` gets `pxRatio` = canvas px per CSS px). Sizes the user thinks of in pixels should be CSS px × `pxRatio`.
+- The kit sizes the canvas in device pixels (`resize` gets `pxRatio` = canvas px per CSS px). Sizes the user thinks of in pixels should be CSS px × `pxRatio`. The camera button resizes to 2880×1864 at `pxRatio` 2, draws one frame with `dt` 0, then resizes back, all in one task: anything kept across frames (trails, caches) must survive a resize, and `frame` must draw even when nothing has moved.
 
 ## Adding a parameter
 

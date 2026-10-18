@@ -4,7 +4,7 @@
 // real time `rt` always runs (wrapped to keep float32 precision in shaders). The canvas is
 // sized to its CSS box × min(devicePixelRatio, maxDpr) × renderScale × the adaptive scale.
 // A Frame cap (maxFps) skips animation frames to draw at most that often; `fixed` (captures,
-// benchmarks) ignores it.
+// benchmarks) ignores it. `snapshot` draws one frame at a size of its own (the camera button).
 
 import type { Param, SketchInstance } from './types';
 
@@ -14,6 +14,12 @@ export interface Loop {
   /** Render exactly one frame `dt` seconds after the last (capture mode). */
   step(dt: number): void;
   degrade(factor: number): void;
+  /**
+   * Draw the current moment once at width×height (`pxRatio` canvas px per CSS px), at full
+   * quality whatever the screen's settings, and return it as a PNG. The screen size is restored
+   * before it returns.
+   */
+  snapshot(width: number, height: number, pxRatio: number): Promise<Blob>;
   /** Turn adaptive quality off: full resolution always (captures, `?fixed` benchmarks). */
   fixed: boolean;
   /** Called twice a second with a status line for the pane header. */
@@ -175,6 +181,21 @@ export function createLoop(canvas: HTMLCanvasElement, P: Record<string, Param>, 
     stop() { cancelAnimationFrame(raf); raf = 0; },
     step(dt) { render(dt); },
     degrade(factor) { dynScale = Math.max(MIN_SCALE, dynScale * factor); },
+    snapshot(width, height, pxRatio) {
+      const s = sketch();
+      if (!s) return Promise.reject(new Error('The sketch is not running.'));
+      canvas.width = width;
+      canvas.height = height;
+      s.resize(width, height, pxRatio);
+      s.frame(sceneTime, 0, realTime, 0);
+      // toBlob copies the pixels now (the drawing buffer isn't kept past this task) and encodes later.
+      const png = new Promise<Blob>((resolve, reject) =>
+        canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('The browser could not encode the image.'))), 'image/png'));
+      lastW = 0; // force the resize back
+      resizeIfNeeded(s);
+      s.frame(sceneTime, 0, realTime, 0);
+      return png;
+    },
   };
   return loop;
 }

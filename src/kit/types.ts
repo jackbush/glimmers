@@ -81,7 +81,10 @@ export interface SketchContext {
 }
 
 export interface SketchInstance {
-  /** The canvas's pixel size changed. `pxRatio` = canvas px per CSS px. */
+  /**
+   * The canvas's pixel size changed. `pxRatio` = canvas px per CSS px. The camera button
+   * resizes to its own size for one frame (dt 0) and straight back.
+   */
   resize(width: number, height: number, pxRatio: number): void;
   /**
    * Draw one frame. `t` and `dt` are scene time and its step (Speed and the play/pause button
