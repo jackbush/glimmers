@@ -1,8 +1,3 @@
-# Homepage
-
-## Bug (open, 2026-10-18): Roles text is black on iPhone Safari
-On iOS Safari, everything drawn by the ink copies (intro, toggle, role text) goes black in Roles, whatever the theme colour; Projects is right. Seen with a dark purple theme (Roles page light green, text black instead of purple) and a lilac one (Roles page dark green, text black instead of lilac). Screenshots: `~/Desktop/IMG_0797.PNG`–`IMG_0800.PNG`. The guess was that something isolated the ink copies from the WebGL canvas on mobile Safari, so the difference layer ran against black. Since then (same day) the backdrop has moved into `.hp` as SVG, and `.hp` isolates, so the blends no longer reach outside the page. That may well fix it. **Next:** retest on the iPhone (both themes, both tabs, and mid-switch with the warp); if it's still black, diagnose from there.
-
 # Geode
 
 A raw quartz cluster revolving in a dark studio, ray-traced in WebGL2, at `src/sketches/geode/`. Its studio backdrop takes the stone's hue plus Hue shift (0–360; 0 and 360 both mean the stone's own hue; default 180, the opposite hue).

@@ -1,7 +1,7 @@
 // Homepage — text in the inverse of whichever page is under it, wherever the switch has reached.
 //
 // Text at opacity o over a page colour bg should be bg + o·((1 − bg) − bg) = (1 − 2o)·bg + o,
-// per channel. The text is drawn three times over the backdrop in blend layers (multiply, then
+// per channel. The text is drawn three times over the canvas in blend layers (multiply, then
 // difference, then plus-lighter), which together give exactly that:
 //
 //   o ≥ ½   multiply by 2o − 1, then difference with o:   |o − (2o − 1)·bg| = o − (2o − 1)·bg
