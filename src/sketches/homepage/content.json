@@ -7,7 +7,7 @@
   "projects": [
     {
       "name": "Sprig",
-      "description": "Botanical studies. Be taken on an arboreal tour, or click the settings cog and invent your own impossible plants.",
+      "description": "Botanical studies. Be taken on an arboreal tour, or click the settings cog and invent some plants. A bit like a god.",
       "url": "https://jackbush.github.io/glimmers/sprig/",
       "cover": {
         "format": "landscape",
@@ -19,19 +19,18 @@
     },
     {
       "name": "Zola",
-      "description": "Build more accessible products. Each card describes a real person's experience and needs, which your design should accommodate.",
+      "description": "Build more accessible products. Each card describes a person's experience and the needs a design should accommodate.",
       "url": "https://jackbush.github.io/zola/",
       "cover": {
         "format": "landscape",
-        "background": "#BC6061",
-        "image": "https://jackbush.github.io/_astro/zola.B2vd_PRb_ANHQA.webp",
+        "image": "https://jackbush.github.io/_astro/zola.DhmzwEUE_ZiFCAi.webp",
         "width": 2400,
-        "height": 1600
+        "height": 1260
       }
     },
     {
       "name": "Risolino",
-      "description": "Make risograph prints from anywhere. Customise the ink blending, shading model and registration jitter for some analogue charm.",
+      "description": "Make riso-style prints. Customise the ink blending, shading mode and registration for some analogue charm.",
       "url": "https://jackbush.github.io/risolino/",
       "cover": {
         "format": "landscape",
@@ -42,7 +41,7 @@
     },
     {
       "name": "Atlas Nights",
-      "description": "Spend a night star-gazing in the High Atlas. Choose constellation maps from a selection of regional sky cultures.",
+      "description": "Spend a night star-gazing in the High Atlas. Choose constellation maps from regional sky cultures.",
       "url": "https://jackbush.github.io/glimmers/atlas-nights/",
       "cover": {
         "format": "landscape",
@@ -54,7 +53,7 @@
     },
     {
       "name": "Chromist",
-      "description": "Get your colours right. Build palettes for modern devices, see how they appear on old screens, audit accessibility against the next standards.",
+      "description": "Get your colours right. Build palettes for modern devices, see how they appear on old screens, audit accessibility against the next standards (WCAG 3.0).",
       "url": "https://jackbush.github.io/chromist/",
       "cover": {
         "format": "square",
@@ -88,7 +87,7 @@
     },
     {
       "name": "Albums",
-      "description": "Nice, old-fashioned photo albums. Because social media is a dumpster fire, but it's nice to show your mum what you've been up to.",
+      "description": "Old-fashioned photo albums. Because social media is a mess, but it's nice to show your mum what you've been doing.",
       "url": "https://jackbush.github.io/albums/",
       "cover": {
         "format": "landscape",
@@ -169,12 +168,17 @@
       "role": "Vice President, Product",
       "start": "2024-01",
       "end": "2026-06",
-      "description": "Owned product, design, research and product marketing. Took supply chain traceability and Digital Product Passports from a fragmented, support-run legacy suite to a unified self-serve platform.",
+      "description": "Owned product, design, research and product marketing. Rebuilt a pioneering suite of battery traceability tools as one simpler, self-serve platform, to compete as regulation softened and the market commoditised.",
       "listItems": [
-        "Restructured product and engineering into cross-functional, stream-aligned teams",
         "Packaged the platform into two off-the-shelf propositions, setting sales up for repeatable deals instead of bespoke solutions",
         "Rebuilt the platform API-first on AWS and open source, with a data lake and full API parity, cutting running costs 25%",
-        "Addressed scaling bottlenecks: Cut back-of-house config time 70%, shipped self-serve API setup tool with AI assistant"
+        "Addressed scaling bottlenecks: Cut back-of-house config time 70%, shipped self-serve API setup tool with AI assistant",
+        "Restructured product and engineering into cross-functional, stream-aligned teams"
+      ],
+      "caseStudies": [
+        {
+          "label": "Rebuilding traceability for batteries"
+        }
       ],
       "dates": "Jan 2024 – Jun 2026"
     },
@@ -183,10 +187,15 @@
       "role": "Principal Product Designer",
       "start": "2020-10",
       "end": "2024-01",
-      "description": "Led design of OVO’s consumer app and digital experience for 4m UK households, also owning the design system and accessibility.",
+      "description": "Led design of OVO's consumer app and digital experience for 4m UK households, also owning the design system and accessibility.",
       "listItems": [
         "Rebuilt the customer app from information architecture up, based on mental model research, growing users from 200k to 500k and doubling engagement",
-        "Brought every customer product onto one design system at WCAG AA, with open clinics and team-wide training"
+        "Brought every customer product onto one design system at WCAG 2.2 AA, with open clinics and team-wide training"
+      ],
+      "caseStudies": [
+        {
+          "label": "Redesigning energy for 4m households"
+        }
       ],
       "dates": "Oct 2020 – Jan 2024"
     },
@@ -200,6 +209,11 @@
         "Conceived an automated booking service from ethnographic research, converted 82% from email to booking",
         "Scaled from four local pilot users to a 1000+ engineer UK-wide network completing 200k jobs/year",
         "Implemented ride-alongs, with every colleague spending a day in the field"
+      ],
+      "caseStudies": [
+        {
+          "label": "Designing trade tools in the field"
+        }
       ],
       "dates": "Jun 2019 – Oct 2020"
     },
@@ -221,7 +235,7 @@
       "end": "2018-07",
       "description": "Set up the product and design function at an accelerator-stage start-up, leading it through growth to a $10.4m Series A.",
       "listItems": [
-        "Built the first decentralised platform for tracing provenance data across supply chains, securing over two million diamonds",
+        "Built the first decentralised platform for tracing provenance data across supply chains, securing 2m+ diamonds",
         "Used it to digitally track the first diamond across mining, cutting, polishing and certification, to a ring in a shop"
       ],
       "dates": "Oct 2016 – Jul 2018"
@@ -251,6 +265,7 @@
     },
     {
       "organisation": "Victoria University",
+      "cvOrganisation": "Victoria University of Wellington",
       "role": "Research Assistant",
       "start": "2011-11",
       "end": "2012-02",
