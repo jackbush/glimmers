@@ -15,7 +15,7 @@ npm run check    # type check + params check for every sketch
 - **Cog** (top right) opens the settings pane. **Escape** closes it. Every page opens with it closed, unless its URL ends `#settings`.
 - Sketches with `autoplay` in their manifest (Sprig) cycle through their presets (from a random one, then in menu order) until you open the settings pane; they start again next visit.
 - **Play/pause** (in settings) freezes the scene.
-- **Back arrow** (top left) goes back to the index. Sketches the index doesn't list are standalone and don't have one.
+- **Back arrow** (top left) goes back to the index. Sketches the index doesn't list are standalone and don't have one. Opened from jackbush.github.io (`?from=home`), every sketch has one, and it goes back there.
 - Edit any parameter, then **Copy changes** and paste the result to Claude to make it the new default. Double-click a label to reset one parameter, or use **[reset]** for all of them. A moved slider keeps a grey mark at its default; one pinned at an end offers **↔** to re-centre its range on the value (not for sliders ending at 1 or 100, or at a 0 floor). Untick the box by the changes count to see the defaults again for a before/after comparison.
 
 ## Add a sketch

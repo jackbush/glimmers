@@ -3,9 +3,9 @@
 A home for small browser sketches ("glimmers"): an index page of looping covers, plus one full-screen page per sketch with a shared settings pane. Astro (static), served at `https://jackbush.github.io/glimmers/`. See `README.md` to run it.
 
 - `src/sketches/<slug>/`: one folder per sketch. **The folder name is the URL.** `params.js` holds every default, `sketch.js` draws, `manifest.js` has the name, page colour and capture settings, and `NOTES.md` holds the sketch's architecture, perf budget and benchmark history. **Read a sketch's `NOTES.md` before changing it.**
-- `src/sketches/index.js`: `listed` is which sketches the index shows, in order. Every other sketch is unlisted: live at its URL, standalone (no back button), and on the index only with `?all` (or `#all`), alphabetically in two columns below the list.
+- `src/sketches/index.js`: `listed` is which sketches the index shows, in order. Every other sketch is unlisted: live at its URL, standalone (no back button, unless opened from jackbush.github.io with `?from=home`), and on the index only with `?all` (or `#all`), alphabetically in two columns below the list.
 - `src/kit/`: the shared engine. It covers the param model and saved settings (`params.ts`), the settings pane (`panel.ts`) and its OKHSL colour picker (`colour-picker.ts`, maths in `okhsl.ts`), the buttons and keys (`chrome.ts`), the frame loop and adaptive quality (`loop.ts`), new-build detection (`version.ts`), standard params (`standard.js`), seeded random and hashes (`random.js`), WebGL plumbing (`gl.js`), the film grain and dust and the simplex noise shared by the WebGL sketches (`film.js`, `noise.js`), the manifest schema and defaults (`manifest-schema.js`, `manifest.js`), and boot (`run.ts`). No design logic goes here.
-- `src/layouts/SketchLayout.astro`: the canvas, the back button and cog, and the pane's markup and CSS. `src/pages/`: the index and the `[slug]` route.
+- `src/layouts/SketchLayout.astro`: the canvas, the back button (to jackbush.github.io instead when the URL has `?from=home`, as the site's project links add) and cog, and the pane's markup and CSS. `src/pages/`: the index and the `[slug]` route.
 - Scripts:
   - `scripts/check.mjs`: params ↔ code consistency. Run it after every change.
   - `scripts/bench.mjs`: real-GPU fps in headless Chrome.
