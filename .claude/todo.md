@@ -1,3 +1,58 @@
+# Move glimmers into jackbush.github.io (not started)
+
+Glimmers becomes part of the site repo (`~/repos/jackbush.github.io`), still served at `/glimmers/` and `/glimmers/<slug>/`, so no link changes. Albums stays a separate repo: it's 1.3 GB of media and its image build takes minutes.
+
+**Why:** the `homepage` sketch hand-copies the site. Its `theme.js`/`params.js` mirror the site's `src/data/theme.ts`, and `content.json` is a snapshot of the site's copy, refreshed by a post-commit hook. In one repo the sketch imports both directly, and the site's glimmer covers (`src/assets/covers/`, copied from the sketch folders) can be imported from the sketches too. One Astro version and one deploy.
+
+## Before starting
+- [ ] Baselines, each run twice to prove they're deterministic:
+  - every sketch with `bench.mjs <slug> --fixed --shot`;
+  - the site's home page (both modes) and `/pdf`;
+  - sha1s of `dist/cv/*.pdf` text (`pdftotext`).
+
+## Steps
+- [ ] **Upgrade the site to Astro 7** on its own and diff against the baselines. Glimmers is on `^7.3.8`, the site on `^6.0.8`. Check `src/integrations/cv-pdfs.ts` still runs.
+- [ ] **Bring the history across.** In a fresh clone of glimmers, run `git filter-repo --to-subdirectory-filter glimmers-import`. Then, in the site, `git merge --allow-unrelated-histories`, and `git mv` the files into place so `git log --follow` keeps working:
+  - `src/kit`, `src/sketches`, `src/layouts` (the glimmers ones), `src/lib/sketches.ts` → `src/glimmers/…`;
+  - `src/pages/index.astro`, `[slug].astro` → `src/pages/glimmers/`;
+  - `public/*` → `public/glimmers/` (icons, `site.webmanifest`, `share.jpg`, `leaf/`);
+  - `scripts/*` → `scripts/glimmers/` (or `scripts/` if nothing clashes);
+  - `.claude/skills/*` → the site's `.claude/skills/`; merge `.claude/lessons.md` and this file.
+- [ ] **Base path.** The site has no `base`, so `url()` in `src/lib/sketches.ts` and `src/kit/version.ts` stop using `import.meta.env.BASE_URL` and prefix `/glimmers/` themselves. Grep for `BASE_URL` and `/glimmers/`; the skills and `scripts/lib/chrome.mjs` (`ensureServer`'s default URL) mention it too.
+- [ ] **Config.** Move into the site's `astro.config.mjs`:
+  - `versionFile()`;
+  - `vite.build.cssTarget`;
+  - the video `assetsInlineLimit`.
+
+  No `trailingSlash` setting: both forms of every URL work. `build.format: 'directory'` is already the default.
+- [ ] **Dependencies:** add `three`, `@types/three`, `@astrojs/check` and `typescript`. Add a `check` script (`astro check && node scripts/…/check.mjs`) and run it in the site's `deploy.yaml` before the build, with `PUBLIC_BUILD="${GITHUB_SHA::7}"` on the build step, as here.
+- [ ] **Shared Chrome finding.** The site's `cv-pdfs.ts` and `scripts/lib/chrome.mjs` both find a Chrome install, so one should import the other.
+- [ ] **Homepage sketch reads the site directly:**
+  - its param defaults come from `src/data/theme.ts`;
+  - `page.js` builds from the site's projects/roles data, not `content.json`.
+
+  Then delete `content.json`, `content-url.js`, `scripts/homepage-content.mjs` and `.githooks/` (and the site's `src/pages/content.json.ts` if nothing else reads it). Update the homepage `NOTES.md` and the site's `CLAUDE.md` ("tuned live in the homepage sketch in the glimmers repo").
+- [ ] **Covers.** `src/data/projects.ts` imports glimmer covers from `src/glimmers/sketches/<slug>/cover.{jpg,mp4}`. Delete the copies in `src/assets/covers/` (atlas-nights, blackstar, geode, sprig) and update `publish-glimmer` step 2, which copies them.
+- [ ] **Version check.** `version.ts` makes open sketch tabs jump to a newer build. Every site deploy, copy edits included, now counts as one. That's fine: the jump keeps the URL and saved settings.
+- [ ] **Docs.** Merge this repo's `CLAUDE.md` and `README.md` into the site's `CLAUDE.md` as a Glimmers section. `?from=home` (`src/data/links.ts` in the site, the back button in `SketchLayout.astro`) keeps working as is.
+
+## Verify
+- [ ] Every baseline matches pixel for pixel (sketches, home page, `/pdf`) and the PDF text hashes match.
+- [ ] `check` passes.
+- [ ] Every sketch boots at `localhost:4321/glimmers/<slug>/`.
+- [ ] The index lists the right sketches, and `?all` shows the rest.
+- [ ] Back works both ways: to the index, and home with `?from=home`.
+- [ ] `#settings` opens the pane.
+- [ ] Icons and `site.webmanifest` load from `/glimmers/`.
+- [ ] Bench, capture and `bench --shot` still start and stop their own preview server.
+
+## Cut-over (GitHub Pages)
+A project repo's Pages site takes over its path on the user site, so `/glimmers/` keeps serving this repo until it's switched off.
+- [ ] Deploy the site with the glimmers routes. They're still shadowed, so nothing changes yet.
+- [ ] Turn off Pages for this repo (Settings → Pages). The site's `/glimmers/` takes over, with a minute or two of gap at most.
+- [ ] Check every URL in `src/data/projects.ts` and a few `#settings`/`?all` links on the live site.
+- [ ] Archive this repo, with a README line pointing to the site repo.
+
 # Geode
 
 A raw quartz cluster revolving in a dark studio, ray-traced in WebGL2, at `src/sketches/geode/`. Its studio backdrop takes the stone's hue plus Hue shift (0–360; 0 and 360 both mean the stone's own hue; default 180, the opposite hue).
