@@ -13,7 +13,7 @@ export async function newerBuild(): Promise<string | null> {
   const build = currentBuild();
   if (!build || build === 'dev') return null;
   try {
-    const base = import.meta.env.BASE_URL;
+    const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
     const r = await fetch(base + 'version.json?t=' + Date.now(), { cache: 'no-store' });
     const j = r.ok ? await r.json() : null;
     return j && j.version && j.version !== build ? String(j.version) : null;
@@ -22,8 +22,11 @@ export async function newerBuild(): Promise<string | null> {
   }
 }
 
+/** Reload at the new build, keeping the rest of the URL (?from=home, ?all, #settings). */
 export function jumpTo(version: string): void {
-  location.replace(location.pathname + '?v=' + version + location.hash);
+  const url = new URL(location.href);
+  url.searchParams.set('v', version);
+  location.replace(url);
 }
 
 /** Check now, and again whenever the tab comes back. At most one automatic jump per build. */

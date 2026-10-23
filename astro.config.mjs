@@ -9,8 +9,7 @@ export default defineConfig({
   integrations: [versionFile()],
 
   site: 'https://jackbush.github.io',
-  base: '/glimmers/',
-  trailingSlash: 'always',
+  base: '/glimmers',
 
   build: {
     // Emit `blackstar/index.html` rather than `blackstar.html` so paths work under `base`.
