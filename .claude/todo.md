@@ -2,7 +2,7 @@
 
 Glimmers becomes part of the site repo (`~/repos/jackbush.github.io`), still served at `/glimmers/` and `/glimmers/<slug>/`, so no link changes. Albums stays a separate repo: it's 1.3 GB of media and its image build takes minutes.
 
-**Why:** the `homepage` sketch hand-copies the site. Its `theme.js`/`params.js` mirror the site's `src/data/theme.ts`, and `content.json` is a snapshot of the site's copy, refreshed by a post-commit hook. In one repo the sketch imports both directly, and the site's glimmer covers (`src/assets/covers/`, copied from the sketch folders) can be imported from the sketches too. One Astro version and one deploy.
+**Why:** the site's glimmer covers (`src/assets/covers/`) are copies from the sketch folders; in one repo they can be imported from the sketches. One Astro version and one deploy.
 
 ## Before starting
 - [ ] Baselines, each run twice to prove they're deterministic:
@@ -27,11 +27,6 @@ Glimmers becomes part of the site repo (`~/repos/jackbush.github.io`), still ser
   No `trailingSlash` setting: both forms of every URL work. `build.format: 'directory'` is already the default.
 - [ ] **Dependencies:** add `three`, `@types/three`, `@astrojs/check` and `typescript`. Add a `check` script (`astro check && node scripts/…/check.mjs`) and run it in the site's `deploy.yaml` before the build, with `PUBLIC_BUILD="${GITHUB_SHA::7}"` on the build step, as here.
 - [ ] **Shared Chrome finding.** The site's `cv-pdfs.ts` and `scripts/lib/chrome.mjs` both find a Chrome install, so one should import the other.
-- [ ] **Homepage sketch reads the site directly:**
-  - its param defaults come from `src/data/theme.ts`;
-  - `page.js` builds from the site's projects/roles data, not `content.json`.
-
-  Then delete `content.json`, `content-url.js`, `scripts/homepage-content.mjs` and `.githooks/` (and the site's `src/pages/content.json.ts` if nothing else reads it). Update the homepage `NOTES.md` and the site's `CLAUDE.md` ("tuned live in the homepage sketch in the glimmers repo").
 - [ ] **Covers.** `src/data/projects.ts` imports glimmer covers from `src/glimmers/sketches/<slug>/cover.{jpg,mp4}`. Delete the copies in `src/assets/covers/` (atlas-nights, blackstar, geode, sprig) and update `publish-glimmer` step 2, which copies them.
 - [ ] **Version check.** `version.ts` makes open sketch tabs jump to a newer build. Every site deploy, copy edits included, now counts as one. That's fine: the jump keeps the URL and saved settings.
 - [ ] **Docs.** Merge this repo's `CLAUDE.md` and `README.md` into the site's `CLAUDE.md` as a Glimmers section. `?from=home` (`src/data/links.ts` in the site, the back button in `SketchLayout.astro`) keeps working as is.

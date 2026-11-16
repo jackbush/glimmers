@@ -87,7 +87,7 @@ The owner's site (`~/repos/jackbush.github.io`, deployed from the `source` branc
 1. Copy the sketch's `cover.jpg` and `cover.mp4` to `src/assets/covers/<slug>.jpg` and `<slug>.mp4` (exact copies, as the other glimmers' are).
 2. In `src/data/projects.ts`, import them like the other glimmers (`<name>Poster` from the `.jpg`, `<name>Video` from the `.mp4?url`) and add an entry at the top of `projects`: `name`, a draft `description` (one or two sentences in the others' voice: what it is, then an invitation to open the settings), `url: "https://jackbush.github.io/glimmers/<slug>/"` and `cover: { format: "landscape", image: <name>Poster, video: <name>Video }` (a 3:2 header with the cover playing over its poster).
 3. `npm run build` in that repo: 0 errors.
-4. Leave it uncommitted and say so: the owner edits the copy and moves the entry. If the cover is recaptured later, copy it over again. The glimmers homepage sketch picks the new project up from the site's `content.json` once that's deployed.
+4. Leave it uncommitted and say so: the owner edits the copy and moves the entry. If the cover is recaptured later, copy it over again.
 
 ## Hand it back
 
